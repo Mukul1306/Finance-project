@@ -163,6 +163,10 @@ app.post("/test", (req, res) => {
 // ==========================================
 const PORT = process.env.PORT || 5000;
 
+app.get("/", (req, res) => {
+  res.send("SRM Finance Backend Running Successfully 🚀");
+});
+
 app.listen(PORT, () => {
     console.log(`=================================`);
     console.log(`🚀 CORE ENGINE RUNNING ON PORT: ${PORT}`);
