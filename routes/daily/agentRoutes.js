@@ -11,9 +11,7 @@ const {
   getAgent,
   deleteAgent
 
-} = require(
-  "../../controllers/daily/AgentController"
-);
+} = require("../../controllers/daily/agentController");
 
 router.post(
   "/add-agent",
