@@ -134,7 +134,7 @@ npm start
 
 Development
 
-http://localhost:5000
+https://srmfinance.in
 
 Production
 
@@ -148,4 +148,4 @@ Mukul Sharma
 
 Finance Management Platform
 
-2025
+2026
