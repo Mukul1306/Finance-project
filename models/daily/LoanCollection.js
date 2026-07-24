@@ -1,72 +1,148 @@
 const mongoose = require("mongoose");
 
-const loanCollectionSchema =
-new mongoose.Schema({
+const loanCollectionSchema = new mongoose.Schema({
 
-  loan:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"DailyLoan",
-    required:true
+  // ==========================================
+  // LOAN
+  // ==========================================
+
+  loan: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "DailyLoan",
+    required: true
   },
 
-  member:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"DailyMember",
-    required:true
+  member: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "DailyMember",
+    required: true
   },
-installmentNo:{
-  type:Number,
-  required:true
+
+  // ==========================================
+  // INSTALLMENT
+  // ==========================================
+
+  installmentNo: {
+    type: Number,
+    required: true
+  },
+
+  emiType: {
+    type: String,
+    enum: [
+      "DAILY",
+      "WEEKLY",
+      "MONTHLY",
+      "FIXED_INTEREST",
+      "PRINCIPAL"
+    ],
+    required: true
+  },
+
+  dueDate: {
+    type: Date
+  },
+
+  paymentDate: {
+    type: Date,
+    default: Date.now
+  },
+
+  delayDays: {
+    type: Number,
+    default: 0
+  },
+
+  // ==========================================
+  // AMOUNTS
+  // ==========================================
+
+  principalAmount: {
+    type: Number,
+    default: 0
+  },
+
+  interestAmount: {
+    type: Number,
+    default: 0
+  },
+
+  penalty: {
+    type: Number,
+    default: 0
+  },
+
+  totalAmount: {
+    type: Number,
+    required: true
+  },
+
+  // ==========================================
+  // COLLECTION
+  // ==========================================
+
+  collectorType: {
+    type: String,
+    enum: ["ADMIN", "AGENT"],
+    required: true
+  },
+
+  collectorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "DailyAgent",
+    default: null
+  },
+dueDate: {
+    type: Date
 },
 
-paymentDate:{
-  type:Date,
-  default:Date.now
+delayDays: {
+    type: Number,
+    default: 0
 },
-
-  amount:{
-    type:Number,
-    required:true
+  paymentMethod: {
+    type: String,
+    enum: [
+      "CASH",
+      "UPI",
+      "BANK_TRANSFER",
+      "CHEQUE"
+    ],
+    default: "CASH"
   },
 
-  penalty:{
-    type:Number,
-    default:0
+  receiptNo: {
+    type: String,
+    unique: true,
+    required: true
   },
 
-  totalAmount:{
-    type:Number,
-    required:true
+  // ==========================================
+  // STATUS
+  // ==========================================
+
+  status: {
+    type: String,
+    enum: [
+      "PAID",
+      "PARTIAL",
+      "PENDING"
+    ],
+    default: "PAID"
   },
 
-  collectorType:{
-    type:String,
-    enum:["ADMIN","AGENT"],
-    required:true
-  },
-
-  collectorId:{
-    type:mongoose.Schema.Types.ObjectId,
-    required:true
-  },
-
-  paymentMethod:{
-    type:String,
-    enum:["CASH","UPI"],
-    default:"CASH"
-  },
-
-  paymentDate:{
-    type:Date,
-    default:Date.now
+  remarks: {
+    type: String,
+    default: ""
   }
 
-},{
-  timestamps:true
+}, {
+  timestamps: true
 });
 
 module.exports =
+mongoose.models.LoanCollection ||
 mongoose.model(
-"LoanCollection",
-loanCollectionSchema
+  "LoanCollection",
+  loanCollectionSchema
 );

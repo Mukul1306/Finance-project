@@ -1,257 +1,271 @@
-const DailyMember =
-require("../../models/daily/DailyMember");
+const DailyMember = require("../../models/daily/DailyMember");
 
-const AreaGroup =
-require("../../models/daily/AreaGroup");
+/*
+==================================
+CREATE MEMBER
+==================================
+*/
 
-exports.createMember =
-async(req,res)=>{
+exports.createMember = async (req, res) => {
 
-try{
+  try {
 
-const area =
-await AreaGroup.findById(
-req.body.areaGroup
-);
+    const exists = await DailyMember.findOne({
+      $or: [
+        { memberId: req.body.memberId },
+        { mobile: req.body.mobile }
+      ]
+    });
 
-if(!area){
+    if (exists) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID or Mobile Number already exists"
+      });
+    }
 
-return res.status(404).json({
+    const member = await DailyMember.create({
 
-success:false,
-message:"Area Group Not Found"
+      memberId: req.body.memberId,
 
-});
+      memberName: req.body.memberName,
 
-}
+      fatherName: req.body.fatherName,
 
-if(!req.body.assignedAgent){
+      gender: req.body.gender,
 
-return res.status(400).json({
+      dob: req.body.dob,
 
-success:false,
+      email: req.body.email,
 
-message:"Please Select Agent"
+      mobile: req.body.mobile,
 
-});
+      alternateMobile: req.body.alternateMobile,
 
-}
+      residentialAddress: req.body.residentialAddress,
 
-const member =
-await DailyMember.create({
+      city: req.body.city,
 
-memberName:req.body.memberName,
+      district: req.body.district,
 
-fatherName:req.body.fatherName,
+      state: req.body.state,
 
-mobile:req.body.mobile,
+      pincode: req.body.pincode,
 
-areaGroup:req.body.areaGroup,
+      status: req.body.status || "ACTIVE"
 
-assignedAgent:
-req.body.assignedAgent,
+    });
 
-startDate:req.body.startDate,
+    res.status(201).json({
 
-endDate:req.body.endDate,
+      success: true,
 
-isFlexibleAmount:
-req.body.isFlexibleAmount,
+      message: "Member Registered Successfully",
 
-fixedDailyAmount:
-req.body.fixedDailyAmount,
+      member
 
-  totalDaysPaid:0,
+    });
 
-residentialAddress:
-req.body.residentialAddress,
+  } catch (error) {
 
-city:req.body.city,
+    res.status(500).json({
 
-state:req.body.state,
+      success: false,
 
-pincode:req.body.pincode
+      message: error.message
 
-});
+    });
 
-await AreaGroup.findByIdAndUpdate(
-
-req.body.areaGroup,
-
-{
-$inc:{
-totalMembers:1
-}
-}
-
-);
-
-res.status(201).json({
-
-success:true,
-member
-
-});
-
-}catch(error){
-
-console.log(error);
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
+  }
 
 };
 
-exports.getMembers =
-async(req,res)=>{
+/*
+==================================
+GET ALL MEMBERS
+==================================
+*/
 
-try{
+exports.getMembers = async (req, res) => {
 
-const members =
-await DailyMember
-.find()
-.populate(
-"areaGroup",
-"areaName"
-);
+  try {
 
-res.json({
+    const members = await DailyMember.find()
+      .sort({ createdAt: -1 });
 
-success:true,
-members
+    res.status(200).json({
 
-});
+      success: true,
 
-}catch(error){
+      members
 
-res.status(500).json({
+    });
 
-success:false,
-message:error.message
+  } catch (error) {
 
-});
+    res.status(500).json({
 
-}
+      success: false,
 
-};
-exports.getMemberProfile =
-async(req,res)=>{
+      message: error.message
 
-try{
+    });
 
-const member =
-await DailyMember
-.findById(req.params.id)
-.populate(
-"areaGroup",
-"areaName duration"
-);
-
-if(!member){
-
-return res.status(404).json({
-success:false,
-message:"Member Not Found"
-});
-
-}
-
-res.status(200).json({
-
-success:true,
-member
-
-});
-
-}catch(error){
-
-res.status(500).json({
-success:false,
-message:error.message
-});
-
-}
-
-};
-const DailyTransaction =
-require("../../models/daily/DailyTransaction");
-
-exports.getMemberTransactions =
-async(req,res)=>{
-
-try{
-
-const transactions =
-await DailyTransaction
-.find({
-
-member:req.params.id
-
-})
-.sort({
-
-collectionDate:-1
-
-});
-
-res.status(200).json({
-
-success:true,
-transactions
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
+  }
 
 };
 
-exports.getAgentMembers =
-async(req,res)=>{
+/*
+==================================
+GET SINGLE MEMBER
+==================================
+*/
 
-try{
+exports.getMemberProfile = async (req, res) => {
 
-const members =
-await DailyMember
-.find({
-assignedAgent:
-req.params.agentId
-})
-.populate(
-"areaGroup",
-"areaName"
-);
+  try {
 
-res.status(200).json({
+    const member = await DailyMember.findById(
+      req.params.id
+    );
 
-success:true,
-members
+    if (!member) {
 
-});
+      return res.status(404).json({
 
-}catch(error){
+        success: false,
 
-res.status(500).json({
+        message: "Member Not Found"
 
-success:false,
-message:error.message
+      });
 
-});
+    }
 
-}
+    res.status(200).json({
+
+      success: true,
+
+      member
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
+
+};
+
+/*
+==================================
+UPDATE MEMBER
+==================================
+*/
+
+exports.updateMember = async (req, res) => {
+
+  try {
+
+    const member = await DailyMember.findByIdAndUpdate(
+
+      req.params.id,
+
+      req.body,
+
+      {
+        new: true,
+        runValidators: true
+      }
+
+    );
+
+    if (!member) {
+
+      return res.status(404).json({
+
+        success: false,
+
+        message: "Member Not Found"
+
+      });
+
+    }
+
+    res.status(200).json({
+
+      success: true,
+
+      message: "Member Updated Successfully",
+
+      member
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
+
+};
+
+/*
+==================================
+DELETE MEMBER
+==================================
+*/
+
+exports.deleteMember = async (req, res) => {
+
+  try {
+
+    const member = await DailyMember.findById(req.params.id);
+
+    if (!member) {
+
+      return res.status(404).json({
+
+        success: false,
+
+        message: "Member Not Found"
+
+      });
+
+    }
+
+    await member.deleteOne();
+
+    res.status(200).json({
+
+      success: true,
+
+      message: "Member Deleted Successfully"
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
 
 };

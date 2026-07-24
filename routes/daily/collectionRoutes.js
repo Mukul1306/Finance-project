@@ -11,13 +11,26 @@ getAllCollections,
 getAgentCollections,
 agentDashboard,
 getAgentHistory,
-adminSummary
+adminSummary,
 
 }=require(
 
 "../../controllers/daily/collectionController"
 
 );
+
+const {
+
+getPendingDays,
+collectPendingPayment,
+getMemberSaving,
+getCollectionMembers,
+getAgentCollectionMembers,
+getCollectionSummary,
+getAgentMonthlyCollection
+
+} = require("../../controllers/daily/DailyCollectionController");
+
 
 router.post(
 "/collect-payment",
@@ -46,6 +59,48 @@ getAgentHistory
 router.get(
 "/admin-summary",
 adminSummary
+);
+router.get(
+
+"/pending-days/:id",
+
+getPendingDays
+
+);
+router.post(
+"/collect-pending",
+collectPendingPayment
+);
+router.get(
+"/member-saving/:id",
+getMemberSaving
+);
+
+// ==============================
+// ADMIN COLLECTION MEMBERS
+// ==============================
+
+router.get(
+"/collection-members",
+getCollectionMembers
+);
+router.get(
+  "/agent-monthly-collection",
+  getAgentMonthlyCollection
+);
+
+// ==============================
+// AGENT COLLECTION MEMBERS
+// ==============================
+
+router.get(
+"/agent-collection-members/:agentId",
+getAgentCollectionMembers
+);
+
+router.get(
+  "/collection-summary",
+  getCollectionSummary
 );
 
 module.exports =

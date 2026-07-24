@@ -5,7 +5,9 @@ const router = express.Router();
 const {
   createMember,
   getMembers,
-  getMemberById
+  getMemberById,
+  updateMember,
+  deleteMember
 } = require("../controllers/memberController");
 
 router.post(
@@ -22,5 +24,9 @@ router.get(
   "/:id",
   getMemberById
 );
+
+router.put("/update/:id", updateMember);
+
+router.delete("/delete/:id", deleteMember);
 
 module.exports = router;

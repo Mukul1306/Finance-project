@@ -36,11 +36,26 @@ message:"Member Not Found"
 
 await DailyTransaction.create({
 
-member:memberId,
-agent:agentId,
-area:member.areaGroup,
-amount,
-paymentMethod
+  member: memberId,
+
+  area: member.areaGroup,
+
+  collectorType: "AGENT",
+
+  collectorId: agentId,
+
+  collectionDate: new Date(),
+
+  // The date this payment is for
+  paymentForDate: req.body.paymentForDate || new Date(),
+
+  dailyAmount: amount,
+
+  penalty: 0,
+
+  totalAmount: amount,
+
+  paymentMethod
 
 });
 

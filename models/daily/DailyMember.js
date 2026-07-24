@@ -2,104 +2,89 @@ const mongoose = require("mongoose");
 
 const dailyMemberSchema = new mongoose.Schema({
 
-  memberName:{
-    type:String,
-    required:true
+  memberId: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true
   },
 
-  fatherName:{
-    type:String,
-    required:true
+  memberName: {
+    type: String,
+    required: true,
+    trim: true
   },
 
-  mobile:{
-    type:String,
-    required:true
+  fatherName: {
+    type: String,
+    required: true,
+    trim: true
   },
 
-
-
-  areaGroup:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"AreaGroup",
-    required:true
-  },
-assignedAgent:{
-  type:mongoose.Schema.Types.ObjectId,
-  ref:"DailyAgent",
-  required:true
-},
-  startDate:{
-    type:Date,
-    required:true
+  gender: {
+    type: String,
+    enum: ["Male", "Female", "Other"],
+    required: true
   },
 
-  endDate:{
-    type:Date,
-    required:true
+  dob: {
+    type: Date,
+    required: true
   },
 
-  lastCollectionDate:{
-type:Date
-},
-
-totalPenalty:{
-type:Number,
-default:0
-},
-
-
-
-  isFlexibleAmount:{
-    type:Boolean,
-    default:false
+  email: {
+    type: String,
+    default: ""
   },
 
-  fixedDailyAmount:{
-    type:Number,
-    default:0
+  mobile: {
+    type: String,
+    required: true,
+    unique: true,
+    match: /^[0-9]{10}$/
   },
 
-  totalPaid:{
-    type:Number,
-    default:0
+  alternateMobile: {
+    type: String,
+    default: ""
   },
-  totalDaysPaid:{
-  type:Number,
-  default:0
-},
 
   residentialAddress: {
-  type: String,
-  required: true
-},
+    type: String,
+    required: true
+  },
 
-city: {
-  type: String,
-  required: true
-},
+  city: {
+    type: String,
+    required: true
+  },
 
-state: {
-  type: String,
-  required: true
-},
+  district: {
+    type: String,
+    required: true
+  },
 
-pincode: {
-  type: String,
-  required: true
-},
+  state: {
+    type: String,
+    required: true
+  },
 
-  status:{
-    type:String,
-    default:"ACTIVE"
+  pincode: {
+    type: String,
+    required: true
+  },
+
+  status: {
+    type: String,
+    enum: ["ACTIVE", "INACTIVE"],
+    default: "ACTIVE"
   }
 
-},{
-  timestamps:true
+}, {
+  timestamps: true
 });
 
-module.exports =
-mongoose.model(
+module.exports = mongoose.model(
   "DailyMember",
   dailyMemberSchema
 );

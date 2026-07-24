@@ -41,15 +41,9 @@ router.get(
     getSocietyById
 );
 
-router.put(
-    "/update/:id",
-    updateSociety
-);
+router.put("/update/:id", updateSociety);
 
-router.delete(
-    "/delete/:id",
-    deleteSociety
-);
+router.delete("/delete/:id", deleteSociety);
 
 
 module.exports =

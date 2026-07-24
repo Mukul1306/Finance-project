@@ -173,47 +173,59 @@ async (req, res) => {
 
 // Update Society
 
-exports.updateSociety =
-async (req, res) => {
+exports.updateSociety = async (req, res) => {
 
-    try {
+  try {
 
-        const society =
-        await Society.findByIdAndUpdate(
+    const society = await Society.findById(req.params.id);
 
-            req.params.id,
+    if (!society) {
 
-            req.body,
+      return res.status(404).json({
 
-            {
-                new: true
-            }
+        success:false,
 
-        );
+        message:"Society Not Found"
 
-        res.status(200).json({
-
-            success: true,
-            message:
-            "Society Updated",
-
-            society
-
-        });
+      });
 
     }
 
-    catch (error) {
+    society.societyName = req.body.societyName;
 
-        res.status(500).json({
+    society.startDate = req.body.startDate;
 
-            success: false,
-            message:
-            error.message
+    society.durationMonths = Number(req.body.durationMonths);
 
-        });
+    society.maxMembers = Number(req.body.maxMembers);
 
-    }
+    society.status = req.body.status;
+
+    await society.save();
+
+    res.json({
+
+      success:true,
+
+      message:"Society Updated Successfully",
+
+      society
+
+    });
+
+  }
+
+  catch(error){
+
+    res.status(500).json({
+
+      success:false,
+
+      message:error.message
+
+    });
+
+  }
 
 };
 
@@ -222,35 +234,50 @@ async (req, res) => {
 
 // Delete Society
 
-exports.deleteSociety =
-async (req, res) => {
+exports.deleteSociety = async (req, res) => {
 
-    try {
+  try {
 
-        await Society.findByIdAndDelete(
-            req.params.id
-        );
+    const memberCount = await Member.countDocuments({
 
-        res.status(200).json({
+      societyId: req.params.id
 
-            success: true,
-            message:
-            "Society Deleted"
+    });
 
-        });
+    if (memberCount > 0) {
 
-    }
+      return res.status(400).json({
 
-    catch (error) {
+        success:false,
 
-        res.status(500).json({
+        message:"Society contains members. Delete members first."
 
-            success: false,
-            message:
-            error.message
-
-        });
+      });
 
     }
+
+    await Society.findByIdAndDelete(req.params.id);
+
+    res.json({
+
+      success:true,
+
+      message:"Society Deleted Successfully"
+
+    });
+
+  }
+
+  catch(error){
+
+    res.status(500).json({
+
+      success:false,
+
+      message:error.message
+
+    });
+
+  }
 
 };

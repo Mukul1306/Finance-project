@@ -8,17 +8,21 @@ const memberSchema = new mongoose.Schema({
     required:true
   },
 
+  // Member ID
+  memberId:{
+    type:String,
+    required:true,
+    unique:true,
+    trim:true
+  },
+
+  // Personal Details
   name:{
     type:String,
     required:true
   },
 
   fatherOrHusbandName:{
-    type:String,
-    required:true
-  },
-
-  mobile:{
     type:String,
     required:true
   },
@@ -33,16 +37,61 @@ const memberSchema = new mongoose.Schema({
     required:true
   },
 
+  // NEW
+  email:{
+    type:String,
+    default:""
+  },
+
+  // Contact
+  mobile:{
+    type:String,
+    required:true
+  },
+
+  // NEW
+  alternateMobile:{
+    type:String,
+    default:""
+  },
+
+  // Address
   address:{
     type:String,
     required:true
   },
 
+  // NEW
+  pinCode:{
+    type:String,
+    default:""
+  },
+
+  // NEW
+  city:{
+    type:String,
+    default:""
+  },
+
+  // NEW
+  district:{
+    type:String,
+    default:""
+  },
+
+  // NEW
+  state:{
+    type:String,
+    default:""
+  },
+
+  // Documents
   aadhaarNumber:{
     type:String,
     required:true
   },
 
+  // Nominee
   nomineeName:{
     type:String,
     required:true
@@ -53,6 +102,7 @@ const memberSchema = new mongoose.Schema({
     required:true
   },
 
+  // Membership
   joiningDate:{
     type:Date,
     default:Date.now
@@ -66,15 +116,18 @@ const memberSchema = new mongoose.Schema({
     type:Number,
     required:true
   },
-monthlyPenalty:{
-  type:Number,
-  default:0
-}, 
+
+  monthlyPenalty:{
+    type:Number,
+    default:0
+  },
+
   dueDay:{
     type:Number,
     required:true
   },
 
+  // Installments
   totalInstallments:{
     type:Number,
     default:0
@@ -90,6 +143,7 @@ monthlyPenalty:{
     default:0
   },
 
+  // Amount Details
   totalPaid:{
     type:Number,
     default:0
@@ -114,6 +168,7 @@ monthlyPenalty:{
     type:Date
   },
 
+  // Status
   status:{
     type:String,
     enum:[
@@ -129,8 +184,4 @@ monthlyPenalty:{
   timestamps:true
 });
 
-module.exports =
-mongoose.model(
-  "Member",
-  memberSchema
-);
+module.exports = mongoose.model("Member", memberSchema);

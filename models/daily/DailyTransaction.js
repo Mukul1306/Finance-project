@@ -3,10 +3,16 @@ const mongoose = require("mongoose");
 const dailyTransactionSchema =
 new mongoose.Schema({
 
+
 member:{
 type:mongoose.Schema.Types.ObjectId,
 ref:"DailyMember",
 required:true
+},
+savingAccount: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailySaving",
+  required: true
 },
 
 area:{
@@ -21,9 +27,10 @@ enum:["ADMIN","AGENT"],
 required:true
 },
 
-collectorId:{
-type:mongoose.Schema.Types.ObjectId,
-default:null
+collectorId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailyAgent",
+  default: null
 },
 
 dailyAmount:{
@@ -41,15 +48,19 @@ type:Number,
 required:true
 },
 
-paymentMethod:{
-type:String,
-enum:["CASH","UPI"],
-default:"CASH"
+paymentMethod: {
+  type: String,
+  enum: ["CASH", "UPI", "BANK"],
+  default: "CASH"
 },
 
 status:{
 type:String,
 default:"PAID"
+},
+paymentForDate: {
+  type: Date,
+  default: Date.now
 },
 
 collectionDate:{

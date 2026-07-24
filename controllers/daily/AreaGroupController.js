@@ -15,7 +15,8 @@ const {
   duration,
   maxMembers,
   startDate,
-  assignedAgent
+  assignedAgent,
+    secondaryAgent
 
 } = req.body;
 
@@ -62,10 +63,8 @@ try{
 const groups =
 await AreaGroup
 .find()
-.populate(
-"assignedAgent",
-"name mobile"
-)
+.populate("assignedAgent", "name")
+.populate("secondaryAgent", "name")
 .sort({
 createdAt:-1
 });

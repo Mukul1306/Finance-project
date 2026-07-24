@@ -9,7 +9,8 @@ const {
   addAgent,
   getAgents,
   getAgent,
-  deleteAgent
+  deleteAgent,
+  getAgentProfile
 
 } = require("../../controllers/daily/agentController");
 
@@ -22,7 +23,10 @@ router.get(
   "/agents",
   getAgents
 );
-
+router.get(
+"/agent-profile/:id",
+getAgentProfile
+);
 router.get(
   "/agent/:id",
   getAgent
@@ -32,5 +36,6 @@ router.delete(
   "/agent/:id",
   deleteAgent
 );
+
 
 module.exports = router;

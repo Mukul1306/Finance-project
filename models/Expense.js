@@ -15,7 +15,11 @@ const expenseSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-
+type: {
+  type: String,
+  enum: ["INCOME", "EXPENSE"],
+  default: "EXPENSE"
+},
   paymentMethod: {
     type: String,
     default: "Cash"

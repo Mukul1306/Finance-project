@@ -1,76 +1,143 @@
-const Expense =
-require("../models/Expense");
+const Expense = require("../models/Expense");
 
-exports.addExpense =
-async(req,res)=>{
+/*
+==============================
+ADD TRANSACTION
+(INCOME / EXPENSE)
+==============================
+*/
 
-try{
+exports.addExpense = async (req, res) => {
 
-const expense =
-await Expense.create(req.body);
+  try {
 
-res.status(201).json({
-success:true,
-expense
-});
+    const {
+      title,
+      type,
+      category,
+      amount,
+      paymentMethod,
+      note
+    } = req.body;
+console.log("BODY RECEIVED:", req.body);
+    const transaction = await Expense.create({
 
-}catch(error){
+      title,
 
-res.status(500).json({
-success:false,
-message:error.message
-});
+      type: type || "EXPENSE",
 
-}
+      category,
+
+      amount,
+
+      paymentMethod,
+
+      note
+
+    });
+
+    res.status(201).json({
+
+      success: true,
+
+      transaction
+
+    });
+
+  }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
 
 };
 
-exports.getExpenses =
-async(req,res)=>{
+/*
+==============================
+GET ALL TRANSACTIONS
+==============================
+*/
 
-try{
+exports.getExpenses = async (req, res) => {
 
-const expenses =
-await Expense.find()
-.sort({createdAt:-1});
+  try {
 
-res.json({
-success:true,
-expenses
-});
+    const expenses = await Expense.find()
 
-}catch(error){
+      .sort({
 
-res.status(500).json({
-success:false,
-message:error.message
-});
+        createdAt: -1
 
-}
+      });
+
+    res.json({
+
+      success: true,
+
+      expenses
+
+    });
+
+  }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
 
 };
 
-exports.deleteExpense =
-async(req,res)=>{
+/*
+==============================
+DELETE TRANSACTION
+==============================
+*/
 
-try{
+exports.deleteExpense = async (req, res) => {
 
-await Expense.findByIdAndDelete(
-req.params.id
-);
+  try {
 
-res.json({
-success:true,
-message:"Expense Deleted"
-});
+    await Expense.findByIdAndDelete(
 
-}catch(error){
+      req.params.id
 
-res.status(500).json({
-success:false,
-message:error.message
-});
+    );
 
-}
+    res.json({
+
+      success: true,
+
+      message: "Transaction Deleted"
+
+    });
+
+  }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
 
 };

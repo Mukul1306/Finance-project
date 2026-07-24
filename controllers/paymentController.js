@@ -4,126 +4,488 @@ require("../models/Payment");
 const Member =
 require("../models/Members");
 
-exports.collectPayment =
-async(req,res)=>{
+exports.collectPayment = async (req, res) => {
 
-try{
+  try {
 
-const {
+    const {
+      memberId,
+      paymentMode,
+      transactionId,
+      remarks
+    } = req.body;
 
-memberId,
-paymentMode,
-transactionId,
-remarks
+    const member = await Member.findById(memberId);
 
-}=req.body;
+    if (!member) {
 
-const member =
-await Member.findById(
-memberId
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+
+    }
+
+    // Already Completed
+    if (member.paidInstallments >= member.totalInstallments) {
+
+      return res.status(400).json({
+        success: false,
+        message: "All Installments Already Paid"
+      });
+
+    }
+
+    // Current Installment Number
+    const installmentNo = member.paidInstallments + 1;
+
+    // Calculate Installment Month & Year
+    const installmentDate = new Date(member.joiningDate);
+
+    installmentDate.setMonth(
+      installmentDate.getMonth() + member.paidInstallments
+    );
+
+    const installmentMonth =
+      installmentDate.getMonth() + 1;
+
+    const installmentYear =
+      installmentDate.getFullYear();
+
+    // Current Date
+    const today = new Date();
+
+    const currentMonthIndex =
+      today.getFullYear() * 12 +
+      today.getMonth();
+
+    const installmentMonthIndex =
+      installmentYear * 12 +
+      (installmentMonth - 1);
+
+    const delayMonths = Math.max(
+      0,
+      currentMonthIndex - installmentMonthIndex
+    );
+
+    const installmentAmount =
+      member.monthlyInstallment;
+
+    const penaltyAmount =
+      delayMonths * member.monthlyPenalty;
+
+    const totalReceived =
+      installmentAmount + penaltyAmount;
+
+
+      const alreadyPaid = await Payment.findOne({
+  memberId,
+  installmentNo
+});
+
+if (alreadyPaid) {
+  return res.status(400).json({
+    success: false,
+    message: "This installment is already paid."
+  });
+}
+
+    // Save Payment
+    const payment = await Payment.create({
+
+      memberId,
+
+      societyId: member.societyId,
+
+      installmentNo,
+
+      installmentMonth,
+
+      installmentYear,
+
+      installmentAmount,
+
+      penaltyAmount,
+
+      totalReceived,
+
+      paymentMode,
+
+      transactionId,
+
+      remarks
+
+    });
+
+    // Update Member
+    member.paidInstallments += 1;
+
+    member.pendingInstallments = Math.max(
+      0,
+      member.totalInstallments -
+      member.paidInstallments
+    );
+
+    member.totalPaid += installmentAmount;
+
+    member.pendingAmount = Math.max(
+      0,
+      member.pendingAmount - installmentAmount
+    );
+
+    member.totalPenaltyPaid += penaltyAmount;
+
+    member.currentPenalty =
+      member.pendingInstallments *
+      member.monthlyPenalty;
+
+    member.lastPaymentDate = new Date();
+
+    if (
+      member.paidInstallments >=
+      member.totalInstallments
+    ) {
+
+      member.status = "COMPLETED";
+
+    } else {
+
+      member.status = "ACTIVE";
+
+    }
+
+    await member.save();
+
+    res.status(200).json({
+
+      success: true,
+
+      message: `${installmentDate.toLocaleString("en-IN", {
+  month: "long"
+})} ${installmentYear} Installment Collected Successfully`,
+
+      payment
+
+    });
+
+  }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
+
+};
+
+exports.getPaymentSummary = async (req, res) => {
+  try {
+
+    const firstDay = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth(),
+      1
+    );
+
+    const lastDay = new Date(
+      new Date().getFullYear(),
+      new Date().getMonth() + 1,
+      0,
+      23,
+      59,
+      59
+    );
+
+    // This Month Collection
+  const collection = await Payment.aggregate([
+  {
+    $match: {
+      paymentDate: {
+        $gte: firstDay,
+        $lte: lastDay
+      }
+    }
+  },
+  {
+    $group: {
+      _id: null,
+
+      emiCollection: {
+        $sum: "$installmentAmount"
+      },
+
+      penaltyCollection: {
+        $sum: "$penaltyAmount"
+      },
+
+      totalCollection: {
+        $sum: "$totalReceived"
+      }
+    }
+  }
+]);
+
+const thisMonthCollection =
+collection.length > 0
+? collection[0].emiCollection
+: 0;
+
+const thisMonthPenalty =
+collection.length > 0
+? collection[0].penaltyCollection
+: 0;
+
+const totalCollection =
+collection.length > 0
+? collection[0].totalCollection
+: 0;
+     
+
+    // Pending Collection
+   const activeMembers = await Member.find({
+    status: {
+        $in: ["ACTIVE", "DUE", "OVERDUE"]
+    }
+});
+
+const monthlyTarget = activeMembers.reduce(
+    (sum, member) => sum + Number(member.monthlyInstallment),
+    0
 );
 
-if(!member){
+    let pendingCollection = 0;
+    let pendingMembers = 0;
+    let expectedCollection = 0;
 
-return res.status(404).json({
+    for (const member of activeMembers) {
+      expectedCollection += member.monthlyInstallment;
+      const payment = await Payment.findOne({
+        memberId: member._id,
+        paymentDate: {
+          $gte: firstDay,
+          $lte: lastDay
+        }
+      });
 
-success:false,
-message:"Member Not Found"
+      if (!payment) {
 
+        pendingCollection += member.monthlyInstallment;
+        pendingMembers++;
+
+      }
+
+    }
+const remainingCollection = Math.max(
+    0,
+    monthlyTarget - thisMonthCollection
+);
+ res.json({
+    success: true,
+
+    monthlyTarget,
+
+    thisMonthCollection,
+
+    thisMonthPenalty,
+
+    totalCollection,
+
+    remainingCollection
 });
 
-}
+  } catch (error) {
 
-const installmentAmount =
-member.monthlyInstallment;
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
 
-const penaltyAmount =
-member.pendingInstallments *
-member.monthlyPenalty;
+  }
+};
 
-const totalReceived =
-installmentAmount +
-penaltyAmount;
+exports.getPendingInstallments = async (req, res) => {
 
-const payment =
-await Payment.create({
+  try {
 
-memberId,
+    const member = await Member.findOne({
+      memberId: req.params.memberId
+    });
 
-societyId:
-member.societyId,
+    console.log("Monthly Penalty:", member.monthlyPenalty);
+console.log("Member:", member.memberId);
 
-installmentNo:
-member.paidInstallments + 1,
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
 
-installmentAmount,
+    const currentDate = new Date();
 
-penaltyAmount,
+    const joiningDate = new Date(member.joiningDate);
 
-totalReceived,
+    const monthsPassed =
+      (currentDate.getFullYear() - joiningDate.getFullYear()) * 12 +
+      (currentDate.getMonth() - joiningDate.getMonth());
 
-paymentMode,
+    const pending = [];
 
-transactionId,
+    for (
+      let i = member.paidInstallments;
+      i <= monthsPassed &&
+      i < member.totalInstallments;
+      i++
+    ) {
 
-remarks
+      // Installment Date
+      const installmentDate = new Date(joiningDate);
 
-});
+      installmentDate.setMonth(
+        joiningDate.getMonth() + i
+      );
 
-member.paidInstallments += 1;
+      // Due Date
+      const dueDate = new Date(installmentDate);
+      dueDate.setDate(member.dueDay);
 
-member.pendingInstallments -= 1;
-if(member.pendingInstallments < 0){
-  member.pendingInstallments = 0;
-}
-member.currentPenalty =
-member.pendingInstallments *
-member.monthlyPenalty;
+      // Month Name
+      const month = installmentDate.toLocaleString(
+        "en-IN",
+        {
+          month: "long"
+        }
+      );
 
-member.totalPaid +=
-installmentAmount;
+      const year = installmentDate.getFullYear();
 
-member.pendingAmount -=
-installmentAmount;
+      // Delay Month Calculation
+      const currentMonthIndex =
+        currentDate.getFullYear() * 12 +
+        currentDate.getMonth();
 
-member.totalPenaltyPaid +=
-penaltyAmount;
+      const dueMonthIndex =
+        dueDate.getFullYear() * 12 +
+        dueDate.getMonth();
 
+      let delayMonths =
+        currentMonthIndex - dueMonthIndex;
 
+      if (
+        currentDate.getDate() < member.dueDay
+      ) {
+        delayMonths--;
+      }
 
-member.lastPaymentDate =
-new Date();
+      if (delayMonths < 0) {
+        delayMonths = 0;
+      }
 
-if(
-member.pendingInstallments <= 0
-){
+      const penalty =
+        delayMonths *
+        member.monthlyPenalty;
 
-member.status =
-"COMPLETED";
+      console.log("--------------------------------");
+      console.log("Installment :", i + 1);
+      console.log("Month :", month);
+      console.log("Due Date :", dueDate);
+      console.log("Today :", currentDate);
+      console.log("Delay :", delayMonths);
+      console.log("Penalty :", penalty);
 
-}
+      pending.push({
 
-await member.save();
+        installmentNo: i + 1,
 
-res.status(200).json({
+        installmentMonth:
+          installmentDate.getMonth() + 1,
 
-success:true,
-message:"Payment Collected",
+        installmentYear: year,
 
-payment
+        month,
 
-});
+        dueDate,
 
-}
-catch(error){
+        installmentAmount:
+          member.monthlyInstallment,
 
-res.status(500).json({
+        penaltyAmount: penalty,
 
-success:false,
-message:error.message
+        total:
+          member.monthlyInstallment +
+          penalty
 
-});
+      });
 
-}
+    }
+
+    res.json({
+
+      success: true,
+
+      memberName: member.name,
+
+      memberId: member.memberId,
+
+      pendingInstallments: pending
+
+    });
+
+  }
+
+  catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
+
+};
+
+exports.getPaymentHistory = async (req, res) => {
+
+  try {
+
+    const { memberId } = req.params;
+
+    const member = await Member.findOne({ memberId });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
+
+    const history = await Payment.find({
+      memberId: member._id
+    }).sort({
+      installmentNo: 1
+    });
+
+    res.json({
+      success: true,
+      history
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
 
 };

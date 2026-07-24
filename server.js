@@ -67,9 +67,12 @@ require("./routes/daily/expenseRoutes");
 
 const dailyProfitLossRoutes =
 require("./routes/daily/profitLossRoutes");
-
+const dailySavingRoutes =
+require("./routes/daily/dailySavingRoutes");
 const societyExpenseRoutes =
 require("./routes/expenseRoutes");
+const agentDepositRoutes = require("./routes/daily/agentDepositRoutes");
+const businessFundRoutes = require("./routes/daily/businessFundRoutes");
 
 const societyProfitLossRoutes =
 require("./routes/profitLossRoutes");
@@ -139,12 +142,21 @@ app.use(
 app.use(
   "/api/expenses",
   societyExpenseRoutes
+);app.use(
+  "/api/daily/business-fund",
+  businessFundRoutes
 );
+
 
 app.use(
   "/api/profit-loss",
   societyProfitLossRoutes
 );
+app.use(
+"/api/daily",
+dailySavingRoutes
+);
+app.use("/api/daily", agentDepositRoutes);
 // app.use("/api/dashboard", dashboardRoutes);
 
 // ==========================================

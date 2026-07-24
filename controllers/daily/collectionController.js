@@ -1,3 +1,14 @@
+const LoanCollection =
+require("../../models/daily/LoanCollection");
+
+const DailyMember =
+require("../../models/daily/DailyMember");
+
+const DailyTransaction =
+require("../../models/daily/DailyTransaction");
+
+const PenaltySetting =
+require("../../models/daily/PenaltySetting");
 
 
 exports.getAgentMembers =
@@ -31,23 +42,6 @@ async (req,res)=>{
   }
 
 };
-
-
-
-
-
-
-
-
-
-const DailyMember =
-require("../../models/daily/DailyMember");
-
-const DailyTransaction =
-require("../../models/daily/DailyTransaction");
-
-const PenaltySetting =
-require("../../models/daily/PenaltySetting");
 
 exports.collectPayment =
 async(req,res)=>{
@@ -197,7 +191,9 @@ const totalAmount =
 dailyAmount + penalty;
 
 await DailyTransaction.create({
+
   member: member._id,
+
   area: member.areaGroup,
 
   collectorType,
@@ -207,10 +203,21 @@ await DailyTransaction.create({
       ? null
       : collectorId,
 
+  // Date when payment is actually collected
+  collectionDate: new Date(),
+
+  // Date for which payment is collected
+  paymentForDate:
+    req.body.paymentForDate || new Date(),
+
   dailyAmount,
+
   penalty,
+
   totalAmount,
+
   paymentMethod
+
 });
 
 member.totalPaid +=
@@ -218,6 +225,8 @@ dailyAmount;
 
 member.totalPenalty +=
 penalty;
+
+
 
 member.totalDaysPaid += 1;
 
@@ -263,7 +272,11 @@ await DailyTransaction
 .find()
 .populate(
 "member",
-"memberName mobile"
+"memberId memberName mobile"
+)
+
+.populate(
+"savingAccount"
 )
 .populate(
 "area",
@@ -293,17 +306,14 @@ message:error.message
 
 };
 
-exports.getAgentCollections =
-async(req,res)=>{
+exports.getAgentCollections = async(req,res)=>{
 
 try{
 
-const transactions =
-await DailyTransaction
-.find({
+const saving =
+await DailyTransaction.find({
 
-collectorId:
-req.params.agentId,
+collectorId:req.params.agentId,
 
 collectorType:"AGENT"
 
@@ -311,14 +321,43 @@ collectorType:"AGENT"
 .populate(
 "member",
 "memberName mobile"
-)
-.sort({
-createdAt:-1
-});
+);
 
-res.status(200).json({
+const loan =
+await LoanCollection.find({
+
+collectorId:req.params.agentId,
+
+collectorType:"AGENT"
+
+})
+.populate(
+"member",
+"memberName mobile"
+);
+
+const transactions=[
+
+...saving,
+
+...loan
+
+];
+
+transactions.sort(
+
+(a,b)=>
+
+new Date(b.createdAt)-
+
+new Date(a.createdAt)
+
+);
+
+res.json({
 
 success:true,
+
 transactions
 
 });
@@ -328,6 +367,7 @@ transactions
 res.status(500).json({
 
 success:false,
+
 message:error.message
 
 });
@@ -335,22 +375,47 @@ message:error.message
 }
 
 };
-
 exports.agentDashboard =
 async(req,res)=>{
 
 try{
 
-const transactions =
+const saving =
 await DailyTransaction.find({
 
-collectorId:
-req.params.agentId,
+collectorId:req.params.agentId,
 
 collectorType:"AGENT"
 
 });
 
+const loan =
+await LoanCollection.find({
+
+collectorId:req.params.agentId,
+
+collectorType:"AGENT"
+
+});
+
+const transactions=[
+...saving.map(item=>({
+
+...item.toObject(),
+
+collectionDate:item.collectionDate
+
+})),
+
+...loan.map(item=>({
+
+...item.toObject(),
+
+collectionDate:item.paymentDate
+
+}))
+
+];
 const today =
 new Date();
 
@@ -423,152 +488,250 @@ message:error.message
 };
 
 
-exports.getAgentHistory =
-async(req,res)=>{
+exports.getAgentHistory = async (req, res) => {
 
 try{
 
-const transactions =
-await DailyTransaction
-.find({
+const dailyTransactions =
+await DailyTransaction.find({
 
-collectorId:
-req.params.agentId,
+collectorId:req.params.agentId,
 
 collectorType:"AGENT"
 
 })
 .populate(
 "member",
-"memberName mobile"
-)
-.sort({
-collectionDate:-1
-});
-
-res.status(200).json({
-
-success:true,
-transactions
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
-
-};
-
-
-exports.adminSummary = async(req,res)=>{
-
-try{
-
-const transactions =
-await DailyTransaction.find();
-
-const today =
-new Date();
-
-today.setHours(0,0,0,0);
-
-const todayCollection =
-transactions
-.filter((t)=>{
-
-const d =
-new Date(
-t.collectionDate
+"memberId memberName mobile"
 );
 
-d.setHours(
-0,0,0,0
-);
+const loanTransactions =
+await LoanCollection.find({
 
-return (
-d.getTime() ===
-today.getTime()
-);
+collectorId:req.params.agentId,
+
+collectorType:"AGENT"
 
 })
-.reduce(
-(sum,item)=>
-sum +
-item.totalAmount,
-0
+.populate(
+"member",
+"memberId memberName mobile"
 );
 
-const totalMembers =
-await DailyMember.countDocuments();
+const savingData =
+dailyTransactions.map(item=>({
 
-const paidMembers =
-new Set(
+_id:item._id,
 
-transactions
-.filter((t)=>{
+type:"DAILY",
 
-const d =
-new Date(
-t.collectionDate
+collectionDate:item.collectionDate,
+
+paymentForDate:item.paymentForDate,
+
+member:item.member,
+
+dailyAmount:item.dailyAmount,
+
+penalty:item.penalty,
+
+totalAmount:item.totalAmount,
+
+paymentMethod:item.paymentMethod,
+
+status:"PAID"
+
+}));
+
+const loanData =
+loanTransactions.map(item=>({
+
+_id:item._id,
+
+type:"LOAN EMI",
+
+collectionDate:item.paymentDate,
+
+member:item.member,
+
+dailyAmount:item.principalAmount,
+
+penalty:item.penalty,
+
+totalAmount:item.totalAmount,
+
+paymentMethod:item.paymentMethod,
+
+status:item.status
+
+}));
+
+const transactions=[
+...savingData,
+...loanData
+];
+
+transactions.sort(
+(a,b)=>
+new Date(b.collectionDate)-new Date(a.collectionDate)
 );
-
-d.setHours(
-0,0,0,0
-);
-
-return (
-d.getTime() ===
-today.getTime()
-);
-
-})
-.map((t)=>
-t.member.toString()
-)
-
-).size;
-
-const pending =
-totalMembers -
-paidMembers;
-
-const successRate =
-totalMembers
-? Math.round(
-(paidMembers /
-totalMembers)
-*100
-)
-:0;
 
 res.json({
 
 success:true,
 
-todayCollection,
-
-pending,
-
-successRate
+transactions
 
 });
 
 }catch(error){
 
 res.status(500).json({
+
 success:false,
+
 message:error.message
+
 });
 
 }
 
 };
+
+
+exports.adminSummary = async (req, res) => {
+
+  try {
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate()+1);
+
+    // ============================
+    // DAILY SAVING COLLECTION
+    // ============================
+
+    const savingTransactions =
+      await DailyTransaction.find({
+
+        collectionDate:{
+          $gte:today,
+          $lt:tomorrow
+        }
+
+      });
+
+    // ============================
+    // DAILY LOAN EMI COLLECTION
+    // ============================
+
+    const loanTransactions =
+      await LoanCollection.find({
+
+        paymentDate:{
+          $gte:today,
+          $lt:tomorrow
+        }
+
+      });
+
+    // ============================
+    // TODAY COLLECTION
+    // ============================
+
+    const savingCollection =
+      savingTransactions.reduce(
+
+        (sum,item)=>
+        sum+(item.totalAmount||0),
+
+        0
+
+      );
+
+    const loanCollection =
+      loanTransactions.reduce(
+
+        (sum,item)=>
+        sum+(item.totalAmount||0),
+
+        0
+
+      );
+
+    const todayCollection =
+      savingCollection +
+      loanCollection;
+
+    // ============================
+    // MEMBERS
+    // ============================
+
+    const totalMembers =
+      await DailyMember.countDocuments();
+
+    const paidMembers = new Set();
+
+    savingTransactions.forEach(item=>{
+
+      paidMembers.add(
+        item.member.toString()
+      );
+
+    });
+
+    loanTransactions.forEach(item=>{
+
+      paidMembers.add(
+        item.member.toString()
+      );
+
+    });
+
+    const pending =
+      totalMembers -
+      paidMembers.size;
+
+    const successRate =
+      totalMembers
+      ? Math.round(
+          (paidMembers.size/totalMembers)*100
+        )
+      : 0;
+
+    res.json({
+
+      success:true,
+
+      todayCollection,
+
+      savingCollection,
+
+      loanCollection,
+
+      pending,
+
+      successRate
+
+    });
+
+  }
+
+  catch(error){
+
+    res.status(500).json({
+
+      success:false,
+
+      message:error.message
+
+    });
+
+  }
+
+};
+
 
 

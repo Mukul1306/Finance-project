@@ -9,6 +9,7 @@ require("../../models/daily/DailyLoan");
 
 const LoanCollection =
 require("../../models/daily/LoanCollection");
+const DailySaving = require("../../models/daily/DailySaving");
 const AreaGroup =
 require("../../models/daily/AreaGroup");
 exports.dashboardReport =
@@ -22,10 +23,12 @@ const areaReport = [];
 
 for(const area of areas){
 
-  const members =
-  await DailyMember.countDocuments({
-    areaGroup: area._id
-  });
+ 
+
+const members = await DailySaving.countDocuments({
+  areaGroup: area._id,
+  status: "ACTIVE"
+});
 
   const collections =
   await DailyTransaction.aggregate([

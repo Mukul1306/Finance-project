@@ -9,6 +9,10 @@ const {
   getAllLoans,
   getLoanById,
   closeLoan,
+  getPendingEmis,
+  collectLoanEmi,
+  getLoanHistory,
+  loanDashboard
 } = require("../controllers/loanController");
 
 /*
@@ -47,16 +51,44 @@ router.get(
 GET SINGLE LOAN
 */
 router.get(
-  "/:id",
-  getLoanById
+  "/pending-emis/:loanId",
+  getPendingEmis
 );
 
-/*
-CLOSE LOAN
-*/
+router.get(
+  "/payment-history/:loanId",
+  getLoanHistory
+);
+
+router.post(
+  "/collect-emi",
+  collectLoanEmi
+);
+
 router.put(
   "/close/:loanId",
   closeLoan
 );
+
+
+
+// ===========================
+// LOAN DASHBOARD
+// ===========================
+
+router.get(
+  "/dashboard",
+  loanDashboard
+);
+
+
+
+// KEEP THIS LAST
+router.get(
+  "/:id",
+  getLoanById
+);
+
+
 
 module.exports = router;

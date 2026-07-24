@@ -6,15 +6,35 @@ express.Router();
 const {
 
 createLoan,
-getLoans,
-getLoan,
-getLoanDetails,
-collectEmi,
-getAreas,
-getMembersByArea,
-getMember,
-closeLoan
 
+getLoans,
+
+getLoan,
+
+getLoanDetails,
+
+collectEmi,
+
+collectPrincipal,
+
+getAreas,
+
+getMembersByArea,
+
+getMember,
+
+searchLoanMembers,
+
+getLoanMemberDetails,
+
+calculateLoan,
+
+getLoanHistory,
+
+loanDashboard,
+
+closeLoan,
+getPendingInstallments
 
 } = require(
 "../../controllers/daily/loanController"
@@ -32,11 +52,44 @@ router.post(
 "/create-loan",
 createLoan
 );
+// Search Member
+router.get(
+"/loan-search/:keyword",
+searchLoanMembers
+);
+
+// Member Details
+router.get(
+"/loan-member/:memberId",
+getLoanMemberDetails
+);
+
+// Loan Calculator
+router.post(
+"/calculate-loan",
+calculateLoan
+);
+
 
 router.get(
 "/loans",
 getLoans
 );
+router.get(
+"/loan/:id",
+getLoan
+);
+
+router.get(
+"/loan-history/:loanId",
+getLoanHistory
+);
+
+router.get(
+"/loan-dashboard",
+loanDashboard
+);
+
 
 router.get(
 "/loan-details/:id",
@@ -47,11 +100,19 @@ router.post(
 "/collect-emi",
 collectEmi
 );
+router.post(
+"/collect-principal",
+collectPrincipal
+);
+
 router.get(
 "/areas",
 getAreas
 );
-
+router.get(
+  "/pending-installments/:loanId",
+  getPendingInstallments
+);
 router.get(
 "/members-by-area/:areaId",
 getMembersByArea

@@ -14,7 +14,20 @@ const paymentSchema = new mongoose.Schema({
     required:true
   },
 
+  // Installment Number
   installmentNo:{
+    type:Number,
+    required:true
+  },
+
+  // NEW
+  installmentMonth:{
+    type:Number,
+    required:true
+  },
+
+  // NEW
+  installmentYear:{
     type:Number,
     required:true
   },

@@ -7,7 +7,8 @@ require("../../models/daily/DailyLoan");
 const DailyTransaction =
 require("../../models/daily/DailyTransaction");
 
-
+const BusinessFund =
+require("../../models/daily/BusinessFund");
 const LoanCollection =
 require("../../models/daily/LoanCollection");
 
@@ -76,33 +77,57 @@ async (req, res) => {
     const totalLoanGiven =
       loanGiven[0]?.total || 0;
 
-    const totalIncome =
-      totalDailyCollection +
-      totalLoanCollection;
+   const totalBusinessFund = await BusinessFund.aggregate([
+{
+$group:{
+_id:null,
+total:{
+$sum:"$amount"
+}
+}
+}
+]);
+
+const businessFund =
+  totalBusinessFund[0]?.total || 0;
+  
+// Remaining Business Fund
+const remainingBusinessFund = Math.max(
+  0,
+  businessFund - totalExpenses
+);
+
+const totalIncome =
+totalDailyCollection +
+totalLoanCollection +
+businessFund;
 
     const totalOutflow =
       totalExpenses +
       totalLoanGiven;
 
     const netProfit =
-      totalIncome -
-      totalOutflow;
+totalIncome -
+totalExpenses -
+totalLoanGiven;
 
-    res.json({
-      success: true,
+res.json({
+  success: true,
 
-      totalDailyCollection,
-      totalLoanCollection,
+  totalDailyCollection,
+  totalLoanCollection,
+  businessFund,
 
-      totalIncome,
+  remainingBusinessFund,
+  totalIncome,
 
-      totalExpenses,
-      totalLoanGiven,
+  totalExpenses,
+  totalLoanGiven,
 
-      totalOutflow,
+  totalOutflow,
 
-      netProfit
-    });
+  netProfit
+});
 
   } catch (error) {
 
