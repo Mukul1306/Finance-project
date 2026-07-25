@@ -172,3 +172,8 @@ app.listen(PORT, () => {
     console.log(`🚀 CORE ENGINE RUNNING ON PORT: ${PORT}`);
     console.log(`=================================`);
 });
+
+
+app.get("/", (req, res) => {
+  res.send("SRM Finance Backend Running Successfully 🚀");
+});
