@@ -814,7 +814,103 @@ message:error.message
 
 };
 
+exports.updateLoan = async (req, res) => {
+  try {
 
+    const loan = await DailyLoan.findById(req.params.id);
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan Not Found"
+      });
+    }
+
+    // Preserve values that should never be overwritten
+    const {
+      _id,
+      loanNumber,
+      totalPaid,
+      outstandingAmount,
+      completedInstallments,
+      pendingInstallments,
+      lastInstallmentNo,
+      lastPaymentDate,
+      status,
+      closedDate,
+      closedBy,
+      createdAt,
+      updatedAt,
+      ...data
+    } = req.body;
+
+    // Update all editable fields
+    Object.assign(loan, data);
+
+    // ============================
+    // RECALCULATE LOAN
+    // ============================
+
+    const principal = Number(loan.loanAmount);
+    const rate = Number(loan.interestRate);
+
+    let tenure = 0;
+
+    if (loan.loanType === "DAILY") {
+      tenure = Number(loan.durationDays);
+    }
+
+    if (loan.loanType === "WEEKLY") {
+      tenure = Number(loan.durationWeeks);
+    }
+
+    if (
+      loan.loanType === "MONTHLY" ||
+      loan.loanType === "FIXED"
+    ) {
+      tenure = Number(loan.durationMonths);
+    }
+
+    const totalInterest =
+      Math.round((principal * rate * tenure) / 100);
+
+    const totalPayable =
+      principal + totalInterest;
+
+    const emi =
+      tenure > 0
+        ? Math.round(totalPayable / tenure)
+        : totalPayable;
+
+    loan.totalInterest = totalInterest;
+    loan.totalPayable = totalPayable;
+    loan.emiAmount = emi;
+
+    // Outstanding should consider already collected amount
+    loan.outstandingAmount =
+      totalPayable - loan.totalPaid;
+
+    if (loan.outstandingAmount < 0) {
+      loan.outstandingAmount = 0;
+    }
+
+    await loan.save();
+
+    res.json({
+      success: true,
+      message: "Loan Updated Successfully",
+      loan
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+};
 
 // ==========================================
 // GET SINGLE LOAN

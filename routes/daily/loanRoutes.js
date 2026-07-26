@@ -34,6 +34,7 @@ getLoanHistory,
 loanDashboard,
 
 closeLoan,
+updateLoan,
 getPendingInstallments
 
 } = require(
@@ -95,7 +96,7 @@ router.get(
 "/loan-details/:id",
 getLoanDetails  
 );
-
+router.put("/loan/:id", updateLoan);
 router.post(
 "/collect-emi",
 collectEmi
