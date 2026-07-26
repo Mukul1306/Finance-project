@@ -147,7 +147,112 @@ exports.addAgent = async (req, res) => {
 
 };
 
+exports.updateAgent = async (req, res) => {
 
+  try {
+
+    const agentId = req.params.id;
+
+    const {
+      name,
+      fatherName,
+      gender,
+      dob,
+      email,
+      mobile,
+      alternateMobile,
+      aadhaarNumber,
+      aadhaarReceived,
+      panNumber,
+      panReceived,
+      stampPaperReceived,
+      address,
+      operationalArea,
+      joiningDate,
+      password,
+      status
+    } = req.body;
+
+    const agent = await Agent.findById(agentId);
+
+    if (!agent) {
+
+      return res.status(404).json({
+        success: false,
+        message: "Agent Not Found"
+      });
+
+    }
+
+    // Mobile duplicate check
+    const mobileExists = await Agent.findOne({
+      mobile,
+      _id: { $ne: agentId }
+    });
+
+    if (mobileExists) {
+
+      return res.status(400).json({
+        success: false,
+        message: "Mobile already exists"
+      });
+
+    }
+
+    // Email duplicate check
+    const emailExists = await Agent.findOne({
+      email,
+      _id: { $ne: agentId }
+    });
+
+    if (emailExists) {
+
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists"
+      });
+
+    }
+
+    agent.name = name;
+    agent.fatherName = fatherName;
+    agent.gender = gender;
+    agent.dob = dob;
+    agent.email = email;
+    agent.mobile = mobile;
+    agent.alternateMobile = alternateMobile;
+    agent.aadhaarNumber = aadhaarNumber;
+    agent.aadhaarReceived = aadhaarReceived;
+    agent.panNumber = panNumber;
+    agent.panReceived = panReceived;
+    agent.stampPaperReceived = stampPaperReceived;
+    agent.address = address;
+    agent.operationalArea = operationalArea;
+    agent.joiningDate = joiningDate;
+    agent.status = status;
+
+    if (password && password.trim() !== "") {
+      agent.password = password;
+    }
+
+    await agent.save();
+
+    res.json({
+      success: true,
+      message: "Agent Updated Successfully",
+      agent
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+
+};
 // Get All Agents
 
 exports.getAgents = async (req, res) => {
