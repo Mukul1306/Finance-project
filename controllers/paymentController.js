@@ -8,12 +8,13 @@ exports.collectPayment = async (req, res) => {
 
   try {
 
-    const {
-      memberId,
-      paymentMode,
-      transactionId,
-      remarks
-    } = req.body;
+   const {
+  memberId,
+  installmentNo,
+  paymentMode,
+  transactionId,
+  remarks
+} = req.body;
 
     const member = await Member.findById(memberId);
 
@@ -36,15 +37,13 @@ exports.collectPayment = async (req, res) => {
 
     }
 
-    // Current Installment Number
-    const installmentNo = member.paidInstallments + 1;
 
     // Calculate Installment Month & Year
     const installmentDate = new Date(member.joiningDate);
 
-    installmentDate.setMonth(
-      installmentDate.getMonth() + member.paidInstallments
-    );
+installmentDate.setMonth(
+  installmentDate.getMonth() + (installmentNo - 1)
+);
 
     const installmentMonth =
       installmentDate.getMonth() + 1;
