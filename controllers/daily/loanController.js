@@ -2651,3 +2651,37 @@ message:error.message
 
 };
 
+
+exports.getAgentLoans = async (req, res) => {
+
+  try {
+
+    const agentId = req.params.agentId;
+
+    const loans = await DailyLoan.find({
+
+      assignedAgent: agentId,
+
+      status: {
+        $in: ["ACTIVE", "DUE", "OVERDUE"]
+      }
+
+    })
+    .populate("member", "memberName memberId mobile")
+    .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      loans
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+
+};

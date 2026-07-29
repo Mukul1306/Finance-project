@@ -35,7 +35,8 @@ loanDashboard,
 
 closeLoan,
 updateLoan,
-getPendingInstallments
+getPendingInstallments,
+getAgentLoans
 
 } = require(
 "../../controllers/daily/loanController"
@@ -124,7 +125,10 @@ router.get(
 getMember
 );
 
-
+router.get(
+  "/agent-loans/:agentId",
+  getAgentLoans
+);
 router.put(
   "/close-loan/:id",
   closeLoan

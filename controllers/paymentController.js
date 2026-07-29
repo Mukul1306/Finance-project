@@ -259,32 +259,68 @@ const monthlyTarget = activeMembers.reduce(
     0
 );
 
-    let pendingCollection = 0;
-    let pendingMembers = 0;
-    let expectedCollection = 0;
+let pendingThisMonth = 0;
+let pendingTillToday = 0;
 
-    for (const member of activeMembers) {
-      expectedCollection += member.monthlyInstallment;
-      const payment = await Payment.findOne({
-        memberId: member._id,
-        paymentDate: {
-          $gte: firstDay,
-          $lte: lastDay
-        }
-      });
+const today = new Date();
 
-      if (!payment) {
+for (const member of activeMembers) {
 
-        pendingCollection += member.monthlyInstallment;
-        pendingMembers++;
+  // Current month payment
+  const currentMonthPayment = await Payment.findOne({
+    memberId: member._id,
+    installmentMonth: today.getMonth() + 1,
+    installmentYear: today.getFullYear()
+  });
 
-      }
+  // Pending This Month
+  if (!currentMonthPayment) {
+    pendingThisMonth += Number(member.monthlyInstallment);
+  }
 
+  // Pending Till Today
+  const currentDate = new Date(member.joiningDate);
+
+  const monthsPassed =
+    (today.getFullYear() - currentDate.getFullYear()) * 12 +
+    (today.getMonth() - currentDate.getMonth());
+
+  for (
+    let i = member.paidInstallments;
+    i <= monthsPassed &&
+    i < member.totalInstallments;
+    i++
+  ) {
+
+    const installmentDate = new Date(member.joiningDate);
+
+    installmentDate.setMonth(
+      installmentDate.getMonth() + i
+    );
+
+    const dueDate = new Date(installmentDate);
+
+    dueDate.setDate(member.dueDay);
+
+    let delayMonths =
+      (today.getFullYear() - dueDate.getFullYear()) * 12 +
+      (today.getMonth() - dueDate.getMonth());
+
+    if (today.getDate() < member.dueDay) {
+      delayMonths--;
     }
-const remainingCollection = Math.max(
-    0,
-    monthlyTarget - thisMonthCollection
-);
+
+    if (delayMonths < 0) {
+      delayMonths = 0;
+    }
+
+    const penalty =
+      delayMonths * member.monthlyPenalty;
+
+    pendingTillToday +=
+      Number(member.monthlyInstallment) + penalty;
+  }
+}
  res.json({
     success: true,
 
@@ -296,7 +332,8 @@ const remainingCollection = Math.max(
 
     totalCollection,
 
-    remainingCollection
+    pendingThisMonth,
+pendingTillToday
 });
 
   } catch (error) {
