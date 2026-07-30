@@ -36,7 +36,9 @@ loanDashboard,
 closeLoan,
 updateLoan,
 getPendingInstallments,
-getAgentLoans
+getAgentLoans,
+    getAgentsByArea
+
 
 } = require(
 "../../controllers/daily/loanController"
@@ -92,7 +94,10 @@ router.get(
 loanDashboard
 );
 
-
+router.get(
+    "/agents-by-area/:areaId",
+    getAgentsByArea
+);
 router.get(
 "/loan-details/:id",
 getLoanDetails  
