@@ -41,7 +41,7 @@ router.get(
 );
 router.get(
   "/saving-member/:memberId",
-  savingController.getSavingMemberDetails
+    getSavingMemberDetails
 );
 /*
 =========================================
