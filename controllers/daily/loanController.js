@@ -2213,12 +2213,15 @@ exports.getLoanDetails = async (req, res) => {
 
 try{
 
-const loan =
-await DailyLoan.findById(req.params.id)
-
-.populate("member")
-
-.populate("assignedAgent","name mobile");
+const loan = await DailyLoan.findById(req.params.id)
+  .populate(
+    "member",
+    "memberId memberName mobile fatherName"
+  )
+  .populate(
+    "assignedAgent",
+    "name mobile"
+  );
 
 if(!loan){
 
