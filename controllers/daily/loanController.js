@@ -774,17 +774,10 @@ exports.getLoans = async (req, res) => {
 
 try{
 
-const loans =
-await DailyLoan.find()
-
-.populate(
-"assignedAgent",
-"name mobile"
-)
-
-.sort({
-createdAt:-1
-});
+const loans = await DailyLoan.find()
+  .populate("member", "memberId memberName mobile")
+  .populate("assignedAgent", "name mobile")
+  .sort({ createdAt: -1 });
 
 res.json({
 

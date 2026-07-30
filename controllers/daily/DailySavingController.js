@@ -483,3 +483,44 @@ saving.assignedAgent,
   }
 
 };
+
+
+/*
+=========================================
+GET MEMBER DETAILS FOR NEW SAVING
+=========================================
+*/
+
+exports.getSavingMemberDetails = async (req, res) => {
+  try {
+    const member = await DailyMember.findById(req.params.memberId);
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+    }
+
+    // Check if member already has an active saving account
+    const activeSaving = await DailySaving.findOne({
+      member: member._id,
+      status: "ACTIVE"
+    })
+      .populate("areaGroup", "areaName")
+      .populate("assignedAgent", "name");
+
+    res.status(200).json({
+      success: true,
+      member,
+      hasSaving: !!activeSaving,
+      saving: activeSaving
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
