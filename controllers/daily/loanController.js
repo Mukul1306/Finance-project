@@ -182,6 +182,9 @@ try{
 const{
 
 member,
+areaName,
+    assignedAgent,
+
 loanAmount,
   loanTenureMonths,
 interestRate,
@@ -358,12 +361,6 @@ message:"Member Not Found"
 });
 
 }
-const saving = await DailySaving.findOne({
-    member: memberData._id,
-    status: "ACTIVE"
-})
-.populate("areaGroup", "areaName")
-.populate("assignedAgent", "name");
 
 
 // ==========================================
@@ -536,11 +533,8 @@ state:memberData.state,
 
 pincode:memberData.pincode,
 
-areaName:
-saving?.areaGroup?.areaName || "",
-
-assignedAgent:
-saving?.assignedAgent?._id || null,
+areaName,
+assignedAgent,
 
 loanNumber,
 
@@ -2650,7 +2644,28 @@ message:error.message
 }
 
 };
+exports.getAgentsByArea = async (req, res) => {
+    try {
 
+        const agents = await Agent.find({
+            operationalArea: req.params.areaId,
+            status: "ACTIVE"
+        });
+
+        res.json({
+            success: true,
+            agents
+        });
+
+    } catch (error) {
+
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+
+    }
+};
 
 exports.getAgentLoans = async (req, res) => {
 
