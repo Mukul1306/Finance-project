@@ -186,20 +186,53 @@ if (alreadyPaid) {
 exports.getPaymentSummary = async (req, res) => {
   try {
 
-    const firstDay = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      1
-    );
+    const { year, month } = req.query;
+let firstDay;
+let lastDay;
 
-    const lastDay = new Date(
-      new Date().getFullYear(),
-      new Date().getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
+if (!year || year === "all") {
+
+  firstDay = new Date(2000, 0, 1);
+
+  lastDay = new Date();
+
+}
+else if (month && month !== "all") {
+
+  firstDay = new Date(
+    Number(year),
+    Number(month) - 1,
+    1
+  );
+
+  lastDay = new Date(
+    Number(year),
+    Number(month),
+    0,
+    23,
+    59,
+    59
+  );
+
+}
+else {
+
+  firstDay = new Date(
+    Number(year),
+    0,
+    1
+  );
+
+  lastDay = new Date(
+    Number(year),
+    11,
+    31,
+    23,
+    59,
+    59
+  );
+
+}
 
     // This Month Collection
   const collection = await Payment.aggregate([
