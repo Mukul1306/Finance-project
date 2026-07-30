@@ -6,7 +6,8 @@ const {
   collectPayment,
   getPaymentSummary,
   getPendingInstallments,
-  getPaymentHistory
+  getPaymentHistory,
+  getPenaltyCollection
 } = require("../controllers/paymentController");
 
 // Collect Payment
@@ -30,4 +31,7 @@ router.get(
   "/history/:memberId",
   getPaymentHistory
 );
+
+router.get("/penalty-collection", getPenaltyCollection);
+
 module.exports = router;

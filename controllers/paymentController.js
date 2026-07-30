@@ -553,3 +553,58 @@ exports.getPaymentHistory = async (req, res) => {
   }
 
 };
+
+exports.getPenaltyCollection = async (req, res) => {
+  try {
+
+    const { year, month } = req.query;
+
+    let match = {};
+
+    if (year && year !== "all") {
+
+      if (month && month !== "all") {
+
+        match.paymentDate = {
+          $gte: new Date(Number(year), Number(month) - 1, 1),
+          $lte: new Date(Number(year), Number(month), 0, 23, 59, 59)
+        };
+
+      } else {
+
+        match.paymentDate = {
+          $gte: new Date(Number(year), 0, 1),
+          $lte: new Date(Number(year), 11, 31, 23, 59, 59)
+        };
+
+      }
+
+    }
+
+    const result = await Payment.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalPenalty: {
+            $sum: "$penaltyAmount"
+          }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      totalPenalty:
+        result.length > 0 ? result[0].totalPenalty : 0
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+};
