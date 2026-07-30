@@ -2645,26 +2645,39 @@ message:error.message
 
 };
 exports.getAgentsByArea = async (req, res) => {
-    try {
+  try {
+    const area = await AreaGroup.findById(req.params.areaId)
+      .populate("assignedAgent", "name mobile")
+      .populate("secondaryAgent", "name mobile");
 
-        const agents = await Agent.find({
-            operationalArea: req.params.areaId,
-            status: "ACTIVE"
-        });
-
-        res.json({
-            success: true,
-            agents
-        });
-
-    } catch (error) {
-
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-
+    if (!area) {
+      return res.status(404).json({
+        success: false,
+        message: "Area not found"
+      });
     }
+
+    const agents = [];
+
+    if (area.assignedAgent) {
+      agents.push(area.assignedAgent);
+    }
+
+    if (area.secondaryAgent) {
+      agents.push(area.secondaryAgent);
+    }
+
+    res.json({
+      success: true,
+      agents
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
 
 exports.getAgentLoans = async (req, res) => {
