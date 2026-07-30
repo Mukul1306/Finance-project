@@ -373,93 +373,88 @@ console.log("Member:", member.memberId);
 
     const pending = [];
 
-    for (
-      let i = member.paidInstallments;
-      i <= monthsPassed &&
-      i < member.totalInstallments;
-      i++
-    ) {
+for (
+  let i = 0;
+  i <= monthsPassed &&
+  i < member.totalInstallments;
+  i++
+) {
 
-      // Installment Date
-      const installmentDate = new Date(joiningDate);
+  // Check if this installment is already paid
+  const alreadyPaid = await Payment.findOne({
+    memberId: member._id,
+    installmentNo: i + 1
+  });
 
-      installmentDate.setMonth(
-        joiningDate.getMonth() + i
-      );
+  if (alreadyPaid) {
+    continue;
+  }
 
-      // Due Date
-      const dueDate = new Date(installmentDate);
-      dueDate.setDate(member.dueDay);
+  // Installment Date
+  const installmentDate = new Date(joiningDate);
 
-      // Month Name
-      const month = installmentDate.toLocaleString(
-        "en-IN",
-        {
-          month: "long"
-        }
-      );
+  installmentDate.setMonth(
+    joiningDate.getMonth() + i
+  );
 
-      const year = installmentDate.getFullYear();
+  // Due Date
+  const dueDate = new Date(installmentDate);
+  dueDate.setDate(member.dueDay);
 
-      // Delay Month Calculation
-      const currentMonthIndex =
-        currentDate.getFullYear() * 12 +
-        currentDate.getMonth();
+  // Month Name
+  const month = installmentDate.toLocaleString("en-IN", {
+    month: "long"
+  });
 
-      const dueMonthIndex =
-        dueDate.getFullYear() * 12 +
-        dueDate.getMonth();
+  const year = installmentDate.getFullYear();
 
-      let delayMonths =
-        currentMonthIndex - dueMonthIndex;
+  // Delay Calculation
+  const currentMonthIndex =
+    currentDate.getFullYear() * 12 +
+    currentDate.getMonth();
 
-      if (
-        currentDate.getDate() < member.dueDay
-      ) {
-        delayMonths--;
-      }
+  const dueMonthIndex =
+    dueDate.getFullYear() * 12 +
+    dueDate.getMonth();
 
-      if (delayMonths < 0) {
-        delayMonths = 0;
-      }
+  let delayMonths =
+    currentMonthIndex - dueMonthIndex;
 
-      const penalty =
-        delayMonths *
-        member.monthlyPenalty;
+  if (currentDate.getDate() < member.dueDay) {
+    delayMonths--;
+  }
 
-      console.log("--------------------------------");
-      console.log("Installment :", i + 1);
-      console.log("Month :", month);
-      console.log("Due Date :", dueDate);
-      console.log("Today :", currentDate);
-      console.log("Delay :", delayMonths);
-      console.log("Penalty :", penalty);
+  if (delayMonths < 0) {
+    delayMonths = 0;
+  }
 
-      pending.push({
+  const penalty =
+    delayMonths * member.monthlyPenalty;
 
-        installmentNo: i + 1,
+  pending.push({
 
-        installmentMonth:
-          installmentDate.getMonth() + 1,
+    installmentNo: i + 1,
 
-        installmentYear: year,
+    installmentMonth:
+      installmentDate.getMonth() + 1,
 
-        month,
+    installmentYear: year,
 
-        dueDate,
+    month,
 
-        installmentAmount:
-          member.monthlyInstallment,
+    dueDate,
 
-        penaltyAmount: penalty,
+    installmentAmount:
+      member.monthlyInstallment,
 
-        total:
-          member.monthlyInstallment +
-          penalty
+    penaltyAmount: penalty,
 
-      });
+    total:
+      member.monthlyInstallment + penalty
 
-    }
+  });
+
+}
 
     res.json({
 
