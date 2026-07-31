@@ -197,214 +197,364 @@ if (alreadyPaid) {
 };
 
 exports.getPaymentSummary = async (req, res) => {
+
   try {
 
-    const { year, month } = req.query;
-let firstDay;
-let lastDay;
+    const today = new Date();
 
-if (!year || year === "all") {
+    // =====================================
+    // CURRENT MONTH DATE RANGE
+    // =====================================
 
-  firstDay = new Date(2000, 0, 1);
-
-  lastDay = new Date();
-
-}
-else if (month && month !== "all") {
-
-  firstDay = new Date(
-    Number(year),
-    Number(month) - 1,
-    1
-  );
-
-  lastDay = new Date(
-    Number(year),
-    Number(month),
-    0,
-    23,
-    59,
-    59
-  );
-
-}
-else {
-
-  firstDay = new Date(
-    Number(year),
-    0,
-    1
-  );
-
-  lastDay = new Date(
-    Number(year),
-    11,
-    31,
-    23,
-    59,
-    59
-  );
-
-}
-
-    // This Month Collection
-  const collection = await Payment.aggregate([
-  {
-    $match: {
-      paymentDate: {
-        $gte: firstDay,
-        $lte: lastDay
-      }
-    }
-  },
-  {
-    $group: {
-      _id: null,
-
-      emiCollection: {
-        $sum: "$installmentAmount"
-      },
-
-      penaltyCollection: {
-        $sum: "$penaltyAmount"
-      },
-
-      totalCollection: {
-        $sum: "$totalReceived"
-      }
-    }
-  }
-]);
-
-const thisMonthCollection =
-collection.length > 0
-? collection[0].emiCollection
-: 0;
-
-const thisMonthPenalty =
-collection.length > 0
-? collection[0].penaltyCollection
-: 0;
-
-const totalCollection =
-collection.length > 0
-? collection[0].totalCollection
-: 0;
-     
-
-    // Pending Collection
-   const activeMembers = await Member.find({
-    status: {
-        $in: ["ACTIVE", "DUE", "OVERDUE"]
-    }
-});
-
-const monthlyTarget = activeMembers.reduce(
-    (sum, member) => sum + Number(member.monthlyInstallment),
-    0
-);
-
-let pendingThisMonth = 0;
-let pendingTillToday = 0;
-
-const today = new Date();
-
-for (const member of activeMembers) {
-
-  // Current month payment
-  const currentMonthPayment = await Payment.findOne({
-    memberId: member._id,
-    installmentMonth: today.getMonth() + 1,
-    installmentYear: today.getFullYear()
-  });
-
-  // Pending This Month
-  if (!currentMonthPayment) {
-    pendingThisMonth += Number(member.monthlyInstallment);
-  }
-
-  // Pending Till Today
-  const currentDate = new Date(member.joiningDate);
-
-  const monthsPassed =
-    (today.getFullYear() - currentDate.getFullYear()) * 12 +
-    (today.getMonth() - currentDate.getMonth());
-
-for (
-  let i = 0;
-  i <= monthsPassed &&
-  i < member.totalInstallments;
-  i++
-) {
-
-  const alreadyPaid = await Payment.findOne({
-  memberId: member._id,
-  installmentNo: i + 1
-});
-
-if (alreadyPaid) {
-  continue;
-}
-
-
-    const installmentDate = new Date(member.joiningDate);
-
-    installmentDate.setMonth(
-      installmentDate.getMonth() + i
+    const firstDay = new Date(
+      today.getFullYear(),
+      today.getMonth(),
+      1
     );
 
-    const dueDate = new Date(installmentDate);
+    const lastDay = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0,
+      23,
+      59,
+      59
+    );
 
-    dueDate.setDate(member.dueDay);
 
-const graceEndDate = new Date(dueDate);
+    // =====================================
+    // RUN MAIN DATABASE QUERIES TOGETHER
+    // =====================================
 
-graceEndDate.setDate(
-  graceEndDate.getDate() +
-  Number(member.graceDays || 0)
-);
+    const [
+      collection,
+      activeMembers
+    ] = await Promise.all([
 
-let delayMonths = 0;
+      Payment.aggregate([
+        {
+          $match: {
+            paymentDate: {
+              $gte: firstDay,
+              $lte: lastDay
+            }
+          }
+        },
+        {
+          $group: {
+            _id: null,
 
-if (today > graceEndDate) {
+            emiCollection: {
+              $sum: "$installmentAmount"
+            },
 
-  delayMonths =
-    (today.getFullYear() - graceEndDate.getFullYear()) * 12 +
-    (today.getMonth() - graceEndDate.getMonth()) +
-    1;
-}
+            penaltyCollection: {
+              $sum: "$penaltyAmount"
+            },
 
-const penalty =
-  delayMonths *
-  Number(member.monthlyPenalty || 0);
+            totalCollection: {
+              $sum: "$totalReceived"
+            }
+          }
+        }
+      ]),
 
-    pendingTillToday +=
-      Number(member.monthlyInstallment) + penalty;
-  }
-}
- res.json({
-    success: true,
+      Member.find({
+        status: {
+          $in: [
+            "ACTIVE",
+            "DUE",
+            "OVERDUE"
+          ]
+        }
+      }).lean()
 
-    monthlyTarget,
+    ]);
 
-    thisMonthCollection,
 
-    thisMonthPenalty,
+    // =====================================
+    // COLLECTION SUMMARY
+    // =====================================
 
-    totalCollection,
+    const thisMonthCollection =
+      collection.length > 0
+        ? collection[0].emiCollection
+        : 0;
 
-    pendingThisMonth,
-pendingTillToday
-});
+    const thisMonthPenalty =
+      collection.length > 0
+        ? collection[0].penaltyCollection
+        : 0;
+
+    const totalCollection =
+      collection.length > 0
+        ? collection[0].totalCollection
+        : 0;
+
+
+    // =====================================
+    // MONTHLY TARGET
+    // =====================================
+
+    const monthlyTarget =
+      activeMembers.reduce(
+        (sum, member) =>
+          sum +
+          Number(member.monthlyInstallment || 0),
+        0
+      );
+
+
+    // =====================================
+    // GET ALL PAYMENTS IN ONE QUERY
+    // =====================================
+
+    const memberIds =
+      activeMembers.map(
+        member => member._id
+      );
+
+    const payments = await Payment.find({
+      memberId: {
+        $in: memberIds
+      }
+    })
+    .select(
+      "memberId installmentNo installmentMonth installmentYear"
+    )
+    .lean();
+
+
+    // =====================================
+    // CREATE FAST LOOKUP SETS
+    // =====================================
+
+    const paidInstallments = new Set();
+
+    const paidMonths = new Set();
+
+    for (const payment of payments) {
+
+      const memberId =
+        String(payment.memberId);
+
+      paidInstallments.add(
+        `${memberId}_${payment.installmentNo}`
+      );
+
+      paidMonths.add(
+        `${memberId}_${payment.installmentYear}_${payment.installmentMonth}`
+      );
+
+    }
+
+
+    // =====================================
+    // PENDING CALCULATION
+    // =====================================
+
+    let pendingThisMonth = 0;
+
+    let pendingTillToday = 0;
+
+
+    for (const member of activeMembers) {
+
+      const memberId =
+        String(member._id);
+
+
+      // =====================================
+      // PENDING THIS MONTH
+      // =====================================
+
+      const currentMonthKey =
+        `${memberId}_${today.getFullYear()}_${today.getMonth() + 1}`;
+
+      if (
+        !paidMonths.has(currentMonthKey)
+      ) {
+
+        pendingThisMonth +=
+          Number(
+            member.monthlyInstallment || 0
+          );
+
+      }
+
+
+      // =====================================
+      // MONTHS PASSED
+      // =====================================
+
+      const joiningDate =
+        new Date(member.joiningDate);
+
+      const monthsPassed =
+        (
+          today.getFullYear() -
+          joiningDate.getFullYear()
+        ) * 12 +
+        (
+          today.getMonth() -
+          joiningDate.getMonth()
+        );
+
+
+      // Member hasn't started yet
+      if (monthsPassed < 0) {
+        continue;
+      }
+
+
+      // =====================================
+      // CHECK INSTALLMENTS IN MEMORY
+      // NO DATABASE QUERY INSIDE LOOP
+      // =====================================
+
+      for (
+        let i = 0;
+        i <= monthsPassed &&
+        i < member.totalInstallments;
+        i++
+      ) {
+
+        const installmentNo =
+          i + 1;
+
+        const paymentKey =
+          `${memberId}_${installmentNo}`;
+
+
+        // Already paid
+        if (
+          paidInstallments.has(paymentKey)
+        ) {
+          continue;
+        }
+
+
+        // =====================================
+        // INSTALLMENT DATE
+        // =====================================
+
+        const installmentDate =
+          new Date(joiningDate);
+
+        installmentDate.setMonth(
+          installmentDate.getMonth() + i
+        );
+
+
+        // =====================================
+        // DUE DATE
+        // =====================================
+
+        const dueDate =
+          new Date(installmentDate);
+
+        dueDate.setDate(
+          member.dueDay
+        );
+
+
+        // =====================================
+        // GRACE PERIOD
+        // =====================================
+
+        const graceEndDate =
+          new Date(dueDate);
+
+        graceEndDate.setDate(
+          graceEndDate.getDate() +
+          Number(
+            member.graceDays || 0
+          )
+        );
+
+
+        // =====================================
+        // PENALTY
+        // =====================================
+
+        let delayMonths = 0;
+
+        if (
+          today > graceEndDate
+        ) {
+
+          delayMonths =
+            (
+              today.getFullYear() -
+              graceEndDate.getFullYear()
+            ) * 12 +
+            (
+              today.getMonth() -
+              graceEndDate.getMonth()
+            ) +
+            1;
+
+        }
+
+
+        const penalty =
+          delayMonths *
+          Number(
+            member.monthlyPenalty || 0
+          );
+
+
+        pendingTillToday +=
+          Number(
+            member.monthlyInstallment || 0
+          ) +
+          penalty;
+
+      }
+
+    }
+
+
+    // =====================================
+    // RESPONSE
+    // =====================================
+
+    return res.status(200).json({
+
+      success: true,
+
+      monthlyTarget,
+
+      thisMonthCollection,
+
+      thisMonthPenalty,
+
+      totalCollection,
+
+      pendingThisMonth,
+
+      pendingTillToday
+
+    });
+
 
   } catch (error) {
 
-    res.status(500).json({
+    console.error(
+      "Payment Summary Error:",
+      error
+    );
+
+    return res.status(500).json({
+
       success: false,
+
       message: error.message
+
     });
 
   }
+
 };
 
 exports.getPendingInstallments = async (req, res) => {
