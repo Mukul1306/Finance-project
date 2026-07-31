@@ -352,10 +352,9 @@ exports.getPaymentSummary = async (req, res) => {
     // =====================================
     // PENDING CALCULATION
     // =====================================
-
-    let pendingThisMonth = 0;
-
-    let pendingTillToday = 0;
+let pendingThisMonth = 0;
+let pendingTillToday = 0;
+let pendingPenaltyTillToday = 0;
 
 
     for (const member of activeMembers) {
@@ -503,6 +502,7 @@ exports.getPaymentSummary = async (req, res) => {
             member.monthlyPenalty || 0
           );
 
+               pendingPenaltyTillToday += penalty;
 
         pendingTillToday +=
           Number(
@@ -533,7 +533,8 @@ exports.getPaymentSummary = async (req, res) => {
 
       pendingThisMonth,
 
-      pendingTillToday
+      pendingTillToday,
+        pendingPenaltyTillToday
 
     });
 
@@ -643,6 +644,7 @@ if (currentDate > graceEndDate) {
 const penalty =
   delayMonths *
   Number(member.monthlyPenalty || 0);
+  
 
   pending.push({
 
