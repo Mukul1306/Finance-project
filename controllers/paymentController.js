@@ -54,24 +54,37 @@ installmentDate.setMonth(
     // Current Date
     const today = new Date();
 
-    const currentMonthIndex =
-      today.getFullYear() * 12 +
-      today.getMonth();
+   // Due date for selected installment
+const dueDate = new Date(installmentDate);
 
-    const installmentMonthIndex =
-      installmentYear * 12 +
-      (installmentMonth - 1);
+// Use member's configured due day
+dueDate.setDate(member.dueDay);
 
-    const delayMonths = Math.max(
-      0,
-      currentMonthIndex - installmentMonthIndex
-    );
+// Add grace days
+const graceEndDate = new Date(dueDate);
 
-    const installmentAmount =
-      member.monthlyInstallment;
+graceEndDate.setDate(
+  graceEndDate.getDate() +
+  Number(member.graceDays || 0)
+);
 
-    const penaltyAmount =
-      delayMonths * member.monthlyPenalty;
+let delayMonths = 0;
+
+// Penalty starts AFTER grace period
+if (today > graceEndDate) {
+
+  delayMonths =
+    (today.getFullYear() - graceEndDate.getFullYear()) * 12 +
+    (today.getMonth() - graceEndDate.getMonth()) +
+    1;
+}
+
+const installmentAmount =
+  Number(member.monthlyInstallment || 0);
+
+const penaltyAmount =
+  delayMonths *
+  Number(member.monthlyPenalty || 0);
 
     const totalReceived =
       installmentAmount + penaltyAmount;
@@ -317,12 +330,22 @@ for (const member of activeMembers) {
     (today.getFullYear() - currentDate.getFullYear()) * 12 +
     (today.getMonth() - currentDate.getMonth());
 
-  for (
-    let i = member.paidInstallments;
-    i <= monthsPassed &&
-    i < member.totalInstallments;
-    i++
-  ) {
+for (
+  let i = 0;
+  i <= monthsPassed &&
+  i < member.totalInstallments;
+  i++
+) {
+
+  const alreadyPaid = await Payment.findOne({
+  memberId: member._id,
+  installmentNo: i + 1
+});
+
+if (alreadyPaid) {
+  continue;
+}
+
 
     const installmentDate = new Date(member.joiningDate);
 
@@ -334,20 +357,26 @@ for (const member of activeMembers) {
 
     dueDate.setDate(member.dueDay);
 
-    let delayMonths =
-      (today.getFullYear() - dueDate.getFullYear()) * 12 +
-      (today.getMonth() - dueDate.getMonth());
+const graceEndDate = new Date(dueDate);
 
-    if (today.getDate() < member.dueDay) {
-      delayMonths--;
-    }
+graceEndDate.setDate(
+  graceEndDate.getDate() +
+  Number(member.graceDays || 0)
+);
 
-    if (delayMonths < 0) {
-      delayMonths = 0;
-    }
+let delayMonths = 0;
 
-    const penalty =
-      delayMonths * member.monthlyPenalty;
+if (today > graceEndDate) {
+
+  delayMonths =
+    (today.getFullYear() - graceEndDate.getFullYear()) * 12 +
+    (today.getMonth() - graceEndDate.getMonth()) +
+    1;
+}
+
+const penalty =
+  delayMonths *
+  Number(member.monthlyPenalty || 0);
 
     pendingTillToday +=
       Number(member.monthlyInstallment) + penalty;
@@ -382,19 +411,19 @@ exports.getPendingInstallments = async (req, res) => {
 
   try {
 
-    const member = await Member.findOne({
-      memberId: req.params.memberId
-    });
+   const member = await Member.findOne({
+  memberId: req.params.memberId
+});
 
-    console.log("Monthly Penalty:", member.monthlyPenalty);
+if (!member) {
+  return res.status(404).json({
+    success: false,
+    message: "Member not found"
+  });
+}
+
+console.log("Monthly Penalty:", member.monthlyPenalty);
 console.log("Member:", member.memberId);
-
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        message: "Member not found"
-      });
-    }
 
     const currentDate = new Date();
 
@@ -442,27 +471,28 @@ for (
   const year = installmentDate.getFullYear();
 
   // Delay Calculation
-  const currentMonthIndex =
-    currentDate.getFullYear() * 12 +
-    currentDate.getMonth();
+ // Add grace period
+const graceEndDate = new Date(dueDate);
 
-  const dueMonthIndex =
-    dueDate.getFullYear() * 12 +
-    dueDate.getMonth();
+graceEndDate.setDate(
+  graceEndDate.getDate() +
+  Number(member.graceDays || 0)
+);
 
-  let delayMonths =
-    currentMonthIndex - dueMonthIndex;
+let delayMonths = 0;
 
-  if (currentDate.getDate() < member.dueDay) {
-    delayMonths--;
-  }
+// Penalty starts after grace period
+if (currentDate > graceEndDate) {
 
-  if (delayMonths < 0) {
-    delayMonths = 0;
-  }
+  delayMonths =
+    (currentDate.getFullYear() - graceEndDate.getFullYear()) * 12 +
+    (currentDate.getMonth() - graceEndDate.getMonth()) +
+    1;
+}
 
-  const penalty =
-    delayMonths * member.monthlyPenalty;
+const penalty =
+  delayMonths *
+  Number(member.monthlyPenalty || 0);
 
   pending.push({
 
