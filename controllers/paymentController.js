@@ -585,6 +585,13 @@ console.log("Member:", member.memberId);
       (currentDate.getMonth() - joiningDate.getMonth());
 
     const pending = [];
+    console.log("===== PENDING DEBUG =====");
+console.log("Member:", member.memberId);
+console.log("Mongo Member ID:", member._id);
+console.log("Joining:", joiningDate);
+console.log("Today:", currentDate);
+console.log("Months Passed:", monthsPassed);
+console.log("Total Installments:", member.totalInstallments);
 
 for (
   let i = 0;
