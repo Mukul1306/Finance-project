@@ -243,26 +243,45 @@ const paidInstallments = await Payment.countDocuments({
 });
 
 // Number of overdue installments
+// Number of overdue installments
 const overdueInstallments = Math.max(
   0,
   dueInstallments - paidInstallments
 );
 
-// Pending amount till today
+// Total overdue amount
 const overdueAmount =
   overdueInstallments * Number(member.monthlyInstallment);
 
 // Can collect?
 const canCollect = overdueInstallments > 0;
-// Current pending penalty
-const currentPenalty =
-  overdueInstallments *
-  Number(member.monthlyPenalty);
 
-// Total payable today
+/* =======================================
+   CURRENT MONTH CARD CALCULATION
+======================================= */
+
+const currentMonthEmi =
+  Number(member.monthlyInstallment);
+
+let currentPenalty = 0;
+
+// Current month's due date
+const currentDueDate = new Date(
+  today.getFullYear(),
+  today.getMonth(),
+  member.dueDay
+);
+
+// Penalty only after due date
+if (
+  today.getTime() > currentDueDate.getTime() &&
+  canCollect
+) {
+  currentPenalty = Number(member.monthlyPenalty);
+}
+
 const totalPayable =
-  overdueAmount +
-  currentPenalty;
+  currentMonthEmi + currentPenalty;
 
 console.log("========================");
 console.log("Member:", member.name);
@@ -275,15 +294,21 @@ console.log("Payment Count:", paidInstallments);
 console.log("Overdue Installments:", overdueInstallments);
 console.log("Overdue Amount:", overdueAmount);
 
-   return {
+  return {
   ...member.toObject(),
+
   status,
+
   canCollect,
+
   overdueAmount,
+
+  currentMonthEmi,
+
   currentPenalty,
+
   totalPayable
 };
-
       })
 
     );
