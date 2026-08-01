@@ -254,6 +254,16 @@ const overdueAmount =
 
 // Can collect?
 const canCollect = overdueInstallments > 0;
+// Current pending penalty
+const currentPenalty =
+  overdueInstallments *
+  Number(member.monthlyPenalty);
+
+// Total payable today
+const totalPayable =
+  overdueAmount +
+  currentPenalty;
+
 console.log("========================");
 console.log("Member:", member.name);
 console.log("Joining:", member.joiningDate);
@@ -269,7 +279,9 @@ console.log("Overdue Amount:", overdueAmount);
   ...member.toObject(),
   status,
   canCollect,
-  overdueAmount
+  overdueAmount,
+  currentPenalty,
+  totalPayable
 };
 
       })
