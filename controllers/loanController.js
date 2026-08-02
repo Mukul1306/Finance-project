@@ -319,21 +319,18 @@ const updatedLoans = loans.map((loan) => {
 
   const data = loan.toObject();
 
-  const today = new Date();
+ const today = new Date();
 
-  const loanStartDate = new Date(data.loanGivenDate);
+const loanStartDate = new Date(data.loanGivenDate);
 
-  const loanEndDate = new Date(data.loanEndDate);
-
-  const totalMonths =
-    (loanEndDate.getFullYear() - loanStartDate.getFullYear()) * 12 +
-    (loanEndDate.getMonth() - loanStartDate.getMonth()) + 1;
-
-
-
-// First EMI starts after one month
-const firstEmiDate = new Date(loanStartDate);
+const firstEmiDate = new Date(data.loanGivenDate);
 firstEmiDate.setMonth(firstEmiDate.getMonth() + 1);
+
+const loanEndDate = new Date(data.loanEndDate);
+
+const totalMonths =
+  (loanEndDate.getFullYear() - firstEmiDate.getFullYear()) * 12 +
+  (loanEndDate.getMonth() - firstEmiDate.getMonth()) + 1;
 
 const monthsPassed =
   (today.getFullYear() - firstEmiDate.getFullYear()) * 12 +
@@ -479,17 +476,16 @@ exports.getPendingEmis = async (req, res) => {
 
     const today = new Date();
 
-    const loanStartDate = new Date(loan.loanGivenDate);
+const loanStartDate = new Date(loan.loanGivenDate);
 
-    const loanEndDate = new Date(loan.loanEndDate);
-
-    const totalMonths =
-      (loanEndDate.getFullYear() - loanStartDate.getFullYear()) * 12 +
-      (loanEndDate.getMonth() - loanStartDate.getMonth()) + 1;
-
- // First EMI starts after one month
-const firstEmiDate = new Date(loanStartDate);
+const firstEmiDate = new Date(loan.loanGivenDate);
 firstEmiDate.setMonth(firstEmiDate.getMonth() + 1);
+
+const loanEndDate = new Date(loan.loanEndDate);
+
+const totalMonths =
+  (loanEndDate.getFullYear() - firstEmiDate.getFullYear()) * 12 +
+  (loanEndDate.getMonth() - firstEmiDate.getMonth()) + 1;
 
 const monthsPassed =
   (today.getFullYear() - firstEmiDate.getFullYear()) * 12 +
@@ -507,7 +503,7 @@ const monthsPassed =
 
     ) {
 
-     const emiDate = new Date(firstEmiDate);
+    const emiDate = new Date(firstEmiDate);
 
 emiDate.setMonth(
   firstEmiDate.getMonth() + i
@@ -808,10 +804,10 @@ const monthsPassed =
   (today.getMonth() - firstEmiDate.getMonth());
 
       const pendingMonths =
-        Math.max(
-          0,
-          monthsPassed - loan.paidEmis
-        );
+  Math.max(
+    0,
+    monthsPassed + 1 - loan.paidEmis
+  );
 
       pendingInterest +=
         pendingMonths *
