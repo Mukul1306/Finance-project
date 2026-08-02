@@ -70,6 +70,7 @@ graceEndDate.setDate(
 
 let delayMonths = 0;
 
+
 // Penalty starts AFTER grace period
 if (today > graceEndDate) {
 
@@ -476,31 +477,30 @@ let pendingPenaltyTillToday = 0;
         // PENALTY
         // =====================================
 
-        let delayMonths = 0;
+       let delayMonths = 0;
 
-        if (
-          today > graceEndDate
-        ) {
+if (today > graceEndDate) {
 
-          delayMonths =
-            (
-              today.getFullYear() -
-              graceEndDate.getFullYear()
-            ) * 12 +
-            (
-              today.getMonth() -
-              graceEndDate.getMonth()
-            ) +
-            1;
+  delayMonths =
+    (
+      today.getFullYear() -
+      graceEndDate.getFullYear()
+    ) * 12 +
+    (
+      today.getMonth() -
+      graceEndDate.getMonth()
+    );
 
-        }
+  // Add one month only after the same day of next month
+  if (today.getDate() >= graceEndDate.getDate()) {
+    delayMonths++;
+  }
 
+}
 
-        const penalty =
-          delayMonths *
-          Number(
-            member.monthlyPenalty || 0
-          );
+const penalty =
+  delayMonths *
+  Number(member.monthlyPenalty || 0);
 
                pendingPenaltyTillToday += penalty;
 
