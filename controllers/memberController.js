@@ -260,21 +260,19 @@ const canCollect = overdueInstallments > 0;
    CURRENT MONTH CARD CALCULATION
 ======================================= */
 
-const currentMonthEmi =
-  Number(member.monthlyInstallment);
+const currentMonthEmi = Number(member.monthlyInstallment);
 
+// Current month penalty (for card)
 let currentPenalty = 0;
 
-// Current month's due date
 const currentDueDate = new Date(
   today.getFullYear(),
   today.getMonth(),
   member.dueDay
 );
 
-// Penalty only after due date
 if (
-  today.getTime() > currentDueDate.getTime() &&
+  today > currentDueDate &&
   canCollect
 ) {
   currentPenalty = Number(member.monthlyPenalty);
@@ -283,16 +281,47 @@ if (
 const totalPayable =
   currentMonthEmi + currentPenalty;
 
-console.log("========================");
-console.log("Member:", member.name);
-console.log("Joining:", member.joiningDate);
-console.log("Monthly EMI:", member.monthlyInstallment);
-console.log("Paid Installments:", member.paidInstallments);
+/* =======================================
+   TOTAL PENDING PENALTY TILL TODAY
+======================================= */
 
-console.log("Due Installments:", dueInstallments);
-console.log("Payment Count:", paidInstallments);
-console.log("Overdue Installments:", overdueInstallments);
-console.log("Overdue Amount:", overdueAmount);
+let pendingPenaltyTillToday = 0;
+
+for (let i = paidInstallments; i < dueInstallments; i++) {
+
+  const installmentDate = new Date(joiningDate);
+
+  installmentDate.setMonth(
+    joiningDate.getMonth() + i
+  );
+
+  const dueDate = new Date(installmentDate);
+
+  dueDate.setDate(member.dueDay);
+
+  let delayMonths = 0;
+
+  if (today > dueDate) {
+
+    delayMonths =
+      (today.getFullYear() - dueDate.getFullYear()) * 12 +
+      (today.getMonth() - dueDate.getMonth());
+
+    if (today.getDate() >= member.dueDay) {
+      delayMonths++;
+    }
+
+    if (delayMonths < 1) {
+      delayMonths = 1;
+    }
+
+  }
+
+  pendingPenaltyTillToday +=
+    delayMonths *
+    Number(member.monthlyPenalty);
+}
+
 
   return {
   ...member.toObject(),
@@ -307,7 +336,8 @@ console.log("Overdue Amount:", overdueAmount);
 
   currentPenalty,
 
-  totalPayable
+  totalPayable,
+    pendingPenaltyTillToday
 };
       })
 
