@@ -520,28 +520,22 @@ emiDate.setMonth(
       );
 
       const year = dueDate.getFullYear();
+let delayMonths = 0;
 
-      let delayMonths = 0;
+if (today > dueDate) {
 
-      if (today > dueDate) {
+  delayMonths =
+    (today.getFullYear() - dueDate.getFullYear()) * 12 +
+    (today.getMonth() - dueDate.getMonth()) + 1;
 
-        delayMonths =
-          (today.getFullYear() - dueDate.getFullYear()) * 12 +
-          (today.getMonth() - dueDate.getMonth());
+  if (today.getDate() < dueDate.getDate()) {
+    delayMonths--;
+  }
 
-        if (today.getDate() < loan.emiDueDay) {
-
-          delayMonths--;
-
-        }
-
-        if (delayMonths < 0) {
-
-          delayMonths = 0;
-
-        }
-
-      }
+  if (delayMonths < 0) {
+    delayMonths = 0;
+  }
+}
 
       const penaltyAmount =
         (
