@@ -493,14 +493,11 @@ if (today > graceEndDate) {
 
 const penaltyAmount =
   delayMonths * Number(member.monthlyPenalty || 0);
+pendingPenaltyTillToday += penaltyAmount;
 
-               pendingPenaltyTillToday += penalty;
-
-        pendingTillToday +=
-          Number(
-            member.monthlyInstallment || 0
-          ) +
-          penalty;
+pendingTillToday +=
+  Number(member.monthlyInstallment || 0) +
+  penaltyAmount;
 
       }
 
