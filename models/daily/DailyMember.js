@@ -43,6 +43,11 @@ const dailyMemberSchema = new mongoose.Schema({
     unique: true,
     match: /^[0-9]{10}$/
   },
+  password: {
+  type: String,
+  required: true
+},
+
 
   alternateMobile: {
     type: String,

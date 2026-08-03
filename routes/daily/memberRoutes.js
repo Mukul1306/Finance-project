@@ -12,7 +12,9 @@ const {
 
   updateMember,
 
-  deleteMember
+  deleteMember,
+  
+  memberLogin
 
 } = require("../../controllers/daily/DailyMemberController");
 
@@ -70,5 +72,7 @@ router.delete(
   "/member/:id",
   deleteMember
 );
+
+router.post("/login", memberLogin);
 
 module.exports = router;

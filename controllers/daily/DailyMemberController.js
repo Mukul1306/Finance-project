@@ -24,6 +24,13 @@ exports.createMember = async (req, res) => {
       });
     }
 
+    if (req.body.password !== req.body.confirmPassword) {
+  return res.status(400).json({
+    success: false,
+    message: "Password and Confirm Password do not match"
+  });
+}
+
     const member = await DailyMember.create({
 
       memberId: req.body.memberId,
@@ -38,9 +45,11 @@ exports.createMember = async (req, res) => {
 
       email: req.body.email,
 
-      mobile: req.body.mobile,
+     mobile: req.body.mobile,
 
-      alternateMobile: req.body.alternateMobile,
+password: req.body.password,
+
+alternateMobile: req.body.alternateMobile,
 
       residentialAddress: req.body.residentialAddress,
 
@@ -56,15 +65,19 @@ exports.createMember = async (req, res) => {
 
     });
 
-    res.status(201).json({
+  const responseMember = member.toObject();
 
-      success: true,
+delete responseMember.password;
 
-      message: "Member Registered Successfully",
+res.status(201).json({
 
-      member
+  success: true,
 
-    });
+  message: "Member Registered Successfully",
+
+  member: responseMember
+
+});
 
   } catch (error) {
 
@@ -264,6 +277,49 @@ exports.deleteMember = async (req, res) => {
 
       message: error.message
 
+    });
+
+  }
+
+};
+
+exports.memberLogin = async (req, res) => {
+
+  try {
+
+    const { mobile, password } = req.body;
+
+    const member = await DailyMember.findOne({ mobile });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
+
+    if (member.password !== password) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Password"
+      });
+    }
+
+    const responseMember = member.toObject();
+
+    delete responseMember.password;
+
+    res.status(200).json({
+      success: true,
+      message: "Login Successful",
+      member: responseMember
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
 
   }

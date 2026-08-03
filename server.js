@@ -78,6 +78,9 @@ const societyProfitLossRoutes =
 require("./routes/profitLossRoutes");
 // const dashboardRoutes = require("./routes/dashboardRoutes");
 
+const userRoutes =
+require("./routes/daily/userRoutes");
+
 // ==========================================
 // 4. API ROUTE DECLARATION CORNER
 // ==========================================
@@ -145,6 +148,11 @@ app.use(
 );app.use(
   "/api/daily/business-fund",
   businessFundRoutes
+);
+
+app.use(
+"/api/daily/user",
+userRoutes
 );
 
 

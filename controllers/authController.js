@@ -1,6 +1,7 @@
 const Admin = require("../models/Admin");
 const jwt = require("jsonwebtoken");
 const Agent = require("../models/daily/Agent");
+const DailyMember = require("../models/daily/DailyMember");
 
 exports.login = async (req, res) => {
 
@@ -71,6 +72,43 @@ if (agent) {
   });
 
 }
+
+  // ======================
+// DAILY MEMBER LOGIN
+// ======================
+
+const member = await DailyMember.findOne({ mobile });
+
+if (member) {
+
+  if (password !== member.password) {
+
+    return res.status(401).json({
+      success: false,
+      message: "Invalid Password"
+    });
+
+  }
+
+  return res.status(200).json({
+
+    success: true,
+
+    role: "MEMBER",
+
+    member: {
+      _id: member._id,
+      memberId: member.memberId,
+      memberName: member.memberName,
+      mobile: member.mobile,
+      status: member.status
+    }
+
+  });
+
+}
+
+
 
 return res.status(404).json({
   success: false,
