@@ -418,10 +418,22 @@ exports.updateMember = async (req, res) => {
 
     }
 
+    // Password Validation
+    if (
+      req.body.password &&
+      req.body.password !== req.body.confirmPassword
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Password and Confirm Password do not match"
+      });
+    }
+
     const {
 
       memberId,
       societyId,
+
       name,
       fatherOrHusbandName,
       gender,
@@ -447,7 +459,9 @@ exports.updateMember = async (req, res) => {
       monthlyInstallment,
       monthlyPenalty,
 
-      dueDay
+      dueDay,
+
+      password
 
     } = req.body;
 
@@ -478,12 +492,22 @@ exports.updateMember = async (req, res) => {
     member.joiningDate = joiningDate;
 
     member.monthlyInstallment = Number(monthlyInstallment);
-
     member.monthlyPenalty = Number(monthlyPenalty);
 
     member.dueDay = dueDay;
 
+    // Update Password Only If Entered
+    if (password && password.trim() !== "") {
+
+      member.password = password;
+
+    }
+
     await member.save();
+
+    const responseMember = member.toObject();
+
+    delete responseMember.password;
 
     res.json({
 
@@ -491,7 +515,7 @@ exports.updateMember = async (req, res) => {
 
       message: "Member Updated Successfully",
 
-      member
+      member: responseMember
 
     });
 
