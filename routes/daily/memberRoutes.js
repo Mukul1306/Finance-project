@@ -14,7 +14,8 @@ const {
 
   deleteMember,
   
-  memberLogin
+  memberLogin,
+  getMemberLoan
 
 } = require("../../controllers/daily/DailyMemberController");
 
@@ -50,7 +51,10 @@ router.get(
   "/member/:id",
   getMemberProfile
 );
-
+router.get(
+  "/member-loan/:memberId",
+  getMemberLoan
+);
 /*
 ====================================
 UPDATE MEMBER

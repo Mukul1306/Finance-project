@@ -1,5 +1,5 @@
 const DailyMember = require("../../models/daily/DailyMember");
-
+const DailyLoan = require("../../models/daily/DailyLoan");
 /*
 ==================================
 CREATE MEMBER
@@ -313,6 +313,41 @@ exports.memberLogin = async (req, res) => {
       success: true,
       message: "Login Successful",
       member: responseMember
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+
+};
+
+
+exports.getMemberLoan = async (req, res) => {
+
+  try {
+
+    const loan = await DailyLoan.findOne({
+      member: req.params.memberId
+    })
+      .populate("assignedAgent", "name mobile");
+
+    if (!loan) {
+
+      return res.json({
+        success: true,
+        loan: null
+      });
+
+    }
+
+    res.json({
+      success: true,
+      loan
     });
 
   } catch (error) {
