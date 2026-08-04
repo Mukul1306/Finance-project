@@ -1310,20 +1310,55 @@ loan.loanType==="DAILY"
 
 : loan.durationMonths;
 
+const loanDate = new Date(loan.loanDate);
+loanDate.setHours(0, 0, 0, 0);
+
+let dueTillToday = totalInstallments;
+
+if (loan.loanType === "DAILY") {
+
+  dueTillToday = Math.floor(
+    (today - loanDate) /
+    (1000 * 60 * 60 * 24)
+  ) + 1;
+
+}
+
+else if (loan.loanType === "WEEKLY") {
+
+  dueTillToday = Math.floor(
+    (today - loanDate) /
+    (1000 * 60 * 60 * 24 * 7)
+  ) + 1;
+
+}
+
+else if (loan.loanType === "MONTHLY") {
+
+  dueTillToday =
+    (today.getFullYear() - loanDate.getFullYear()) * 12 +
+    (today.getMonth() - loanDate.getMonth()) + 1;
+
+}
+
+if (dueTillToday > totalInstallments) {
+  dueTillToday = totalInstallments;
+}
+
+if (dueTillToday < 0) {
+  dueTillToday = 0;
+}
+
 const installments=[];
 
 const today=new Date();
 
 today.setHours(0,0,0,0);
 for (
-
-let i = 1;
-
-i <= totalInstallments;
-
-i++
-
-) {
+  let i = 1;
+  i <= dueTillToday;
+  i++
+){
 
 if (
 
