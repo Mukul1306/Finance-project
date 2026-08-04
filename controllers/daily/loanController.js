@@ -1310,6 +1310,9 @@ loan.loanType==="DAILY"
 
 : loan.durationMonths;
 
+const today = new Date();
+today.setHours(0,0,0,0);
+
 const loanDate = new Date(loan.loanDate);
 loanDate.setHours(0, 0, 0, 0);
 
@@ -1351,9 +1354,6 @@ if (dueTillToday < 0) {
 
 const installments=[];
 
-const today=new Date();
-
-today.setHours(0,0,0,0);
 for (
   let i = 1;
   i <= dueTillToday;
@@ -1485,6 +1485,11 @@ installments.push({
     installmentNo: i,
 
     dueDate,
+    
+      dueDateString:
+        dueDate.toLocaleDateString("en-IN"),
+
+
 
     emiAmount: loan.emiAmount,
 
