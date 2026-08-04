@@ -524,3 +524,111 @@ exports.getSavingMemberDetails = async (req, res) => {
     });
   }
 };
+exports.getSavingAccounts = async (req, res) => {
+
+  try {
+
+    const filter = req.query.filter || "ALL";
+
+    const today = new Date();
+    today.setHours(0,0,0,0);
+
+    let query = {};
+
+    if (filter === "COMPLETED") {
+
+      query.endDate = {
+        $lt: today
+      };
+
+    }
+
+    else if (filter === "7DAYS") {
+
+      const end = new Date(today);
+      end.setDate(end.getDate() + 7);
+
+      query.endDate = {
+        $gte: today,
+        $lte: end
+      };
+
+    }
+
+    else if (filter === "15DAYS") {
+
+      const end = new Date(today);
+      end.setDate(end.getDate() + 15);
+
+      query.endDate = {
+        $gte: today,
+        $lte: end
+      };
+
+    }
+
+    else if (filter === "30DAYS") {
+
+      const end = new Date(today);
+      end.setDate(end.getDate() + 30);
+
+      query.endDate = {
+        $gte: today,
+        $lte: end
+      };
+
+    }
+
+    else if (filter === "MONTH") {
+
+      const firstDay = new Date(
+        today.getFullYear(),
+        today.getMonth(),
+        1
+      );
+
+      const lastDay = new Date(
+        today.getFullYear(),
+        today.getMonth() + 1,
+        0
+      );
+
+      query.endDate = {
+        $gte: firstDay,
+        $lte: lastDay
+      };
+
+    }
+
+    const accounts =
+      await DailySaving.find(query)
+      .populate("member")
+      .populate("assignedAgent","name")
+      .populate("areaGroup","areaName")
+      .sort({
+        endDate:1
+      });
+
+    res.json({
+
+      success:true,
+
+      accounts
+
+    });
+
+  }
+
+  catch(error){
+
+    res.status(500).json({
+
+      success:false,
+
+      message:error.message
+
+    });
+
+  }
+
+};

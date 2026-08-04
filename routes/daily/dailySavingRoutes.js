@@ -13,7 +13,8 @@ const {
   updateDailySaving,
 
   closeDailySaving,
-  getSavingMemberDetails
+  getSavingMemberDetails,
+  getSavingAccounts
 
 
 } = require("../../controllers/daily/DailySavingController");
@@ -48,6 +49,11 @@ router.get(
 GET SINGLE SAVING ACCOUNT
 =========================================
 */
+router.get(
+"/saving-accounts",
+getSavingAccounts
+);
+
 
 router.get(
   "/saving-account/:id",
