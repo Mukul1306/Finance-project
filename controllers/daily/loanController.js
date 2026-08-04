@@ -834,48 +834,67 @@ exports.updateLoan = async (req, res) => {
     // Update all editable fields
     Object.assign(loan, data);
 
-    // ============================
-    // RECALCULATE LOAN
-    // ============================
+  let endDate = new Date(loan.loanDate);
 
-    const principal = Number(loan.loanAmount);
-    const rate = Number(loan.interestRate);
+if (loan.loanType === "DAILY") {
+  endDate.setDate(
+    endDate.getDate() + Number(loan.durationDays)
+  );
+}
 
-    let tenure = 0;
+if (loan.loanType === "WEEKLY") {
+  endDate.setDate(
+    endDate.getDate() + Number(loan.durationWeeks) * 7
+  );
+}
 
-    if (loan.loanType === "DAILY") {
-      tenure = Number(loan.durationDays);
-    }
+if (loan.loanType === "MONTHLY") {
+  endDate.setMonth(
+    endDate.getMonth() + Number(loan.durationMonths)
+  );
+}
 
-    if (loan.loanType === "WEEKLY") {
-      tenure = Number(loan.durationWeeks);
-    }
+if (loan.loanType === "FIXED") {
+  endDate.setMonth(
+    endDate.getMonth() + Number(loan.loanTenureMonths)
+  );
+}
 
-    if (
-      loan.loanType === "MONTHLY" ||
-      loan.loanType === "FIXED"
-    ) {
-      tenure = Number(loan.durationMonths);
-    }
+loan.endDate = endDate;
+// ============================
+// RECALCULATE LOAN
+// ============================
 
-    const totalInterest =
-      Math.round((principal * rate * tenure) / 100);
+const result = calculateLoanData(
+  loan.loanAmount,
+  loan.interestRate,
+  loan.loanTenureMonths,
+  loan.loanType,
+  loan.durationDays,
+  loan.durationWeeks,
+  loan.durationMonths
+);
 
-    const totalPayable =
-      principal + totalInterest;
+loan.totalInterest = result.totalInterest;
+loan.totalPayable = result.totalPayable;
+loan.emiAmount = result.emiAmount;
 
-    const emi =
-      tenure > 0
-        ? Math.round(totalPayable / tenure)
-        : totalPayable;
+// Keep already paid amount
+loan.outstandingAmount =
+  result.totalPayable - loan.totalPaid;
 
-    loan.totalInterest = totalInterest;
-    loan.totalPayable = totalPayable;
-    loan.emiAmount = emi;
+if (loan.outstandingAmount < 0) {
+  loan.outstandingAmount = 0;
+}
 
-    // Outstanding should consider already collected amount
-    loan.outstandingAmount =
-      totalPayable - loan.totalPaid;
+// Update pending installments
+loan.pendingInstallments =
+  result.totalInstallments -
+  loan.completedInstallments;
+
+if (loan.pendingInstallments < 0) {
+  loan.pendingInstallments = 0;
+}
 
     if (loan.outstandingAmount < 0) {
       loan.outstandingAmount = 0;
