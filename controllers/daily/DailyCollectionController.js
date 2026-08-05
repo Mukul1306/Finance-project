@@ -92,32 +92,20 @@ Math.floor(
 
 let penalty=0;
 
-if(diffDays>saving.graceDays){
+if (diffDays > saving.graceDays) {
 
-const chargeable =
-diffDays-saving.graceDays;
+    if (saving.penaltyType === "FIXED") {
 
-if(saving.penaltyType==="FIXED"){
+        penalty = saving.penaltyValue;
 
-penalty=
-chargeable*
-saving.penaltyValue;
+    } else {
 
-}else{
+        penalty = Math.round(
+            saving.fixedAmount *
+            saving.penaltyValue / 100
+        );
 
-penalty=
-
-Math.round(
-
-(saving.fixedAmount*
-
-saving.penaltyValue/100)
-
-*chargeable
-
-);
-
-}
+    }
 
 }
 
@@ -289,35 +277,20 @@ const diffDays=Math.floor(
 
 let penalty=0;
 
-if(diffDays>saving.graceDays){
+if (diffDays > saving.graceDays) {
 
-const chargeable=
+    if (saving.penaltyType === "FIXED") {
 
-diffDays-saving.graceDays;
+        penalty = saving.penaltyValue;
 
-if(saving.penaltyType==="FIXED"){
+    } else {
 
-penalty=
+        penalty = Math.round(
+            dailyAmount *
+            saving.penaltyValue / 100
+        );
 
-chargeable*
-
-saving.penaltyValue;
-
-}else{
-
-penalty=
-
-Math.round(
-
-(dailyAmount*
-
-saving.penaltyValue/100)
-
-*chargeable
-
-);
-
-}
+    }
 
 }
 
