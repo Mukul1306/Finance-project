@@ -612,3 +612,50 @@ exports.deleteMember = async (req, res) => {
   }
 
 };
+exports.getMemberPaymentHistory = async (req, res) => {
+
+  try {
+
+    const member = await Member.findById(req.params.id)
+      .populate("societyId", "societyName");
+
+    if (!member) {
+
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+
+    }
+
+    const payments = await Payment.find({
+
+      memberId: req.params.id
+
+    })
+      .populate("collectorId", "name")
+      .sort({ paymentDate: -1 });
+
+    res.json({
+
+      success: true,
+
+      member,
+
+      payments
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
+
+};

@@ -4,51 +4,75 @@ require("../../models/daily/AreaGroup");
 
 // CREATE AREA GROUP
 
-exports.createAreaGroup =
-async(req,res)=>{
+exports.createAreaGroup = async (req, res) => {
 
-try{
+  try {
 
-const {
+    const {
+      areaName,
+      duration,
+      durationType,
+      maxMembers,
+      startDate,
+      assignedAgent,
+      secondaryAgent
+    } = req.body;
 
-  areaName,
-  duration,
-  maxMembers,
-  startDate,
-  assignedAgent,
-    secondaryAgent
+    const endDate = new Date(startDate);
 
-} = req.body;
+    if (durationType === "DAYS") {
+      endDate.setDate(endDate.getDate() + Number(duration));
+    }
 
-const group =
-await AreaGroup.create({
+    if (durationType === "MONTHS") {
+      endDate.setMonth(endDate.getMonth() + Number(duration));
+    }
 
-  areaName,
-  duration,
-  maxMembers,
-  startDate,
-  assignedAgent
+    if (durationType === "YEARS") {
+      endDate.setFullYear(endDate.getFullYear() + Number(duration));
+    }
 
-});
+    const group = await AreaGroup.create({
 
-res.status(201).json({
+      areaName,
 
-  success:true,
-  message:"Area Group Created",
-  group
+      duration,
 
-});
+      durationType,
 
-}catch(error){
+      maxMembers,
 
-res.status(500).json({
+      startDate,
 
-  success:false,
-  message:error.message
+      endDate,
 
-});
+      assignedAgent,
 
-}
+      secondaryAgent
+
+    });
+
+    res.status(201).json({
+
+      success: true,
+
+      message: "Area Group Created",
+
+      group
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
 
 };
 
@@ -141,42 +165,65 @@ message:error.message
 
 // UPDATE AREA GROUP
 
-exports.updateAreaGroup =
-async(req,res)=>{
+exports.updateAreaGroup = async (req, res) => {
 
-try{
+  try {
 
-const group =
-await AreaGroup.findByIdAndUpdate(
+    const group = await AreaGroup.findById(req.params.id);
 
-req.params.id,
+    if (!group) {
 
-req.body,
+      return res.status(404).json({
 
-{
-new:true
-}
+        success: false,
 
-);
+        message: "Area Group Not Found"
 
-res.status(200).json({
+      });
 
-success:true,
-message:"Area Updated",
-group
+    }
 
-});
+    Object.assign(group, req.body);
 
-}catch(error){
+    const endDate = new Date(group.startDate);
 
-res.status(500).json({
+    if (group.durationType === "DAYS") {
+      endDate.setDate(endDate.getDate() + Number(group.duration));
+    }
 
-success:false,
-message:error.message
+    if (group.durationType === "MONTHS") {
+      endDate.setMonth(endDate.getMonth() + Number(group.duration));
+    }
 
-});
+    if (group.durationType === "YEARS") {
+      endDate.setFullYear(endDate.getFullYear() + Number(group.duration));
+    }
 
-}
+    group.endDate = endDate;
+
+    await group.save();
+
+    res.status(200).json({
+
+      success: true,
+
+      message: "Area Updated",
+
+      group
+
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
 
 };
 

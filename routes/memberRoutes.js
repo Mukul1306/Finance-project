@@ -7,7 +7,8 @@ const {
   getMembers,
   getMemberById,
   updateMember,
-  deleteMember
+  deleteMember,
+  getMemberPaymentHistory
 } = require("../controllers/memberController");
 
 router.post(
@@ -25,6 +26,10 @@ router.get(
   getMemberById
 );
 
+router.get(
+  "/member/:id/history",
+  memberController.getMemberPaymentHistory
+);
 router.put("/update/:id", updateMember);
 
 router.delete("/delete/:id", deleteMember);

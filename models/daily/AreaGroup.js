@@ -2,58 +2,71 @@ const mongoose = require("mongoose");
 
 const areaGroupSchema = new mongoose.Schema({
 
-  areaName:{
-    type:String,
-    required:true
+  areaName: {
+    type: String,
+    required: true
   },
 
-  duration:{
-    type:Number,
-    required:true
+  // Duration Value
+  duration: {
+    type: Number,
+    required: true
   },
 
-  maxMembers:{
-    type:Number,
-    required:true
+  // NEW FIELD
+  durationType: {
+    type: String,
+    enum: ["DAYS", "MONTHS", "YEARS"],
+    default: "DAYS"
   },
 
-  startDate:{
-    type:Date,
-    required:true
+  maxMembers: {
+    type: Number,
+    required: true
   },
 
-  assignedAgent:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"DailyAgent",
-    required:true
+  startDate: {
+    type: Date,
+    required: true
   },
 
-secondaryAgent: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "DailyAgent",
-  default: null
-},
-  status:{
-    type:String,
-    default:"ACTIVE"
+  // NEW FIELD
+  endDate: {
+    type: Date
   },
 
-  totalMembers:{
-    type:Number,
-    default:0
+  assignedAgent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "DailyAgent",
+    required: true
   },
 
-  totalCollection:{
-    type:Number,
-    default:0
+  secondaryAgent: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "DailyAgent",
+    default: null
+  },
+
+  status: {
+    type: String,
+    default: "ACTIVE"
+  },
+
+  totalMembers: {
+    type: Number,
+    default: 0
+  },
+
+  totalCollection: {
+    type: Number,
+    default: 0
   }
 
-},{
-  timestamps:true
+}, {
+  timestamps: true
 });
 
-module.exports =
-mongoose.model(
+module.exports = mongoose.model(
   "AreaGroup",
   areaGroupSchema
 );
