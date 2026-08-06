@@ -27,8 +27,8 @@ router.get(
 );
 
 router.get(
-  "/member/:id/history",
-  memberController.getMemberPaymentHistory
+  "/:id/history",
+  getMemberPaymentHistory
 );
 router.put("/update/:id", updateMember);
 
