@@ -628,13 +628,11 @@ exports.getMemberPaymentHistory = async (req, res) => {
 
     }
 
-    const payments = await Payment.find({
-
-      memberId: req.params.id
-
-    })
-      .populate("collectorId", "name")
-      .sort({ paymentDate: -1 });
+   const payments = await Payment.find({
+  memberId: req.params.id
+}).sort({
+  installmentNo: -1
+});
 
     res.json({
 
