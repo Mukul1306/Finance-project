@@ -1451,21 +1451,46 @@ let penalty = 0;
 
 if (delay > loan.gracePeriod) {
 
-    const chargeableDays =
-    delay - loan.gracePeriod;
+    // DAILY & WEEKLY → One Time Penalty
+    if (
+        loan.loanType === "DAILY" ||
+        loan.loanType === "WEEKLY"
+    ) {
 
-    if (loan.penaltyType === "PERCENTAGE") {
+        if (loan.penaltyType === "PERCENTAGE") {
 
-        penalty =
-        Math.round(
-            (loan.emiAmount * loan.penaltyValue) / 100
-        ) * chargeableDays;
+            penalty = Math.round(
+                (loan.emiAmount * loan.penaltyValue) / 100
+            );
 
-    } else {
+        } else {
 
-        penalty =
-        loan.penaltyValue *
-        chargeableDays;
+            penalty = Number(loan.penaltyValue);
+
+        }
+
+    }
+
+    // MONTHLY & FIXED → Old Logic
+    else {
+
+        const chargeableDays =
+            delay - loan.gracePeriod;
+
+        if (loan.penaltyType === "PERCENTAGE") {
+
+            penalty =
+                Math.round(
+                    (loan.emiAmount * loan.penaltyValue) / 100
+                ) * chargeableDays;
+
+        } else {
+
+            penalty =
+                Number(loan.penaltyValue) *
+                chargeableDays;
+
+        }
 
     }
 
@@ -1780,29 +1805,50 @@ delay =
 
 let penalty = 0;
 
-if(delay > loan.gracePeriod){
+if (delay > loan.gracePeriod) {
 
-const chargeableDays =
-delay - loan.gracePeriod;
+    // DAILY & WEEKLY → One Time Penalty
+    if (
+        loan.loanType === "DAILY" ||
+        loan.loanType === "WEEKLY"
+    ) {
 
-if(loan.penaltyType==="PERCENTAGE"){
+        if (loan.penaltyType === "PERCENTAGE") {
 
-penalty =
+            penalty = Math.round(
+                (loan.emiAmount * loan.penaltyValue) / 100
+            );
 
-Math.round(
+        } else {
 
-(loan.emiAmount * loan.penaltyValue)/100
+            penalty = Number(loan.penaltyValue);
 
-) * chargeableDays;
+        }
 
-}else{
+    }
 
-penalty =
+    // MONTHLY & FIXED → Existing Logic
+    else {
 
-loan.penaltyValue *
-chargeableDays;
+        const chargeableDays =
+            delay - loan.gracePeriod;
 
-}
+        if (loan.penaltyType === "PERCENTAGE") {
+
+            penalty =
+                Math.round(
+                    (loan.emiAmount * loan.penaltyValue) / 100
+                ) * chargeableDays;
+
+        } else {
+
+            penalty =
+                Number(loan.penaltyValue) *
+                chargeableDays;
+
+        }
+
+    }
 
 }
 
