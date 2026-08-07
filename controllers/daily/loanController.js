@@ -1782,7 +1782,7 @@ installments.push({
 
 
 
-    emiAmount: summaryEmi,
+    emiAmount: displayEmi,
 
     delay,
 
