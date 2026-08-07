@@ -571,7 +571,9 @@ emiAmount,
 totalPaid:0,
 
 outstandingAmount:
-totalPayable,
+loanType === "FIXED"
+    ? Number(loanAmount)
+    : totalPayable,
 
 completedInstallments:0,
 
@@ -1495,8 +1497,7 @@ else if (loan.loanType === "WEEKLY")
     totalInstallments = loan.durationWeeks;
 
 else if (
-    loan.loanType==="MONTHLY" ||
-    loan.loanType==="FIXED"
+    loan.loanType==="MONTHLY" 
 )
     totalInstallments = loan.durationMonths;
 
@@ -1920,7 +1921,6 @@ dueDate.getDate() +
 break;
 
 case "MONTHLY":
-case "FIXED":
 
 dueDate.setMonth(
 
@@ -1930,6 +1930,15 @@ dueDate.getMonth() +
 );
 
 break;
+
+case "FIXED":
+
+    interestAmount = loan.emiAmount;
+
+    principalAmount = 0;
+
+    break;
+
 
 }
 
@@ -2187,11 +2196,20 @@ status:"PAID"
 // Customer paid (EMI + Penalty)
 loan.totalPaid += totalAmount;
 
-// Reduce only loan amount (EMI)
-const loanRecovery = principalAmount + interestAmount;
+if (loan.loanType === "FIXED") {
 
-loan.outstandingAmount -= loanRecovery;
+    loan.totalPaid += totalAmount;
 
+} else {
+
+    const loanRecovery =
+        principalAmount + interestAmount;
+
+    loan.outstandingAmount -= loanRecovery;
+
+    loan.totalPaid += totalAmount;
+
+}
 
 
 if (loan.outstandingAmount < 0) {
@@ -2420,7 +2438,7 @@ status:"PAID"
 
 loan.totalPaid += principalAmount;
 
-loan.outstandingAmount -= loanRecovery;
+loan.outstandingAmount -= principalAmount;
 
 if (loan.outstandingAmount < 0) {
     loan.outstandingAmount = 0;
