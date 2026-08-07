@@ -230,16 +230,15 @@ exports.createLoan = async (req, res) => {
       memberId:finalMemberId,
 
       customerId:finalCustomerId,
+principalAmount: Number(loanAmount),
 
-      principalAmount:Number(loanAmount),
+outstandingPrincipal: Number(loanAmount),
 
-      interestPerHundred:Number(
+totalPrincipalPaid: 0,
 
-        interestPerHundred
+interestPerHundred: Number(interestPerHundred),
 
-      ),
-
-      monthlyInterest,
+monthlyInterest,
 
       emiDueDay:Number(
 
@@ -346,9 +345,9 @@ const pendingEmis = Math.max(
   data.pendingInterest =
     pendingEmis * (data.monthlyInterest || 0);
 
-  data.outstandingAmount =
-    (data.principalAmount || 0) +
-    data.pendingInterest;
+data.outstandingAmount =
+(data.outstandingPrincipal || 0) +
+data.pendingInterest;
 
   data.totalEmis = totalMonths;
 
@@ -612,27 +611,29 @@ exports.collectLoanEmi = async (req, res) => {
 
   try {
 
-    const {
+   const {
 
-      loanId,
+loanId,
 
-      emiNo,
+emiNo,
 
-      month,
+month,
 
-      year,
+year,
 
-      dueDate,
+dueDate,
 
-      interestAmount,
+interestAmount,
 
-      penaltyAmount,
+penaltyAmount,
 
-      paymentMode,
+principalPaid = 0,
 
-      remarks
+paymentMode,
 
-    } = req.body;
+remarks
+
+} = req.body;
 
     const loan = await Loan.findById(loanId);
 
@@ -668,9 +669,10 @@ exports.collectLoanEmi = async (req, res) => {
 
     }
 
-    const totalReceived =
-      Number(interestAmount) +
-      Number(penaltyAmount);
+   const totalReceived =
+Number(interestAmount) +
+Number(penaltyAmount) +
+Number(principalPaid);
 
     await LoanPayment.create({
 
@@ -686,11 +688,13 @@ exports.collectLoanEmi = async (req, res) => {
 
       dueDate,
 
-      interestAmount,
+     interestAmount,
 
-      penaltyAmount,
+penaltyAmount,
 
-      totalReceived,
+principalPaid,
+
+totalReceived,
 
       paymentMode,
 
@@ -698,15 +702,27 @@ exports.collectLoanEmi = async (req, res) => {
 
     });
 
-    loan.paidEmis += 1;
+   loan.paidEmis += 1;
 
-    loan.lastEmiDate = new Date();
+loan.lastEmiDate = new Date();
 
-    loan.totalInterestCollected += Number(interestAmount);
+loan.totalInterestCollected += Number(interestAmount);
 
-    loan.totalPenaltyCollected += Number(penaltyAmount);
+loan.totalPenaltyCollected += Number(penaltyAmount);
 
-    loan.totalAmountCollected += totalReceived;
+loan.totalPrincipalPaid += Number(principalPaid);
+
+loan.outstandingPrincipal -= Number(principalPaid);
+
+if (loan.outstandingPrincipal < 0) {
+    loan.outstandingPrincipal = 0;
+}
+
+loan.monthlyInterest =
+(loan.outstandingPrincipal / 100) *
+loan.interestPerHundred;
+
+loan.totalAmountCollected += totalReceived;
 
     await loan.save();
 

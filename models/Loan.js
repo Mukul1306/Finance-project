@@ -71,6 +71,16 @@ customerId:{
     required: true
   },
 
+outstandingPrincipal: {
+  type: Number,
+  default: 0
+},
+
+totalPrincipalPaid: {
+  type: Number,
+  default: 0
+},
+
   loanEndDate: {
     type: Date,
     required: true
