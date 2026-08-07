@@ -501,12 +501,6 @@ exports.getAgent = async (req, res) => {
 };
 
 
-/*
-=========================================
-GET COMPLETE AGENT PROFILE
-=========================================
-*/
-
 exports.getAgentProfile = async (req, res) => {
 
   try {

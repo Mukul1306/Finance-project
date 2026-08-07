@@ -546,26 +546,29 @@ status:"PAID"
 const loanData =
 loanTransactions.map(item=>({
 
-_id:item._id,
+  _id:item._id,
 
-type:"LOAN EMI",
+  type:"LOAN EMI",
 
-collectionDate:item.paymentDate,
+  collectionDate:item.paymentDate,
 
-member:item.member,
+  paymentForDate:item.dueDate,
 
-dailyAmount:item.principalAmount,
+  installmentNo:item.installmentNo,
 
-penalty:item.penalty,
+  member:item.member,
 
-totalAmount:item.totalAmount,
+  dailyAmount:item.principalAmount,
 
-paymentMethod:item.paymentMethod,
+  penalty:item.penalty,
 
-status:item.status
+  totalAmount:item.totalAmount,
+
+  paymentMethod:item.paymentMethod,
+
+  status:item.status
 
 }));
-
 const transactions=[
 ...savingData,
 ...loanData
