@@ -1782,7 +1782,7 @@ installments.push({
 
 
 
-    emiAmount: displayEmi,
+    emiAmount: summaryEmi,
 
     delay,
 
@@ -1800,6 +1800,14 @@ installments.push({
 
 }
 
+
+let summaryEmi = loan.emiAmount;
+
+if (loan.loanType === "FIXED") {
+    summaryEmi = Math.round(
+        loan.totalInterest / loan.loanTenureMonths
+    );
+}
 
 // ==========================================
 // RESPONSE
@@ -1824,7 +1832,7 @@ res.json({
         loan.pendingInstallments,
 
         emiAmount:
-        displayEmi
+        summaryEmi,
 
     },
 
