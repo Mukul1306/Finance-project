@@ -87,14 +87,15 @@ const calculateLoanData = (
 
             break;
 
-        case "FIXED":
+      case "FIXED":
 
-            totalInstallments = 1;
+    totalInstallments = loanTenureMonths;
 
-            emiAmount =
-                totalInterest;
+    emiAmount = Math.ceil(
+        totalInterest / loanTenureMonths
+    );
 
-            break;
+    break;
 
     }
 
@@ -483,14 +484,15 @@ endDate.getDate()+
 }
 
 if(loanType==="MONTHLY"){
+    endDate.setMonth(
+        endDate.getMonth()+Number(durationMonths)
+    );
+}
 
-endDate.setMonth(
-
-endDate.getMonth()+
-Number(durationMonths)
-
-);
-
+if(loanType==="FIXED"){
+    endDate.setMonth(
+        endDate.getMonth()+Number(loanTenureMonths)
+    );
 }
 
 
@@ -1466,52 +1468,7 @@ message:"Loan Not Found"
 
 }
 
-if (loan.loanType === "FIXED") {
 
-    const today = new Date();
-
-    let delayMonths =
-        (today.getFullYear() - new Date(loan.endDate).getFullYear()) * 12 +
-        (today.getMonth() - new Date(loan.endDate).getMonth());
-
-    if (delayMonths < 0) delayMonths = 0;
-
-    let penalty = 0;
-
-    if (delayMonths > loan.gracePeriod) {
-
-        if (loan.penaltyType === "PERCENTAGE") {
-
-            penalty = Math.round(
-                loan.loanAmount * loan.penaltyValue / 100
-            );
-
-        } else {
-
-            penalty = Number(loan.penaltyValue);
-
-        }
-    }
-
-    return res.json({
-
-        success: true,
-
-        installments: [{
-            installmentNo: 1,
-            dueDate: loan.endDate,
-            emiAmount: loan.totalInterest,
-            principalAmount: loan.loanAmount,
-            penalty,
-            totalAmount:
-                loan.totalInterest +
-                loan.loanAmount +
-                penalty
-        }]
-
-    });
-
-}
 
 const collections =
 await LoanCollection.find({
@@ -1529,17 +1486,22 @@ installmentNo:1
 const paidInstallments =
 collections.map(item => item.installmentNo);
 
-const totalInstallments =
+let totalInstallments;
 
-loan.loanType==="DAILY"
+if (loan.loanType === "DAILY")
+    totalInstallments = loan.durationDays;
 
-? loan.durationDays
+else if (loan.loanType === "WEEKLY")
+    totalInstallments = loan.durationWeeks;
 
-: loan.loanType==="WEEKLY"
+else if (
+    loan.loanType==="MONTHLY" ||
+    loan.loanType==="FIXED"
+)
+    totalInstallments = loan.durationMonths;
 
-? loan.durationWeeks
-
-: loan.durationMonths;
+else
+    totalInstallments = loan.loanTenureMonths;
 
 const today = new Date();
 today.setHours(0,0,0,0);
@@ -1865,16 +1827,7 @@ message:"Loan Not Found"
 
 }
 
-if(loan.loanType==="FIXED"){
 
-return res.status(400).json({
-
-success:false,
-message:"Use Collect Principal API for Fixed Loan."
-
-});
-
-}
 
 // ==========================================
 // CHECK DUPLICATE EMI
@@ -1904,17 +1857,19 @@ message:"This EMI has already been collected."
 // TOTAL INSTALLMENTS
 // ==========================================
 
-const totalInstallments =
+let totalInstallments;
 
-loan.loanType==="DAILY"
+if (loan.loanType==="DAILY")
+    totalInstallments=loan.durationDays;
 
-? loan.durationDays
+else if (loan.loanType==="WEEKLY")
+    totalInstallments=loan.durationWeeks;
 
-: loan.loanType==="WEEKLY"
+else if (loan.loanType==="MONTHLY")
+    totalInstallments=loan.durationMonths;
 
-? loan.durationWeeks
-
-: loan.durationMonths;
+else
+    totalInstallments=loan.loanTenureMonths;
 
 if(
 
@@ -1965,6 +1920,7 @@ dueDate.getDate() +
 break;
 
 case "MONTHLY":
+case "FIXED":
 
 dueDate.setMonth(
 
@@ -2122,18 +2078,23 @@ interestAmount;
 break;
 
 case "MONTHLY":
+case "FIXED":
 
-interestAmount =
-Math.round(
-loan.totalInterest /
-loan.durationMonths
-);
+    interestAmount = Math.round(
+        loan.totalInterest / loan.loanTenureMonths
+    );
 
-principalAmount =
-loan.emiAmount -
-interestAmount;
+    if(Number(installmentNo) === loan.loanTenureMonths){
 
-break;
+        principalAmount = loan.loanAmount;
+
+    }else{
+
+        principalAmount = 0;
+
+    }
+
+    break;
 
 default:
 
