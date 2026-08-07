@@ -839,6 +839,15 @@ exports.getLoans = async (req, res) => {
 
         }
 
+    else if (loan.loanType === "FIXED") {
+
+    dueTillToday =
+        (today.getFullYear()-loanDate.getFullYear())*12 +
+        (today.getMonth()-loanDate.getMonth()) + 1;
+
+}
+
+
         dueTillToday = Math.min(
           dueTillToday,
           totalInstallments
@@ -879,6 +888,14 @@ exports.getLoans = async (req, res) => {
             );
 
           }
+         else if (loan.loanType === "FIXED") {
+
+    dueDate.setMonth(
+        dueDate.getMonth() + (i-1)
+    );
+
+}
+
 
           dueDate.setHours(0,0,0,0);
 
@@ -904,13 +921,17 @@ exports.getLoans = async (req, res) => {
 
             }
 
-            else{
+        else {
 
-              delay =
-                (today.getFullYear()-dueDate.getFullYear())*12 +
-                (today.getMonth()-dueDate.getMonth());
+    delay =
+        (today.getFullYear() - dueDate.getFullYear()) * 12 +
+        (today.getMonth() - dueDate.getMonth());
 
-            }
+    if (today.getDate() > dueDate.getDate()) {
+        delay++;
+    }
+
+}
 
           }
 
@@ -1080,8 +1101,17 @@ loan.totalPayable = result.totalPayable;
 loan.emiAmount = result.emiAmount;
 
 // Keep already paid amount
-loan.outstandingAmount =
-  result.totalPayable - loan.totalPaid;
+if (loan.loanType === "FIXED") {
+
+    loan.outstandingAmount =
+        loan.loanAmount;
+
+} else {
+
+    loan.outstandingAmount =
+        result.totalPayable - loan.totalPaid;
+
+}
 
 if (loan.outstandingAmount < 0) {
   loan.outstandingAmount = 0;
@@ -1501,6 +1531,7 @@ else if (
 )
     totalInstallments = loan.durationMonths;
 
+
 else
     totalInstallments = loan.loanTenureMonths;
 
@@ -1537,6 +1568,15 @@ else if (loan.loanType === "MONTHLY") {
     (today.getMonth() - loanDate.getMonth()) + 1;
 
 }
+
+else if (loan.loanType === "FIXED") {
+
+    dueTillToday =
+        (today.getFullYear() - loanDate.getFullYear()) * 12 +
+        (today.getMonth() - loanDate.getMonth()) + 1;
+
+}
+
 
 if (dueTillToday > totalInstallments) {
   dueTillToday = totalInstallments;
@@ -1595,6 +1635,14 @@ dueDate.setMonth(
 dueDate.getMonth()+(i-1)
 
 );
+
+}
+
+else if (loan.loanType === "FIXED") {
+
+    dueDate.setMonth(
+        dueDate.getMonth() + (i - 1)
+    );
 
 }
 
@@ -1933,9 +1981,9 @@ break;
 
 case "FIXED":
 
-    interestAmount = loan.emiAmount;
-
-    principalAmount = 0;
+    dueDate.setMonth(
+        dueDate.getMonth() + (Number(installmentNo) - 1)
+    );
 
     break;
 
@@ -1983,13 +2031,15 @@ delay = Math.floor(
 
 }
 
-else{
+else {
 
-delay =
+    delay =
+        (today.getFullYear() - dueDate.getFullYear()) * 12 +
+        (today.getMonth() - dueDate.getMonth());
 
-(today.getFullYear()-dueDate.getFullYear())*12+
-
-(today.getMonth()-dueDate.getMonth());
+    if (today.getDate() > dueDate.getDate()) {
+        delay++;
+    }
 
 }
 
@@ -2087,21 +2137,24 @@ interestAmount;
 break;
 
 case "MONTHLY":
-case "FIXED":
 
     interestAmount = Math.round(
-        loan.totalInterest / loan.loanTenureMonths
+        loan.totalInterest / loan.durationMonths
     );
 
-    if(Number(installmentNo) === loan.loanTenureMonths){
+    principalAmount =
+        loan.emiAmount - interestAmount;
 
-        principalAmount = loan.loanAmount;
+    break;
 
-    }else{
 
-        principalAmount = 0;
+case "FIXED":
 
-    }
+    // Fixed loan = monthly interest only
+    interestAmount = loan.emiAmount;
+
+    // Principal is NEVER collected through EMI
+    principalAmount = 0;
 
     break;
 
@@ -2193,9 +2246,6 @@ status:"PAID"
 // UPDATE LOAN
 // ==========================================
 
-// Customer paid (EMI + Penalty)
-loan.totalPaid += totalAmount;
-
 if (loan.loanType === "FIXED") {
 
     loan.totalPaid += totalAmount;
@@ -2243,22 +2293,44 @@ Math.max(
 // UPDATE STATUS
 // ==========================================
 
-if (
-    loan.outstandingAmount <= 0 &&
-    loan.pendingInstallments === 0
-) {
+if (loan.loanType === "FIXED") {
 
-    loan.status = "CLOSED";
-    loan.closedDate = new Date();
-    loan.closedBy = collectorType;
+    if (loan.outstandingAmount <= 0) {
 
-} else if (delay > loan.gracePeriod) {
+        loan.status = "CLOSED";
+        loan.closedDate = new Date();
+        loan.closedBy = collectorType;
 
-    loan.status = "OVERDUE";
+    } else if (delay > loan.gracePeriod) {
+
+        loan.status = "OVERDUE";
+
+    } else {
+
+        loan.status = "ACTIVE";
+
+    }
 
 } else {
 
-    loan.status = "ACTIVE";
+    if (
+        loan.outstandingAmount <= 0 &&
+        loan.pendingInstallments === 0
+    ) {
+
+        loan.status = "CLOSED";
+        loan.closedDate = new Date();
+        loan.closedBy = collectorType;
+
+    } else if (delay > loan.gracePeriod) {
+
+        loan.status = "OVERDUE";
+
+    } else {
+
+        loan.status = "ACTIVE";
+
+    }
 
 }
 
@@ -2753,7 +2825,8 @@ for (const loan of loans) {
       loan.durationDays
     );
 
-} else if (loan.loanType === "MONTHLY") {
+}
+ else if (loan.loanType === "MONTHLY") {
 
     dueInstallments =
       (today.getFullYear() - loanDate.getFullYear()) * 12 +
@@ -2766,19 +2839,26 @@ for (const loan of loans) {
     );
 
   }
+else if (loan.loanType === "FIXED") {
+
+    dueInstallments =
+        (today.getFullYear() - loanDate.getFullYear()) * 12 +
+        (today.getMonth() - loanDate.getMonth()) + 1;
+
+    dueInstallments = Math.min(
+        dueInstallments,
+        loan.loanTenureMonths
+    );
+
+}
+
+
 
   if (dueInstallments < 0) dueInstallments = 0;
 
   const shouldHaveCollected =
     dueInstallments * loan.emiAmount;
-console.log("========================");
-console.log("Loan No:", loan.loanNumber);
-console.log("Loan Type:", loan.loanType);
-console.log("Loan Date:", loan.loanDate);
-console.log("EMI:", loan.emiAmount);
-console.log("Completed Installments:", loan.completedInstallments);
-console.log("Total Installments:", loan.totalInstallments);
-console.log("Due Installments:", dueInstallments);
+
 
 const pendingInstallments = Math.max(
   0,
