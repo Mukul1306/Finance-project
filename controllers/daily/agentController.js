@@ -596,25 +596,29 @@ exports.getAgentProfile = async (req, res) => {
 
       })),
 
-      ...loanCollections.map(item => ({
+  ...loanCollections.map(item => ({
 
-        _id: item._id,
+  _id: item._id,
 
-        type: "LOAN EMI",
+  type: "LOAN EMI",
 
-        collectionDate: item.paymentDate,
+  collectionDate: item.paymentDate,
 
-        member: item.member,
+  paymentForDate: item.dueDate,   // <-- ADD THIS
 
-        dailyAmount: item.principalAmount,
+  installmentNo: item.installmentNo,
 
-        penalty: item.penalty,
+  member: item.member,
 
-        totalAmount: item.totalAmount,
+  dailyAmount: item.principalAmount,
 
-        paymentMethod: item.paymentMethod
+  penalty: item.penalty,
 
-      }))
+  totalAmount: item.totalAmount,
+
+  paymentMethod: item.paymentMethod
+
+}))
 
     ];
 
