@@ -1466,15 +1466,50 @@ message:"Loan Not Found"
 
 }
 
-if(loan.loanType==="FIXED"){
+if (loan.loanType === "FIXED") {
 
-return res.json({
+    const today = new Date();
 
-success:true,
+    let delayMonths =
+        (today.getFullYear() - new Date(loan.endDate).getFullYear()) * 12 +
+        (today.getMonth() - new Date(loan.endDate).getMonth());
 
-installments:[]
+    if (delayMonths < 0) delayMonths = 0;
 
-});
+    let penalty = 0;
+
+    if (delayMonths > loan.gracePeriod) {
+
+        if (loan.penaltyType === "PERCENTAGE") {
+
+            penalty = Math.round(
+                loan.loanAmount * loan.penaltyValue / 100
+            );
+
+        } else {
+
+            penalty = Number(loan.penaltyValue);
+
+        }
+    }
+
+    return res.json({
+
+        success: true,
+
+        installments: [{
+            installmentNo: 1,
+            dueDate: loan.endDate,
+            emiAmount: loan.totalInterest,
+            principalAmount: loan.loanAmount,
+            penalty,
+            totalAmount:
+                loan.totalInterest +
+                loan.loanAmount +
+                penalty
+        }]
+
+    });
 
 }
 
