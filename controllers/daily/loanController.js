@@ -769,35 +769,230 @@ message:error.message
 // ==========================================
 // GET ALL LOANS
 // ==========================================
-
 exports.getLoans = async (req, res) => {
 
-try{
+  try {
 
-const loans = await DailyLoan.find()
-  .populate("member", "memberId memberName mobile")
-  .populate("assignedAgent", "name mobile")
-  .sort({ createdAt: -1 });
+    const loans = await DailyLoan.find()
+      .populate("member", "memberId memberName mobile")
+      .populate("assignedAgent", "name mobile")
+      .sort({ createdAt: -1 });
 
-res.json({
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-success:true,
+    const updatedLoans = await Promise.all(
 
-loans
+      loans.map(async (loan) => {
 
-});
+        const collections = await LoanCollection.find({
+          loan: loan._id
+        });
 
-}catch(error){
+        const paidInstallments =
+          collections.map(item => item.installmentNo);
 
-res.status(500).json({
+        let totalInstallments = 1;
 
-success:false,
+        if (loan.loanType === "DAILY")
+          totalInstallments = loan.durationDays;
 
-message:error.message
+        else if (loan.loanType === "WEEKLY")
+          totalInstallments = loan.durationWeeks;
 
-});
+        else if (loan.loanType === "MONTHLY")
+          totalInstallments = loan.durationMonths;
 
-}
+        let dueTillToday = totalInstallments;
+
+        const loanDate = new Date(loan.loanDate);
+        loanDate.setHours(0,0,0,0);
+
+        if (loan.loanType === "DAILY") {
+
+          dueTillToday =
+            Math.floor(
+              (today-loanDate)/(1000*60*60*24)
+            ) + 1;
+
+        }
+
+        else if (loan.loanType === "WEEKLY") {
+
+          dueTillToday =
+            Math.floor(
+              (today-loanDate)/(1000*60*60*24*7)
+            ) + 1;
+
+        }
+
+        else if (loan.loanType === "MONTHLY") {
+
+          dueTillToday =
+            (today.getFullYear()-loanDate.getFullYear())*12 +
+            (today.getMonth()-loanDate.getMonth()) + 1;
+
+        }
+
+        dueTillToday = Math.min(
+          dueTillToday,
+          totalInstallments
+        );
+
+        if (dueTillToday < 0)
+          dueTillToday = 0;
+
+        let pendingPenalty = 0;
+
+        for(let i=1;i<=dueTillToday;i++){
+
+          if(paidInstallments.includes(i))
+            continue;
+
+          let dueDate = new Date(loan.loanDate);
+
+          if(loan.loanType==="DAILY"){
+
+            dueDate.setDate(
+              dueDate.getDate()+(i-1)
+            );
+
+          }
+
+          else if(loan.loanType==="WEEKLY"){
+
+            dueDate.setDate(
+              dueDate.getDate()+((i-1)*7)
+            );
+
+          }
+
+          else if(loan.loanType==="MONTHLY"){
+
+            dueDate.setMonth(
+              dueDate.getMonth()+(i-1)
+            );
+
+          }
+
+          dueDate.setHours(0,0,0,0);
+
+          let delay = 0;
+
+          if(today>dueDate){
+
+            if(loan.loanType==="DAILY"){
+
+              delay =
+                Math.floor(
+                  (today-dueDate)/(1000*60*60*24)
+                );
+
+            }
+
+            else if(loan.loanType==="WEEKLY"){
+
+              delay =
+                Math.floor(
+                  (today-dueDate)/(1000*60*60*24*7)
+                );
+
+            }
+
+            else{
+
+              delay =
+                (today.getFullYear()-dueDate.getFullYear())*12 +
+                (today.getMonth()-dueDate.getMonth());
+
+            }
+
+          }
+
+          if(delay > loan.gracePeriod){
+
+            if(
+              loan.loanType==="DAILY" ||
+              loan.loanType==="WEEKLY"
+            ){
+
+              // One Time Penalty
+              if(loan.penaltyType==="PERCENTAGE"){
+
+                pendingPenalty += Math.round(
+                  loan.emiAmount *
+                  loan.penaltyValue / 100
+                );
+
+              }else{
+
+                pendingPenalty +=
+                  Number(loan.penaltyValue);
+
+              }
+
+            }
+
+            else{
+
+              const chargeable =
+                delay-loan.gracePeriod;
+
+              if(loan.penaltyType==="PERCENTAGE"){
+
+                pendingPenalty +=
+                  Math.round(
+                    loan.emiAmount *
+                    loan.penaltyValue / 100
+                  ) * chargeable;
+
+              }else{
+
+                pendingPenalty +=
+                  Number(loan.penaltyValue) *
+                  chargeable;
+
+              }
+
+            }
+
+          }
+
+        }
+
+        return{
+
+          ...loan.toObject(),
+
+          pendingPenalty
+
+        };
+
+      })
+
+    );
+
+    res.json({
+
+      success:true,
+
+      loans:updatedLoans
+
+    });
+
+  }
+
+  catch(error){
+
+    res.status(500).json({
+
+      success:false,
+
+      message:error.message
+
+    });
+
+  }
 
 };
 
