@@ -1758,6 +1758,15 @@ if (loan.loanType === "FIXED") {
 const totalAmount =
 displayEmi + penalty;
 
+console.log({
+    loanType: loan.loanType,
+    loanDate: loan.loanDate,
+    today,
+    totalInstallments,
+    dueTillToday
+});
+
+
 // ==========================================
 // PUSH INSTALLMENT
 // ==========================================
