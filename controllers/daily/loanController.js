@@ -2218,19 +2218,16 @@ status:"PAID"
 // ==========================================
 
 // Customer paid (EMI + Penalty)
-loan.totalPaid += totalAmount;
 
-// Only EMI reduces the outstanding loan
+loan.totalPaid += principalAmount;
+
+// Recover only loan amount (EMI)
 const loanRecovery = principalAmount + interestAmount;
 
 loan.outstandingAmount -= loanRecovery;
 
-
-
-if(loan.outstandingAmount<0){
-
-loan.outstandingAmount=0;
-
+if (loan.outstandingAmount < 0) {
+    loan.outstandingAmount = 0;
 }
 
 loan.lastPaymentDate =
