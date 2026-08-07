@@ -1832,7 +1832,7 @@ res.json({
         loan.pendingInstallments,
 
         emiAmount:
-        summaryEmi,
+        summaryEmi
 
     },
 
