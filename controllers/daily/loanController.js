@@ -1992,8 +1992,15 @@ status:"PAID"
 // UPDATE LOAN
 // ==========================================
 
+// Customer paid (EMI + Penalty)
 loan.totalPaid += totalAmount;
-loan.outstandingAmount -= totalAmount;
+
+// Reduce only loan amount (EMI)
+const loanRecovery = principalAmount + interestAmount;
+
+loan.outstandingAmount -= loanRecovery;
+
+
 
 if (loan.outstandingAmount < 0) {
     loan.outstandingAmount = 0;
@@ -2220,9 +2227,6 @@ status:"PAID"
 // Customer paid (EMI + Penalty)
 
 loan.totalPaid += principalAmount;
-
-// Recover only loan amount (EMI)
-const loanRecovery = principalAmount + interestAmount;
 
 loan.outstandingAmount -= loanRecovery;
 
