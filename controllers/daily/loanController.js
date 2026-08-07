@@ -2108,23 +2108,25 @@ if (delay > loan.gracePeriod) {
     // MONTHLY & FIXED → Existing Logic
     else {
 
-        const chargeableDays =
-            delay - loan.gracePeriod;
+       const chargeablePeriods = delay - loan.gracePeriod;
 
-        if (loan.penaltyType === "PERCENTAGE") {
+let penaltyBase = loan.emiAmount;
 
-            penalty =
-                Math.round(
-                    (loan.emiAmount * loan.penaltyValue) / 100
-                ) * chargeableDays;
+if (loan.loanType === "FIXED") {
+    penaltyBase = Math.round(
+        loan.totalInterest / loan.loanTenureMonths
+    );
+}
 
-        } else {
-
-            penalty =
-                Number(loan.penaltyValue) *
-                chargeableDays;
-
-        }
+if (loan.penaltyType === "PERCENTAGE") {
+    penalty =
+        Math.round(
+            (penaltyBase * loan.penaltyValue) / 100
+        ) * chargeablePeriods;
+} else {
+    penalty =
+        Number(loan.penaltyValue) * chargeablePeriods;
+}
 
     }
 
