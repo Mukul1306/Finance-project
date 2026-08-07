@@ -1676,11 +1676,13 @@ delay=Math.floor(
 
 else{
 
-delay=
+delay =
+(today.getFullYear() - dueDate.getFullYear()) * 12 +
+(today.getMonth() - dueDate.getMonth());
 
-(today.getFullYear()-dueDate.getFullYear())*12+
-
-(today.getMonth()-dueDate.getMonth());
+if (today.getDate() > dueDate.getDate()) {
+    delay++;
+}
 
 }
 
@@ -1693,7 +1695,6 @@ let penalty = 0;
 
 if (delay > loan.gracePeriod) {
 
-    // DAILY & WEEKLY → One Time Penalty
     if (
         loan.loanType === "DAILY" ||
         loan.loanType === "WEEKLY"
@@ -1711,26 +1712,32 @@ if (delay > loan.gracePeriod) {
 
         }
 
-    }
+    } else {
 
-    // MONTHLY & FIXED → Old Logic
-    else {
-
-        const chargeableDays =
+        const chargeablePeriods =
             delay - loan.gracePeriod;
+
+        let penaltyBase = loan.emiAmount;
+
+        // FIXED loan penalty is based on monthly interest
+        if (loan.loanType === "FIXED") {
+            penaltyBase = Math.round(
+                loan.totalInterest / loan.loanTenureMonths
+            );
+        }
 
         if (loan.penaltyType === "PERCENTAGE") {
 
             penalty =
                 Math.round(
-                    (loan.emiAmount * loan.penaltyValue) / 100
-                ) * chargeableDays;
+                    (penaltyBase * loan.penaltyValue) / 100
+                ) * chargeablePeriods;
 
         } else {
 
             penalty =
                 Number(loan.penaltyValue) *
-                chargeableDays;
+                chargeablePeriods;
 
         }
 
@@ -1738,10 +1745,18 @@ if (delay > loan.gracePeriod) {
 
 }
 
-const totalAmount =
-loan.emiAmount +
-penalty;
+let displayEmi = loan.emiAmount;
 
+if (loan.loanType === "FIXED") {
+
+    displayEmi = Math.round(
+        loan.totalInterest / loan.loanTenureMonths
+    );
+
+}
+
+const totalAmount =
+displayEmi + penalty;
 
 // ==========================================
 // PUSH INSTALLMENT
@@ -1758,7 +1773,7 @@ installments.push({
 
 
 
-    emiAmount: loan.emiAmount,
+    emiAmount: displayEmi,
 
     delay,
 
@@ -1800,7 +1815,7 @@ res.json({
         loan.pendingInstallments,
 
         emiAmount:
-        loan.emiAmount
+        displayEmi
 
     },
 
