@@ -340,13 +340,14 @@ const memberData =
 await DailyMember.findById(member);
 const existingLoan = await DailyLoan.findOne({
     member,
+    loanType,
     status: "ACTIVE"
 });
 
 if(existingLoan){
     return res.status(400).json({
         success:false,
-        message:"Member already has Active Loan"
+        message:`Member already has an Active ${loanType} Loan`
     });
 }
 
