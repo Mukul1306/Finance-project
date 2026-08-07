@@ -1993,11 +1993,6 @@ status:"PAID"
 // ==========================================
 
 loan.totalPaid += totalAmount;
-
-// Your business rule:
-// If customer pays ₹208 (₹200 EMI + ₹8 penalty)
-// Outstanding also reduces by ₹208
-
 loan.outstandingAmount -= totalAmount;
 
 if (loan.outstandingAmount < 0) {
@@ -2222,9 +2217,15 @@ status:"PAID"
 // UPDATE LOAN
 // ==========================================
 
-loan.totalPaid += principalAmount;
+// Customer paid (EMI + Penalty)
+loan.totalPaid += totalAmount;
 
-loan.outstandingAmount -= principalAmount;
+// Only EMI reduces the outstanding loan
+const loanRecovery = principalAmount + interestAmount;
+
+loan.outstandingAmount -= loanRecovery;
+
+
 
 if(loan.outstandingAmount<0){
 
