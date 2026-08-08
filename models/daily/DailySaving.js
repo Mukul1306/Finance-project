@@ -71,15 +71,33 @@ nomineeMobile: {
     default:0
   },
 
-  status:{
-    type:String,
-    enum:[
-      "ACTIVE",
-      "COMPLETED",
-      "CLOSED"
-    ],
-    default:"ACTIVE"
-  },
+status: {
+  type: String,
+  enum: [
+    "ACTIVE",
+    "COMPLETED",
+    "CLOSED",
+    "TERMINATED"
+  ],
+  default: "ACTIVE"
+},
+
+
+terminationDate: {
+  type: Date,
+  default: null
+},
+
+terminationReason: {
+  type: String,
+  default: ""
+},
+
+terminatedBy: {
+  type: String,
+  default: ""
+},
+
 
   totalSaved:{
     type:Number,

@@ -329,71 +329,285 @@ UPDATE DAILY SAVING ACCOUNT
 */
 
 exports.updateDailySaving = async (req, res) => {
-
   try {
 
-    const saving =
-      await DailySaving.findById(
-        req.params.id
-      );
+    const saving = await DailySaving.findById(req.params.id);
 
     if (!saving) {
-
       return res.status(404).json({
-
         success: false,
-
         message: "Saving Account Not Found"
-
       });
-
     }
 
-    Object.assign(saving, req.body);
+    // Only ACTIVE accounts can be edited
+    if (saving.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Only ACTIVE saving accounts can be edited"
+      });
+    }
 
-    if (
-      req.body.startDate ||
-      req.body.durationDays
-    ) {
+    const {
+      areaGroup,
+      collectionType,
+      fixedAmount,
+      durationDays,
+      startDate,
+      graceDays,
+      penaltyType,
+      penaltyValue,
+      nomineeName,
+      nomineeMobile
+    } = req.body;
 
-      const start =
-        new Date(
-          saving.startDate
+    // ==========================================
+    // AREA / AGENT
+    // ==========================================
+
+    if (areaGroup && areaGroup !== saving.areaGroup.toString()) {
+
+      const newArea = await AreaGroup
+        .findById(areaGroup)
+        .populate("assignedAgent");
+
+      if (!newArea) {
+        return res.status(404).json({
+          success: false,
+          message: "Area Group Not Found"
+        });
+      }
+
+      // Remove old area member count
+      if (saving.areaGroup) {
+        await AreaGroup.findByIdAndUpdate(
+          saving.areaGroup,
+          {
+            $inc: {
+              totalMembers: -1
+            }
+          }
         );
+      }
 
-      start.setHours(0,0,0,0);
+      // Remove old agent count
+      if (saving.assignedAgent) {
+        await DailyAgent.findByIdAndUpdate(
+          saving.assignedAgent,
+          {
+            $inc: {
+              totalMembers: -1
+            }
+          }
+        );
+      }
 
-      const end =
-        new Date(start);
+      saving.areaGroup = newArea._id;
 
-      end.setDate(
+      saving.assignedAgent =
+        newArea.assignedAgent?._id || null;
 
-        end.getDate() +
-
-        Number(
-          saving.durationDays
-        )
-
+      // Add new area count
+      await AreaGroup.findByIdAndUpdate(
+        newArea._id,
+        {
+          $inc: {
+            totalMembers: 1
+          }
+        }
       );
 
-      saving.endDate = end;
+      // Add new agent count
+      if (newArea.assignedAgent?._id) {
+        await DailyAgent.findByIdAndUpdate(
+          newArea.assignedAgent._id,
+          {
+            $inc: {
+              totalMembers: 1
+            }
+          }
+        );
+      }
 
     }
 
+    // ==========================================
+    // SAVING DETAILS
+    // ==========================================
+
+    if (collectionType !== undefined) {
+      saving.collectionType = collectionType;
+    }
+
+    saving.fixedAmount =
+      saving.collectionType === "FIXED"
+        ? Number(fixedAmount || 0)
+        : 0;
+
+    if (durationDays !== undefined) {
+      saving.durationDays = Number(durationDays);
+    }
+
+    if (startDate !== undefined) {
+      saving.startDate = new Date(startDate);
+    }
+
+    if (graceDays !== undefined) {
+      saving.graceDays = Number(graceDays || 0);
+    }
+
+    if (penaltyType !== undefined) {
+      saving.penaltyType = penaltyType;
+    }
+
+    if (penaltyValue !== undefined) {
+      saving.penaltyValue = Number(penaltyValue || 0);
+    }
+
+    saving.nomineeName =
+      nomineeName || "";
+
+    saving.nomineeMobile =
+      nomineeMobile || "";
+
+    // ==========================================
+    // RECALCULATE END DATE
+    // ==========================================
+
+    const start = new Date(saving.startDate);
+
+    start.setHours(0, 0, 0, 0);
+
+    const end = new Date(start);
+
+    end.setDate(
+      end.getDate() +
+      Number(saving.durationDays)
+    );
+
+    saving.endDate = end;
+
     await saving.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Saving Account Updated Successfully",
+      saving
+    });
+
+  } catch (error) {
+
+    console.error(
+      "UPDATE SAVING ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+};
+
+exports.terminateDailySaving = async (req, res) => {
+  try {
+
+    const {
+      reason,
+      terminatedBy
+    } = req.body;
+
+    const saving = await DailySaving.findById(
+      req.params.id
+    );
+
+    if (!saving) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving Account Not Found"
+      });
+    }
+
+    // Only active account can be terminated
+    if (saving.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only ACTIVE saving accounts can be terminated"
+      });
+    }
+
+    // ==========================================
+    // TERMINATE ACCOUNT
+    // ==========================================
+
+    saving.status = "TERMINATED";
+
+    saving.terminationDate = new Date();
+
+    saving.terminationReason =
+      reason || "Account terminated";
+
+    saving.terminatedBy =
+      terminatedBy || "ADMIN";
+
+    // Stop future collection
+    saving.nextCollectionDate = null;
+
+    await saving.save();
+
+    // ==========================================
+    // UPDATE AREA MEMBER COUNT
+    // ==========================================
+
+    if (saving.areaGroup) {
+
+      await AreaGroup.findByIdAndUpdate(
+        saving.areaGroup,
+        {
+          $inc: {
+            totalMembers: -1
+          }
+        }
+      );
+
+    }
+
+    // ==========================================
+    // UPDATE AGENT MEMBER COUNT
+    // ==========================================
+
+    if (saving.assignedAgent) {
+
+      await DailyAgent.findByIdAndUpdate(
+        saving.assignedAgent,
+        {
+          $inc: {
+            totalMembers: -1
+          }
+        }
+      );
+
+    }
 
     res.status(200).json({
 
       success: true,
 
       message:
-      "Saving Account Updated",
+        "Daily Saving Account Terminated Successfully",
 
       saving
 
     });
 
   } catch (error) {
+
+    console.error(
+      "TERMINATE SAVING ERROR:",
+      error
+    );
 
     res.status(500).json({
 
@@ -404,7 +618,6 @@ exports.updateDailySaving = async (req, res) => {
     });
 
   }
-
 };
 /*
 =========================================
