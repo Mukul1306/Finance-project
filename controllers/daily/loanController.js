@@ -886,17 +886,13 @@ else if (
 
           }
 
-          else if(loan.loanType==="MONTHLY"){
-
-            dueDate.setMonth(
-              dueDate.getMonth()+(i-1)
-            );
-
-          }
-         else if (loan.loanType === "FIXED") {
+        else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+) {
 
     dueDate.setMonth(
-        dueDate.getMonth() + (i-1)
+        dueDate.getMonth() + i
     );
 
 }
