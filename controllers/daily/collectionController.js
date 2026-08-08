@@ -10,33 +10,178 @@ require("../../models/daily/DailyTransaction");
 const PenaltySetting =
 require("../../models/daily/PenaltySetting");
 
+const DailySaving =
+require("../../models/daily/DailySaving");
 
-exports.getAgentMembers =
-async (req,res)=>{
 
-  try{
+exports.getAgentMembers = async (req, res) => {
 
-    const members =
-    await DailyMember
-    .find({
-      assignedAgent:
-      req.params.agentId
+  try {
+
+    const savings = await DailySaving.find({
+      assignedAgent: req.params.agentId,
+      status: "ACTIVE"
     })
-    .populate(
-      "areaGroup",
-      "areaName"
-    );
+      .populate(
+        "member",
+        "memberId memberName mobile"
+      )
+      .populate(
+        "areaGroup",
+        "areaName"
+      )
+      .populate(
+        "assignedAgent",
+        "name"
+      );
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const saving of savings) {
+
+      // =====================================
+      // GET ACTUAL PAYMENTS
+      // =====================================
+
+      const transactions =
+        await DailyTransaction.find({
+          savingAccount: saving._id
+        });
+
+      // =====================================
+      // FIND PAID DATES
+      // =====================================
+
+      const paidDates = new Set(
+        transactions.map(transaction => {
+
+          const date =
+            new Date(transaction.collectionDate);
+
+          date.setHours(0, 0, 0, 0);
+
+          return date.getTime();
+
+        })
+      );
+
+      // =====================================
+      // CALCULATE DUE DAYS
+      // =====================================
+
+      const startDate =
+        new Date(saving.startDate);
+
+      startDate.setHours(0, 0, 0, 0);
+
+      const endDate =
+        new Date(saving.endDate);
+
+      endDate.setHours(0, 0, 0, 0);
+
+      let dueDays = 0;
+
+      let current =
+        new Date(startDate);
+
+      while (
+        current <= today &&
+        current <= endDate
+      ) {
+
+        dueDays++;
+
+        current.setDate(
+          current.getDate() + 1
+        );
+
+      }
+
+      // =====================================
+      // CALCULATE PENDING DAYS
+      // =====================================
+
+      let pendingDays = 0;
+
+      current =
+        new Date(startDate);
+
+      while (
+        current <= today &&
+        current <= endDate
+      ) {
+
+        if (
+          !paidDates.has(
+            current.getTime()
+          )
+        ) {
+
+          pendingDays++;
+
+        }
+
+        current.setDate(
+          current.getDate() + 1
+        );
+
+      }
+
+      // =====================================
+      // UPDATE VALUES
+      // =====================================
+
+      saving.completedDays =
+        paidDates.size;
+
+      saving.totalDaysPaid =
+        paidDates.size;
+
+      saving.pendingDays =
+        pendingDays;
+
+      // =====================================
+      // PENDING AMOUNT
+      // =====================================
+
+      if (
+        saving.collectionType === "FIXED"
+      ) {
+
+        saving.pendingAmount =
+          pendingDays *
+          Number(saving.fixedAmount || 0);
+
+      } else {
+
+        saving.pendingAmount = 0;
+
+      }
+
+    }
 
     res.status(200).json({
-      success:true,
-      members
+
+      success: true,
+
+      members: savings
+
     });
 
-  }catch(error){
+  } catch (error) {
+
+    console.error(
+      "GET AGENT MEMBERS ERROR:",
+      error
+    );
 
     res.status(500).json({
-      success:false,
-      message:error.message
+
+      success: false,
+
+      message: error.message
+
     });
 
   }
