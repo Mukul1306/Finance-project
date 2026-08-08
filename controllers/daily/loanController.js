@@ -831,22 +831,19 @@ exports.getLoans = async (req, res) => {
 
         }
 
-        else if (loan.loanType === "MONTHLY") {
-
-          dueTillToday =
-            (today.getFullYear()-loanDate.getFullYear())*12 +
-            (today.getMonth()-loanDate.getMonth()) + 1;
-
-        }
-
-    else if (loan.loanType === "FIXED") {
-
+      else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+) {
     dueTillToday =
-        (today.getFullYear()-loanDate.getFullYear())*12 +
-        (today.getMonth()-loanDate.getMonth()) + 1;
+        (today.getFullYear() - loanDate.getFullYear()) * 12 +
+        (today.getMonth() - loanDate.getMonth());
 
+    // EMI / interest starts from next month
+    if (today.getDate() >= loanDate.getDate()) {
+        dueTillToday++;
+    }
 }
-
 
         dueTillToday = Math.min(
           dueTillToday,
@@ -1628,22 +1625,13 @@ dueDate.getDate()+((i-1)*7)
 
 }
 
-else if(loan.loanType==="MONTHLY"){
-
-dueDate.setMonth(
-
-dueDate.getMonth()+(i-1)
-
-);
-
-}
-
-else if (loan.loanType === "FIXED") {
-
+else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+) {
     dueDate.setMonth(
-        dueDate.getMonth() + (i - 1)
+        dueDate.getMonth() + i
     );
-
 }
 
 dueDate.setHours(0,0,0,0);
@@ -2002,19 +1990,18 @@ break;
 
 case "MONTHLY":
 
-dueDate.setMonth(
+    dueDate.setMonth(
+        dueDate.getMonth() +
+        Number(installmentNo)
+    );
 
-dueDate.getMonth() +
-(Number(installmentNo)-1)
-
-);
-
-break;
+    break;
 
 case "FIXED":
 
     dueDate.setMonth(
-        dueDate.getMonth() + (Number(installmentNo) - 1)
+        dueDate.getMonth() +
+        Number(installmentNo)
     );
 
     break;
