@@ -797,16 +797,20 @@ exports.getLoans = async (req, res) => {
         const paidInstallments =
           collections.map(item => item.installmentNo);
 
-        let totalInstallments = 1;
+       let totalInstallments = 1;
 
-        if (loan.loanType === "DAILY")
-          totalInstallments = loan.durationDays;
-
-        else if (loan.loanType === "WEEKLY")
-          totalInstallments = loan.durationWeeks;
-
-        else if (loan.loanType === "MONTHLY")
-          totalInstallments = loan.durationMonths;
+if (loan.loanType === "DAILY") {
+    totalInstallments = loan.durationDays;
+}
+else if (loan.loanType === "WEEKLY") {
+    totalInstallments = loan.durationWeeks;
+}
+else if (loan.loanType === "MONTHLY") {
+    totalInstallments = loan.durationMonths;
+}
+else if (loan.loanType === "FIXED") {
+    totalInstallments = loan.loanTenureMonths;
+}
 
         let dueTillToday = totalInstallments;
 
@@ -831,20 +835,24 @@ exports.getLoans = async (req, res) => {
 
         }
 
-      else if (
+else if (
     loan.loanType === "MONTHLY" ||
     loan.loanType === "FIXED"
 ) {
-    dueTillToday =
+    const monthDiff =
         (today.getFullYear() - loanDate.getFullYear()) * 12 +
         (today.getMonth() - loanDate.getMonth());
 
-    // EMI / interest starts from next month
-    if (today.getDate() >= loanDate.getDate()) {
-        dueTillToday++;
+    if (monthDiff <= 0) {
+        dueTillToday = 0;
+    }
+    else if (today.getDate() >= loanDate.getDate()) {
+        dueTillToday = monthDiff;
+    }
+    else {
+        dueTillToday = monthDiff - 1;
     }
 }
-
         dueTillToday = Math.min(
           dueTillToday,
           totalInstallments
@@ -1558,19 +1566,24 @@ else if (loan.loanType === "WEEKLY") {
 
 }
 
-else if (loan.loanType === "MONTHLY") {
+else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+) {
 
-  dueTillToday =
-    (today.getFullYear() - loanDate.getFullYear()) * 12 +
-    (today.getMonth() - loanDate.getMonth()) + 1;
-
-}
-
-else if (loan.loanType === "FIXED") {
-
-    dueTillToday =
+    const monthDiff =
         (today.getFullYear() - loanDate.getFullYear()) * 12 +
-        (today.getMonth() - loanDate.getMonth()) + 1;
+        (today.getMonth() - loanDate.getMonth());
+
+    if (monthDiff <= 0) {
+        dueTillToday = 0;
+    }
+    else if (today.getDate() >= loanDate.getDate()) {
+        dueTillToday = monthDiff;
+    }
+    else {
+        dueTillToday = monthDiff - 1;
+    }
 
 }
 
