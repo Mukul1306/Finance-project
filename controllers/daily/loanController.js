@@ -1694,6 +1694,7 @@ if (delay > loan.gracePeriod) {
         loan.loanType === "WEEKLY"
     ) {
 
+        // DAILY / WEEKLY = ONE TIME PENALTY
         if (loan.penaltyType === "PERCENTAGE") {
 
             penalty = Math.round(
@@ -1708,35 +1709,35 @@ if (delay > loan.gracePeriod) {
 
     } else {
 
-        const chargeablePeriods =
-            delay - loan.gracePeriod;
+        // MONTHLY / FIXED
+        // Grace period is in DAYS
+        // Penalty is charged ONLY ONCE
 
         let penaltyBase = loan.emiAmount;
 
-        // FIXED loan penalty is based on monthly interest
+        // FIXED = penalty based on monthly interest
         if (loan.loanType === "FIXED") {
+
             penaltyBase = Math.round(
-                loan.totalInterest / loan.loanTenureMonths
+                loan.totalInterest /
+                loan.loanTenureMonths
             );
+
         }
 
         if (loan.penaltyType === "PERCENTAGE") {
 
-            penalty =
-                Math.round(
-                    (penaltyBase * loan.penaltyValue) / 100
-                ) * chargeablePeriods;
+            penalty = Math.round(
+                (penaltyBase * loan.penaltyValue) / 100
+            );
 
         } else {
 
-            penalty =
-                Number(loan.penaltyValue) *
-                chargeablePeriods;
+            penalty = Number(loan.penaltyValue);
 
         }
 
     }
-
 }
 
 let displayEmi = loan.emiAmount;
@@ -2100,28 +2101,36 @@ if (delay > loan.gracePeriod) {
     // MONTHLY & FIXED → Existing Logic
     else {
 
-       const chargeablePeriods = delay - loan.gracePeriod;
+        // MONTHLY / FIXED
+        // Grace period = DAYS
+        // Penalty = ONE TIME per EMI
 
-let penaltyBase = loan.emiAmount;
+        let penaltyBase = loan.emiAmount;
 
-if (loan.loanType === "FIXED") {
-    penaltyBase = Math.round(
-        loan.totalInterest / loan.loanTenureMonths
-    );
-}
+        // FIXED loan:
+        // EMI = monthly interest
+        if (loan.loanType === "FIXED") {
 
-if (loan.penaltyType === "PERCENTAGE") {
-    penalty =
-        Math.round(
-            (penaltyBase * loan.penaltyValue) / 100
-        ) * chargeablePeriods;
-} else {
-    penalty =
-        Number(loan.penaltyValue) * chargeablePeriods;
-}
+            penaltyBase = Math.round(
+                loan.totalInterest /
+                loan.loanTenureMonths
+            );
+
+        }
+
+        if (loan.penaltyType === "PERCENTAGE") {
+
+            penalty = Math.round(
+                (penaltyBase * loan.penaltyValue) / 100
+            );
+
+        } else {
+
+            penalty = Number(loan.penaltyValue);
+
+        }
 
     }
-
 }
 
 // ==========================================
