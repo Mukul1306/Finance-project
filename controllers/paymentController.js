@@ -198,84 +198,111 @@ if (alreadyPaid) {
 };
 
 exports.getPaymentSummary = async (req, res) => {
-
   try {
 
+    const { year = "all", month = "all" } = req.query;
+
     const today = new Date();
+    today.setHours(23, 59, 59, 999);
 
-    // =====================================
-    // CURRENT MONTH DATE RANGE
-    // =====================================
+    // =====================================================
+    // SELECTED PERIOD
+    // =====================================================
 
-    const firstDay = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      1
-    );
+    let periodStart;
+    let periodEnd;
 
-    const lastDay = new Date(
-      today.getFullYear(),
-      today.getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
+    if (year !== "all") {
 
+      if (month !== "all") {
 
-    // =====================================
-    // RUN MAIN DATABASE QUERIES TOGETHER
-    // =====================================
+        // Selected Year + Month
+        periodStart = new Date(
+          Number(year),
+          Number(month) - 1,
+          1
+        );
 
-    const [
-      collection,
-      activeMembers
-    ] = await Promise.all([
+        periodEnd = new Date(
+          Number(year),
+          Number(month),
+          0,
+          23,
+          59,
+          59,
+          999
+        );
 
-      Payment.aggregate([
-        {
-          $match: {
-            paymentDate: {
-              $gte: firstDay,
-              $lte: lastDay
-            }
-          }
-        },
-        {
-          $group: {
-            _id: null,
+      } else {
 
-            emiCollection: {
-              $sum: "$installmentAmount"
-            },
+        // Selected Year / All Months
+        periodStart = new Date(
+          Number(year),
+          0,
+          1
+        );
 
-            penaltyCollection: {
-              $sum: "$penaltyAmount"
-            },
+        periodEnd = new Date(
+          Number(year),
+          11,
+          31,
+          23,
+          59,
+          59,
+          999
+        );
 
-            totalCollection: {
-              $sum: "$totalReceived"
-            }
-          }
-        }
-      ]),
+      }
 
-      Member.find({
-        status: {
-          $in: [
-            "ACTIVE",
-            "DUE",
-            "OVERDUE"
-          ]
-        }
-      }).lean()
+    } else {
 
-    ]);
+      // All Years
+      periodStart = null;
+      periodEnd = today;
 
+    }
 
-    // =====================================
+    // =====================================================
+    // COLLECTION FILTER
+    // =====================================================
+
+    let collectionMatch = {};
+
+    if (periodStart) {
+
+      collectionMatch.paymentDate = {
+        $gte: periodStart,
+        $lte: periodEnd
+      };
+
+    }
+
+    // =====================================================
     // COLLECTION SUMMARY
-    // =====================================
+    // =====================================================
+
+    const collection = await Payment.aggregate([
+      {
+        $match: collectionMatch
+      },
+      {
+        $group: {
+          _id: null,
+
+          emiCollection: {
+            $sum: "$installmentAmount"
+          },
+
+          penaltyCollection: {
+            $sum: "$penaltyAmount"
+          },
+
+          totalCollection: {
+            $sum: "$totalReceived"
+          }
+        }
+      }
+    ]);
 
     const thisMonthCollection =
       collection.length > 0
@@ -293,124 +320,179 @@ exports.getPaymentSummary = async (req, res) => {
         : 0;
 
 
-    // =====================================
+    // =====================================================
+    // ACTIVE MEMBERS
+    // =====================================================
+
+    const activeMembers = await Member.find({
+      status: {
+        $in: [
+          "ACTIVE",
+          "DUE",
+          "OVERDUE"
+        ]
+      }
+    }).lean();
+
+
+    // =====================================================
     // MONTHLY TARGET
-    // =====================================
+    // =====================================================
 
-    const monthlyTarget =
-      activeMembers.reduce(
-        (sum, member) =>
-          sum +
-          Number(member.monthlyInstallment || 0),
-        0
-      );
+    let monthlyTarget = 0;
+
+    for (const member of activeMembers) {
+
+      const joiningDate =
+        new Date(member.joiningDate);
+
+      const targetDate =
+        periodStart || today;
+
+      // Member hasn't joined yet
+      if (joiningDate > targetDate) {
+        continue;
+      }
+
+      // If selected month/year
+      if (
+        year !== "all" &&
+        month !== "all"
+      ) {
+
+        const selectedYear =
+          Number(year);
+
+        const selectedMonth =
+          Number(month);
+
+        const memberEndDate =
+          member.memberEndDate
+            ? new Date(member.memberEndDate)
+            : null;
+
+        const selectedDate =
+          new Date(
+            selectedYear,
+            selectedMonth - 1,
+            1
+          );
+
+        if (
+          memberEndDate &&
+          selectedDate > memberEndDate
+        ) {
+          continue;
+        }
+
+      }
+
+      monthlyTarget +=
+        Number(member.monthlyInstallment || 0);
+
+    }
 
 
-    // =====================================
-    // GET ALL PAYMENTS IN ONE QUERY
-    // =====================================
+    // =====================================================
+    // GET ALL PAYMENTS
+    // =====================================================
 
     const memberIds =
       activeMembers.map(
         member => member._id
       );
 
-    const payments = await Payment.find({
-      memberId: {
-        $in: memberIds
-      }
-    })
-    .select(
-      "memberId installmentNo installmentMonth installmentYear"
-    )
-    .lean();
+    const payments =
+      await Payment.find({
+        memberId: {
+          $in: memberIds
+        }
+      })
+      .select(
+        "memberId installmentNo installmentMonth installmentYear"
+      )
+      .lean();
 
 
-    // =====================================
-    // CREATE FAST LOOKUP SETS
-    // =====================================
+    // =====================================================
+    // PAID INSTALLMENT LOOKUP
+    // =====================================================
 
-    const paidInstallments = new Set();
-
-    const paidMonths = new Set();
+    const paidInstallments =
+      new Set();
 
     for (const payment of payments) {
 
-      const memberId =
-        String(payment.memberId);
-
       paidInstallments.add(
-        `${memberId}_${payment.installmentNo}`
-      );
-
-      paidMonths.add(
-        `${memberId}_${payment.installmentYear}_${payment.installmentMonth}`
+        `${String(payment.memberId)}_${payment.installmentNo}`
       );
 
     }
 
 
-    // =====================================
-    // PENDING CALCULATION
-    // =====================================
-let pendingThisMonth = 0;
-let pendingTillToday = 0;
-let pendingPenaltyTillToday = 0;
+    // =====================================================
+    // PENDING VALUES
+    // =====================================================
 
+    let pendingThisMonth = 0;
+    let pendingTillToday = 0;
+    let pendingPenaltyTillToday = 0;
+
+
+    // =====================================================
+    // DETERMINE PENDING CUTOFF
+    // =====================================================
+
+    let pendingCutoffDate = today;
+
+    if (periodEnd) {
+
+      // Don't calculate future pending
+      pendingCutoffDate =
+        periodEnd < today
+          ? periodEnd
+          : today;
+
+    }
+
+
+    // =====================================================
+    // LOOP MEMBERS
+    // =====================================================
 
     for (const member of activeMembers) {
 
       const memberId =
         String(member._id);
 
-
-      // =====================================
-      // PENDING THIS MONTH
-      // =====================================
-
-      const currentMonthKey =
-        `${memberId}_${today.getFullYear()}_${today.getMonth() + 1}`;
-
-      if (
-        !paidMonths.has(currentMonthKey)
-      ) {
-
-        pendingThisMonth +=
-          Number(
-            member.monthlyInstallment || 0
-          );
-
-      }
-
-
-      // =====================================
-      // MONTHS PASSED
-      // =====================================
-
       const joiningDate =
         new Date(member.joiningDate);
 
-      const monthsPassed =
+
+      // ===================================================
+      // NUMBER OF MONTHS DUE UNTIL CUTOFF
+      // ===================================================
+
+      let monthsPassed =
         (
-          today.getFullYear() -
+          pendingCutoffDate.getFullYear() -
           joiningDate.getFullYear()
-        ) * 12 +
+        ) * 12
+        +
         (
-          today.getMonth() -
+          pendingCutoffDate.getMonth() -
           joiningDate.getMonth()
         );
 
 
-      // Member hasn't started yet
       if (monthsPassed < 0) {
         continue;
       }
 
 
-      // =====================================
-      // CHECK INSTALLMENTS IN MEMORY
-      // NO DATABASE QUERY INSIDE LOOP
-      // =====================================
+      // ===================================================
+      // PENDING INSTALLMENTS
+      // ===================================================
 
       for (
         let i = 0;
@@ -434,21 +516,21 @@ let pendingPenaltyTillToday = 0;
         }
 
 
-        // =====================================
+        // =================================================
         // INSTALLMENT DATE
-        // =====================================
+        // =================================================
 
         const installmentDate =
           new Date(joiningDate);
 
         installmentDate.setMonth(
-          installmentDate.getMonth() + i
+          joiningDate.getMonth() + i
         );
 
 
-        // =====================================
+        // =================================================
         // DUE DATE
-        // =====================================
+        // =================================================
 
         const dueDate =
           new Date(installmentDate);
@@ -458,72 +540,153 @@ let pendingPenaltyTillToday = 0;
         );
 
 
-        // =====================================
-        // GRACE PERIOD
-        // =====================================
+        // Future installment
+        if (
+          dueDate > pendingCutoffDate
+        ) {
+          continue;
+        }
 
-        const graceEndDate =
-          new Date(dueDate);
 
-        graceEndDate.setDate(
-          graceEndDate.getDate() +
+        const installmentAmount =
           Number(
-            member.graceDays || 0
-          )
-        );
+            member.monthlyInstallment || 0
+          );
 
 
-        // =====================================
+        // =================================================
+        // PENDING MONTH
+        // =================================================
+
+        if (
+          year !== "all" &&
+          month !== "all"
+        ) {
+
+          const selectedYear =
+            Number(year);
+
+          const selectedMonth =
+            Number(month);
+
+          if (
+            dueDate.getFullYear() ===
+              selectedYear &&
+            dueDate.getMonth() + 1 ===
+              selectedMonth
+          ) {
+
+            pendingThisMonth +=
+              installmentAmount;
+
+          }
+
+        } else if (
+          year === "all"
+        ) {
+
+          // Current month pending
+          if (
+            dueDate.getFullYear() ===
+              today.getFullYear() &&
+            dueDate.getMonth() ===
+              today.getMonth()
+          ) {
+
+            pendingThisMonth +=
+              installmentAmount;
+
+          }
+
+        }
+
+
+        // =================================================
         // PENALTY
-        // =====================================
+        // =================================================
 
- let delayMonths = 0;
+        let delayMonths = 0;
 
-if (today > graceEndDate) {
+        if (
+          pendingCutoffDate > dueDate
+        ) {
 
-  delayMonths =
-    (today.getFullYear() - graceEndDate.getFullYear()) * 12 +
-    (today.getMonth() - graceEndDate.getMonth());
+          delayMonths =
+            (
+              pendingCutoffDate.getFullYear() -
+              dueDate.getFullYear()
+            ) * 12
+            +
+            (
+              pendingCutoffDate.getMonth() -
+              dueDate.getMonth()
+            );
 
-  if (today.getDate() >= graceEndDate.getDate()) {
-    delayMonths++;
-  }
+          if (
+            pendingCutoffDate.getDate() >=
+            member.dueDay
+          ) {
+            delayMonths++;
+          }
 
-}
+          if (delayMonths < 1) {
+            delayMonths = 1;
+          }
 
-const penaltyAmount =
-  delayMonths * Number(member.monthlyPenalty || 0);
-pendingPenaltyTillToday += penaltyAmount;
+        }
 
-pendingTillToday +=
-  Number(member.monthlyInstallment || 0) +
-  penaltyAmount;
+
+        const penaltyAmount =
+          delayMonths *
+          Number(
+            member.monthlyPenalty || 0
+          );
+
+
+        pendingTillToday +=
+          installmentAmount +
+          penaltyAmount;
+
+
+        pendingPenaltyTillToday +=
+          penaltyAmount;
 
       }
 
     }
 
 
-    // =====================================
+    // =====================================================
     // RESPONSE
-    // =====================================
+    // =====================================================
 
     return res.status(200).json({
 
       success: true,
 
+      filter: {
+        year,
+        month
+      },
+
       monthlyTarget,
 
+      // Selected period collection
       thisMonthCollection,
 
+      // Selected period penalty
       thisMonthPenalty,
 
       totalCollection,
 
+      // Selected month pending
       pendingThisMonth,
 
+      // Outstanding till selected period
       pendingTillToday,
-        pendingPenaltyTillToday
+
+      // Outstanding penalty till selected period
+      pendingPenaltyTillToday
 
     });
 
@@ -544,7 +707,6 @@ pendingTillToday +=
     });
 
   }
-
 };
 
 exports.getPendingInstallments = async (req, res) => {
