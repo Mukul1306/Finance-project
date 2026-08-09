@@ -113,7 +113,54 @@ const calculateLoanData = (
 
 };
 
+// ==========================================
+// MONTHLY / FIXED PENALTY HELPER
+// ==========================================
+const calculateMonthlyFixedPenalty = ({
+    dueDate,
+    today,
+    gracePeriod,
+    penaltyType,
+    penaltyValue,
+    penaltyBase
+}) => {
 
+    const due = new Date(dueDate);
+    due.setHours(0, 0, 0, 0);
+
+    const current = new Date(today);
+    current.setHours(0, 0, 0, 0);
+
+    const grace = Number(gracePeriod || 0);
+
+    // Penalty starts AFTER grace days
+    const penaltyStartDate = new Date(due);
+
+    penaltyStartDate.setDate(
+        penaltyStartDate.getDate() + grace + 1
+    );
+
+    // Still inside grace period
+    if (current < penaltyStartDate) {
+        return 0;
+    }
+
+    const monthlyPenalty =
+        penaltyType === "PERCENTAGE"
+            ? Math.round(
+                (Number(penaltyBase) * Number(penaltyValue)) / 100
+              )
+            : Number(penaltyValue);
+
+    // One penalty for each calendar month
+    const penaltyMonths =
+        (current.getFullYear() -
+            penaltyStartDate.getFullYear()) * 12 +
+        (current.getMonth() -
+            penaltyStartDate.getMonth()) + 1;
+
+    return monthlyPenalty * penaltyMonths;
+};
 
 
 
@@ -918,56 +965,59 @@ else if (
 }
 
           }
+if (delay > loan.gracePeriod) {
 
-          if(delay > loan.gracePeriod){
+    // DAILY / WEEKLY
+    if (
+        loan.loanType === "DAILY" ||
+        loan.loanType === "WEEKLY"
+    ) {
 
-            if(
-              loan.loanType==="DAILY" ||
-              loan.loanType==="WEEKLY"
-            ){
+        if (loan.penaltyType === "PERCENTAGE") {
 
-              // One Time Penalty
-              if(loan.penaltyType==="PERCENTAGE"){
+            pendingPenalty += Math.round(
+                loan.emiAmount *
+                loan.penaltyValue / 100
+            );
 
-                pendingPenalty += Math.round(
-                  loan.emiAmount *
-                  loan.penaltyValue / 100
-                );
+        } else {
 
-              }else{
+            pendingPenalty += Number(
+                loan.penaltyValue
+            );
 
-                pendingPenalty +=
-                  Number(loan.penaltyValue);
+        }
 
-              }
+    }
 
-            }
+    // MONTHLY / FIXED
+    else {
 
-            else{
+        let penaltyBase = loan.emiAmount;
 
-              const chargeable =
-                delay-loan.gracePeriod;
+        // FIXED loan penalty is based on monthly interest
+        if (loan.loanType === "FIXED") {
 
-              if(loan.penaltyType==="PERCENTAGE"){
+            penaltyBase = Math.round(
+                loan.totalInterest /
+                loan.loanTenureMonths
+            );
 
-                pendingPenalty +=
-                  Math.round(
-                    loan.emiAmount *
-                    loan.penaltyValue / 100
-                  ) * chargeable;
+        }
 
-              }else{
+        const penalty =
+            calculateMonthlyFixedPenalty({
+                dueDate,
+                today,
+                gracePeriod: loan.gracePeriod,
+                penaltyType: loan.penaltyType,
+                penaltyValue: loan.penaltyValue,
+                penaltyBase
+            });
 
-                pendingPenalty +=
-                  Number(loan.penaltyValue) *
-                  chargeable;
-
-              }
-
-            }
-
-          }
-
+        pendingPenalty += penalty;
+    }
+}
         }
 
         return{
@@ -1691,8 +1741,7 @@ if (delay > loan.gracePeriod) {
         }
 
     } 
-
-else {
+      else {
 
     // ==========================================
     // MONTHLY / FIXED
@@ -1711,63 +1760,64 @@ else {
 
     }
 
-    // Number of calendar months from EMI due month
-    // including the current overdue month.
-    //
-    // Example:
-    // Due: 5 Feb
-    // Today: 11 Aug
-    //
-    // Feb -> Aug = 6 month difference
-    // + 1 = 7 penalty months
+    const monthlyPenalty =
+        loan.penaltyType === "PERCENTAGE"
+            ? Math.round(
+                (penaltyBase * loan.penaltyValue) / 100
+            )
+            : Number(loan.penaltyValue);
 
-   // ==========================================
-// MONTHLY / FIXED PENALTY
-// ONE PENALTY PER OVERDUE MONTH
-// ==========================================
+    // ==========================================
+    // PENALTY START DATE
+    // ==========================================
 
-const monthlyPenalty =
-    loan.penaltyType === "PERCENTAGE"
-        ? Math.round(
-            (penaltyBase * loan.penaltyValue) / 100
-          )
-        : Number(loan.penaltyValue);
+    const penaltyStartDate =
+        new Date(dueDate);
 
-// Penalty starts only after grace period
-const penaltyStartDate = new Date(dueDate);
+    penaltyStartDate.setDate(
+        penaltyStartDate.getDate() +
+        Number(loan.gracePeriod || 0) +
+        1
+    );
 
-penaltyStartDate.setDate(
-    penaltyStartDate.getDate() +
-    Number(loan.gracePeriod || 0)
-);
+    penaltyStartDate.setHours(
+        0, 0, 0, 0
+    );
 
-// Normalize
-penaltyStartDate.setHours(0, 0, 0, 0);
+    // ==========================================
+    // STILL IN GRACE PERIOD
+    // ==========================================
 
-// If today is before penalty start → no penalty
-if (today < penaltyStartDate) {
+    if (today < penaltyStartDate) {
 
-    penalty = 0;
+        penalty = 0;
 
-} else {
+    }
 
-    // First penalty month starts at penaltyStartDate.
-    // Every new calendar month adds one more penalty.
+    // ==========================================
+    // PENALTY APPLIES
+    // ==========================================
 
-    const penaltyMonths =
-        (today.getFullYear() -
-            penaltyStartDate.getFullYear()) * 12 +
-        (
-            today.getMonth() -
-            penaltyStartDate.getMonth()
-        ) + 1;
+    else {
 
-    penalty =
-        monthlyPenalty * penaltyMonths;
+        const penaltyMonths =
+            (
+                (today.getFullYear() -
+                    penaltyStartDate.getFullYear()) * 12
+            ) +
+            (
+                today.getMonth() -
+                penaltyStartDate.getMonth()
+            ) +
+            1;
+
+        penalty =
+            monthlyPenalty *
+            penaltyMonths;
+    }
+}
 }
 
-}
-}
 
 let displayEmi = loan.emiAmount;
 
@@ -2127,7 +2177,7 @@ if (delay > loan.gracePeriod) {
 
     }
 
-  else {
+   else {
 
     // ==========================================
     // MONTHLY / FIXED
@@ -2146,40 +2196,71 @@ if (delay > loan.gracePeriod) {
 
     }
 
-    // Calculate calendar months for which
-    // this particular EMI remained unpaid.
-    //
-    // Example:
-    // EMI due: 5 Feb
-    // Payment: 11 Aug
-    //
-    // Feb, Mar, Apr, May, Jun, Jul, Aug
-    // = 7 penalty months
+    // ==========================================
+    // MONTHLY PENALTY AMOUNT
+    // ==========================================
 
-    const penaltyMonths =
-        (today.getFullYear() - dueDate.getFullYear()) * 12 +
-        (today.getMonth() - dueDate.getMonth()) +
-        1;
-
-    if (loan.penaltyType === "PERCENTAGE") {
-
-        const monthlyPenalty =
-            Math.round(
+    const monthlyPenalty =
+        loan.penaltyType === "PERCENTAGE"
+            ? Math.round(
                 (penaltyBase * loan.penaltyValue) / 100
-            );
+            )
+            : Number(loan.penaltyValue);
 
-        penalty =
-            monthlyPenalty * penaltyMonths;
+    // ==========================================
+    // PENALTY START DATE
+    // ==========================================
 
-    } else {
+    const penaltyStartDate =
+        new Date(dueDate);
 
-        penalty =
-            Number(loan.penaltyValue) *
-            penaltyMonths;
+    penaltyStartDate.setDate(
+        penaltyStartDate.getDate() +
+        Number(loan.gracePeriod || 0) +
+        1
+    );
+
+    penaltyStartDate.setHours(
+        0,
+        0,
+        0,
+        0
+    );
+
+    // ==========================================
+    // BEFORE PENALTY START
+    // ==========================================
+
+    if (today < penaltyStartDate) {
+
+        penalty = 0;
 
     }
 
+    // ==========================================
+    // PENALTY STARTED
+    // ==========================================
+
+    else {
+
+        const penaltyMonths =
+            (
+                (today.getFullYear() -
+                    penaltyStartDate.getFullYear()) * 12
+            ) +
+            (
+                today.getMonth() -
+                penaltyStartDate.getMonth()
+            ) +
+            1;
+
+        penalty =
+            monthlyPenalty *
+            penaltyMonths;
+    }
+
 }
+
 }
 
 // ==========================================
