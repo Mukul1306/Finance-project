@@ -1016,6 +1016,28 @@ if (delay > loan.gracePeriod) {
 }
         }
 
+
+
+        console.log("========== LOAN LIST PENALTY ==========");
+
+console.log({
+    loanId: loan._id,
+    loanNumber: loan.loanNumber,
+    loanType: loan.loanType,
+    loanDate: loan.loanDate,
+
+    emiAmount: loan.emiAmount,
+
+    gracePeriod: loan.gracePeriod,
+    penaltyType: loan.penaltyType,
+    penaltyValue: loan.penaltyValue,
+
+    dueTillToday,
+    paidInstallments,
+
+    pendingPenalty
+});
+
         return{
 
           ...loan.toObject(),
