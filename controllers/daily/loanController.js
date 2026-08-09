@@ -1609,7 +1609,6 @@ else if (
     else {
         dueTillToday = monthDiff - 1;
     }
-
 }
 
 
@@ -1741,12 +1740,12 @@ if (delay > loan.gracePeriod) {
 
     // ==========================================
     // MONTHLY / FIXED
-    // PENALTY PER OVERDUE MONTH
+    // ONE PENALTY PER OVERDUE EMI
     // ==========================================
 
     let penaltyBase = loan.emiAmount;
 
-    // FIXED = monthly interest only
+    // FIXED loan = monthly interest
     if (loan.loanType === "FIXED") {
 
         penaltyBase = Math.round(
@@ -1756,6 +1755,7 @@ if (delay > loan.gracePeriod) {
 
     }
 
+    // Calculate penalty for THIS EMI
     const monthlyPenalty =
         loan.penaltyType === "PERCENTAGE"
             ? Math.round(
@@ -1764,52 +1764,19 @@ if (delay > loan.gracePeriod) {
             : Number(loan.penaltyValue);
 
     // ==========================================
-    // PENALTY START DATE
+    // THIS EMI GETS PENALTY ONLY AFTER
+    // ITS OWN GRACE PERIOD
     // ==========================================
 
-    const penaltyStartDate =
-        new Date(dueDate);
+    if (delay > Number(loan.gracePeriod || 0)) {
 
-    penaltyStartDate.setDate(
-        penaltyStartDate.getDate() +
-        Number(loan.gracePeriod || 0) +
-        1
-    );
+        // ONE penalty for this EMI
+        penalty = monthlyPenalty;
 
-    penaltyStartDate.setHours(
-        0, 0, 0, 0
-    );
-
-    // ==========================================
-    // STILL IN GRACE PERIOD
-    // ==========================================
-
-    if (today < penaltyStartDate) {
+    } else {
 
         penalty = 0;
 
-    }
-
-    // ==========================================
-    // PENALTY APPLIES
-    // ==========================================
-
-    else {
-
-        const penaltyMonths =
-            (
-                (today.getFullYear() -
-                    penaltyStartDate.getFullYear()) * 12
-            ) +
-            (
-                today.getMonth() -
-                penaltyStartDate.getMonth()
-            ) +
-            1;
-
-        penalty =
-            monthlyPenalty *
-            penaltyMonths;
     }
 }
 }
