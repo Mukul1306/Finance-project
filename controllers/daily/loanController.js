@@ -1707,37 +1707,61 @@ if (delay > loan.gracePeriod) {
 
         }
 
-    } else {
+    } 
 
-        // MONTHLY / FIXED
-        // Grace period is in DAYS
-        // Penalty is charged ONLY ONCE
+else {
 
-        let penaltyBase = loan.emiAmount;
+    // ==========================================
+    // MONTHLY / FIXED
+    // PENALTY PER OVERDUE MONTH
+    // ==========================================
 
-        // FIXED = penalty based on monthly interest
-        if (loan.loanType === "FIXED") {
+    let penaltyBase = loan.emiAmount;
 
-            penaltyBase = Math.round(
-                loan.totalInterest /
-                loan.loanTenureMonths
-            );
+    // FIXED = monthly interest only
+    if (loan.loanType === "FIXED") {
 
-        }
+        penaltyBase = Math.round(
+            loan.totalInterest /
+            loan.loanTenureMonths
+        );
 
-        if (loan.penaltyType === "PERCENTAGE") {
+    }
 
-            penalty = Math.round(
+    // Number of calendar months from EMI due month
+    // including the current overdue month.
+    //
+    // Example:
+    // Due: 5 Feb
+    // Today: 11 Aug
+    //
+    // Feb -> Aug = 6 month difference
+    // + 1 = 7 penalty months
+
+    const penaltyMonths =
+        (today.getFullYear() - dueDate.getFullYear()) * 12 +
+        (today.getMonth() - dueDate.getMonth()) +
+        1;
+
+    if (loan.penaltyType === "PERCENTAGE") {
+
+        const monthlyPenalty =
+            Math.round(
                 (penaltyBase * loan.penaltyValue) / 100
             );
 
-        } else {
+        penalty =
+            monthlyPenalty * penaltyMonths;
 
-            penalty = Number(loan.penaltyValue);
+    } else {
 
-        }
+        penalty =
+            Number(loan.penaltyValue) *
+            penaltyMonths;
 
     }
+
+}
 }
 
 let displayEmi = loan.emiAmount;
@@ -2098,39 +2122,59 @@ if (delay > loan.gracePeriod) {
 
     }
 
-    // MONTHLY & FIXED → Existing Logic
-    else {
+  else {
 
-        // MONTHLY / FIXED
-        // Grace period = DAYS
-        // Penalty = ONE TIME per EMI
+    // ==========================================
+    // MONTHLY / FIXED
+    // PENALTY PER OVERDUE MONTH
+    // ==========================================
 
-        let penaltyBase = loan.emiAmount;
+    let penaltyBase = loan.emiAmount;
 
-        // FIXED loan:
-        // EMI = monthly interest
-        if (loan.loanType === "FIXED") {
+    // FIXED loan = monthly interest
+    if (loan.loanType === "FIXED") {
 
-            penaltyBase = Math.round(
-                loan.totalInterest /
-                loan.loanTenureMonths
-            );
+        penaltyBase = Math.round(
+            loan.totalInterest /
+            loan.loanTenureMonths
+        );
 
-        }
+    }
 
-        if (loan.penaltyType === "PERCENTAGE") {
+    // Calculate calendar months for which
+    // this particular EMI remained unpaid.
+    //
+    // Example:
+    // EMI due: 5 Feb
+    // Payment: 11 Aug
+    //
+    // Feb, Mar, Apr, May, Jun, Jul, Aug
+    // = 7 penalty months
 
-            penalty = Math.round(
+    const penaltyMonths =
+        (today.getFullYear() - dueDate.getFullYear()) * 12 +
+        (today.getMonth() - dueDate.getMonth()) +
+        1;
+
+    if (loan.penaltyType === "PERCENTAGE") {
+
+        const monthlyPenalty =
+            Math.round(
                 (penaltyBase * loan.penaltyValue) / 100
             );
 
-        } else {
+        penalty =
+            monthlyPenalty * penaltyMonths;
 
-            penalty = Number(loan.penaltyValue);
+    } else {
 
-        }
+        penalty =
+            Number(loan.penaltyValue) *
+            penaltyMonths;
 
     }
+
+}
 }
 
 // ==========================================
