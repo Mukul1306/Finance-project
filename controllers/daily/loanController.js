@@ -1721,28 +1721,50 @@ else {
     // Feb -> Aug = 6 month difference
     // + 1 = 7 penalty months
 
+   // ==========================================
+// MONTHLY / FIXED PENALTY
+// ONE PENALTY PER OVERDUE MONTH
+// ==========================================
+
+const monthlyPenalty =
+    loan.penaltyType === "PERCENTAGE"
+        ? Math.round(
+            (penaltyBase * loan.penaltyValue) / 100
+          )
+        : Number(loan.penaltyValue);
+
+// Penalty starts only after grace period
+const penaltyStartDate = new Date(dueDate);
+
+penaltyStartDate.setDate(
+    penaltyStartDate.getDate() +
+    Number(loan.gracePeriod || 0)
+);
+
+// Normalize
+penaltyStartDate.setHours(0, 0, 0, 0);
+
+// If today is before penalty start → no penalty
+if (today < penaltyStartDate) {
+
+    penalty = 0;
+
+} else {
+
+    // First penalty month starts at penaltyStartDate.
+    // Every new calendar month adds one more penalty.
+
     const penaltyMonths =
-        (today.getFullYear() - dueDate.getFullYear()) * 12 +
-        (today.getMonth() - dueDate.getMonth()) +
-        1;
+        (today.getFullYear() -
+            penaltyStartDate.getFullYear()) * 12 +
+        (
+            today.getMonth() -
+            penaltyStartDate.getMonth()
+        ) + 1;
 
-    if (loan.penaltyType === "PERCENTAGE") {
-
-        const monthlyPenalty =
-            Math.round(
-                (penaltyBase * loan.penaltyValue) / 100
-            );
-
-        penalty =
-            monthlyPenalty * penaltyMonths;
-
-    } else {
-
-        penalty =
-            Number(loan.penaltyValue) *
-            penaltyMonths;
-
-    }
+    penalty =
+        monthlyPenalty * penaltyMonths;
+}
 
 }
 }
