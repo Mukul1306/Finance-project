@@ -1016,28 +1016,6 @@ if (delay > loan.gracePeriod) {
 }
         }
 
-
-
-        console.log("========== LOAN LIST PENALTY ==========");
-
-console.log({
-    loanId: loan._id,
-    loanNumber: loan.loanNumber,
-    loanType: loan.loanType,
-    loanDate: loan.loanDate,
-
-    emiAmount: loan.emiAmount,
-
-    gracePeriod: loan.gracePeriod,
-    penaltyType: loan.penaltyType,
-    penaltyValue: loan.penaltyValue,
-
-    dueTillToday,
-    paidInstallments,
-
-    pendingPenalty
-});
-
         return{
 
           ...loan.toObject(),
@@ -2904,7 +2882,7 @@ _id:null,
 
 penalty:{
 
-$sum:"$penalty"
+$sum:"$pendingPenalty"
 
 }
 
@@ -2948,32 +2926,35 @@ for (const loan of loans) {
     );
 
 }
- else if (loan.loanType === "MONTHLY") {
+ else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+) {
 
-    dueInstallments =
-      (today.getFullYear() - loanDate.getFullYear()) * 12 +
-      (today.getMonth() - loanDate.getMonth()) + 1;
-
-    dueInstallments = Math.min(
-      dueInstallments,
-    loan.durationMonths
-
-    );
-
-  }
-else if (loan.loanType === "FIXED") {
-
-    dueInstallments =
+    const monthDiff =
         (today.getFullYear() - loanDate.getFullYear()) * 12 +
-        (today.getMonth() - loanDate.getMonth()) + 1;
+        (today.getMonth() - loanDate.getMonth());
+
+    if (today.getDate() >= loanDate.getDate()) {
+
+        dueInstallments = monthDiff;
+
+    } else {
+
+        dueInstallments = monthDiff - 1;
+
+    }
+
+    const totalInstallments =
+        loan.loanType === "MONTHLY"
+            ? loan.durationMonths
+            : loan.loanTenureMonths;
 
     dueInstallments = Math.min(
-        dueInstallments,
-        loan.loanTenureMonths
+        Math.max(dueInstallments, 0),
+        totalInstallments
     );
-
 }
-
 
 
   if (dueInstallments < 0) dueInstallments = 0;
