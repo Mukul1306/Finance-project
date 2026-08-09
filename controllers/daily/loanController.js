@@ -338,30 +338,13 @@ guarantor2SecurityDetails
 // ==========================================
 
 const memberData =
-await DailyMember.findById(member);
-const existingLoan = await DailyLoan.findOne({
-    member,
-    loanType,
-    status: "ACTIVE"
-});
-
-if(existingLoan){
-    return res.status(400).json({
-        success:false,
-        message:`Member already has an Active ${loanType} Loan`
-    });
-}
+    await DailyMember.findById(member);
 
 if(!memberData){
-
-return res.status(404).json({
-
-success:false,
-
-message:"Member Not Found"
-
-});
-
+    return res.status(404).json({
+        success:false,
+        message:"Member Not Found"
+    });
 }
 
 
