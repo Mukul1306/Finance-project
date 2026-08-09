@@ -2243,16 +2243,29 @@ if (delay > loan.gracePeriod) {
 
     else {
 
-        const penaltyMonths =
-            (
-                (today.getFullYear() -
-                    penaltyStartDate.getFullYear()) * 12
-            ) +
-            (
-                today.getMonth() -
-                penaltyStartDate.getMonth()
-            ) +
-            1;
+ let penaltyMonths = 1;
+
+const firstPenaltyDate = new Date(penaltyStartDate);
+firstPenaltyDate.setHours(0, 0, 0, 0);
+
+const currentDate = new Date(today);
+currentDate.setHours(0, 0, 0, 0);
+
+// Count only COMPLETED monthly penalty anniversaries
+while (true) {
+
+    const nextPenaltyDate = new Date(firstPenaltyDate);
+
+    nextPenaltyDate.setMonth(
+        nextPenaltyDate.getMonth() + penaltyMonths
+    );
+
+    if (currentDate < nextPenaltyDate) {
+        break;
+    }
+
+    penaltyMonths++;
+}
 
         penalty =
             monthlyPenalty *
