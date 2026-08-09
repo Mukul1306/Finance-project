@@ -133,33 +133,29 @@ const calculateMonthlyFixedPenalty = ({
 
     const grace = Number(gracePeriod || 0);
 
-    // Penalty starts AFTER grace days
+    // Penalty starts after grace days
     const penaltyStartDate = new Date(due);
 
     penaltyStartDate.setDate(
         penaltyStartDate.getDate() + grace + 1
     );
 
-    // Still inside grace period
+    penaltyStartDate.setHours(0, 0, 0, 0);
+
+    // Still within grace period
     if (current < penaltyStartDate) {
         return 0;
     }
 
-    const monthlyPenalty =
+    // Calculate ONE penalty for this unpaid EMI
+    const penalty =
         penaltyType === "PERCENTAGE"
             ? Math.round(
                 (Number(penaltyBase) * Number(penaltyValue)) / 100
-              )
+            )
             : Number(penaltyValue);
 
-    // One penalty for each calendar month
-    const penaltyMonths =
-        (current.getFullYear() -
-            penaltyStartDate.getFullYear()) * 12 +
-        (current.getMonth() -
-            penaltyStartDate.getMonth()) + 1;
-
-    return monthlyPenalty * penaltyMonths;
+    return penalty;
 };
 
 
@@ -2181,7 +2177,7 @@ if (delay > loan.gracePeriod) {
 
     // ==========================================
     // MONTHLY / FIXED
-    // PENALTY PER OVERDUE MONTH
+    // ONE PENALTY PER UNPAID EMI
     // ==========================================
 
     let penaltyBase = loan.emiAmount;
@@ -2195,10 +2191,6 @@ if (delay > loan.gracePeriod) {
         );
 
     }
-
-    // ==========================================
-    // MONTHLY PENALTY AMOUNT
-    // ==========================================
 
     const monthlyPenalty =
         loan.penaltyType === "PERCENTAGE"
@@ -2220,60 +2212,23 @@ if (delay > loan.gracePeriod) {
         1
     );
 
-    penaltyStartDate.setHours(
-        0,
-        0,
-        0,
-        0
-    );
+    penaltyStartDate.setHours(0, 0, 0, 0);
 
     // ==========================================
-    // BEFORE PENALTY START
+    // PENALTY
     // ==========================================
 
-    if (today < penaltyStartDate) {
+    if (today >= penaltyStartDate) {
+
+        // ONLY ONE PENALTY FOR THIS EMI
+        penalty = monthlyPenalty;
+
+    } else {
 
         penalty = 0;
 
     }
-
-    // ==========================================
-    // PENALTY STARTED
-    // ==========================================
-
-    else {
-
- let penaltyMonths = 1;
-
-const firstPenaltyDate = new Date(penaltyStartDate);
-firstPenaltyDate.setHours(0, 0, 0, 0);
-
-const currentDate = new Date(today);
-currentDate.setHours(0, 0, 0, 0);
-
-// Count only COMPLETED monthly penalty anniversaries
-while (true) {
-
-    const nextPenaltyDate = new Date(firstPenaltyDate);
-
-    nextPenaltyDate.setMonth(
-        nextPenaltyDate.getMonth() + penaltyMonths
-    );
-
-    if (currentDate < nextPenaltyDate) {
-        break;
-    }
-
-    penaltyMonths++;
 }
-
-        penalty =
-            monthlyPenalty *
-            penaltyMonths;
-    }
-
-}
-
 }
 
 // ==========================================
