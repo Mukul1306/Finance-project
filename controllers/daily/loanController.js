@@ -1671,16 +1671,13 @@ delay=Math.floor(
 
 }
 
-else{
-
-delay =
-(today.getFullYear() - dueDate.getFullYear()) * 12 +
-(today.getMonth() - dueDate.getMonth());
-
-if (today.getDate() > dueDate.getDate()) {
-    delay++;
-}
-
+else {
+    // MONTHLY & FIXED
+    // Grace period is ALWAYS in DAYS
+    delay = Math.floor(
+        (today - dueDate) /
+        (1000 * 60 * 60 * 24)
+    );
 }
 
 }
@@ -2061,13 +2058,12 @@ delay = Math.floor(
 
 else {
 
-    delay =
-        (today.getFullYear() - dueDate.getFullYear()) * 12 +
-        (today.getMonth() - dueDate.getMonth());
-
-    if (today.getDate() > dueDate.getDate()) {
-        delay++;
-    }
+    // MONTHLY & FIXED
+    // Grace period is calculated in DAYS
+    delay = Math.floor(
+        (today - dueDate) /
+        (1000 * 60 * 60 * 24)
+    );
 
 }
 
