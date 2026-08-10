@@ -74,30 +74,9 @@ nomineeMobile
 
     }
 
-    // Prevent Duplicate Active Account
+    
 
-    const exists =
-      await DailySaving.findOne({
-
-        member,
-
-        status: "ACTIVE"
-
-      });
-
-    if (exists) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message:
-        "This Member already has an Active Saving Account"
-
-      });
-
-    }
-
+   
     // Calculate End Date
 
     const endDate =
@@ -716,19 +695,19 @@ exports.getSavingMemberDetails = async (req, res) => {
     }
 
     // Check if member already has an active saving account
-    const activeSaving = await DailySaving.findOne({
-      member: member._id,
-      status: "ACTIVE"
-    })
-      .populate("areaGroup", "areaName")
-      .populate("assignedAgent", "name");
+   const activeSavings = await DailySaving.find({
+  member: member._id,
+  status: "ACTIVE"
+})
+  .populate("areaGroup", "areaName")
+  .populate("assignedAgent", "name");
 
     res.status(200).json({
-      success: true,
-      member,
-      hasSaving: !!activeSaving,
-      saving: activeSaving
-    });
+  success: true,
+  member,
+  hasSaving: activeSavings.length > 0,
+  savings: activeSavings
+});
 
   } catch (error) {
     res.status(500).json({
