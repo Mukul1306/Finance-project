@@ -2318,7 +2318,10 @@ member:loan.member,
 
 installmentNo:Number(installmentNo),
 
-emiType:loan.loanType,
+emiType:
+    loan.loanType === "FIXED"
+        ? "FIXED_INTEREST"
+        : loan.loanType,
 
 dueDate,
 
