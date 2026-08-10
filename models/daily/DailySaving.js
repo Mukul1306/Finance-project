@@ -2,12 +2,11 @@ const mongoose = require("mongoose");
 
 const dailySavingSchema = new mongoose.Schema({
 
-  member:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"DailyMember",
-    required:true,
-    unique:true
-  },
+ member: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailyMember",
+  required: true
+},
 nomineeName: {
     type: String,
     default: ""
