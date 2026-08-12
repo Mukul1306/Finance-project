@@ -11,6 +11,11 @@ const Agent = require("../../models/daily/Agent");
 // LOAN CALCULATION HELPER
 // ==========================================
 
+// ==========================================
+// LOAN CALCULATION HELPER
+// ONE SOURCE OF TRUTH
+// ==========================================
+
 const calculateLoanData = (
     loanAmount,
     interestRate,
@@ -21,98 +26,120 @@ const calculateLoanData = (
     durationMonths
 ) => {
 
-    loanAmount = Number(loanAmount);
-    interestRate = Number(interestRate);
-    loanTenureMonths = Number(loanTenureMonths);
+    loanAmount = Number(loanAmount || 0);
+    interestRate = Number(interestRate || 0);
+    loanTenureMonths = Number(loanTenureMonths || 0);
 
-    durationDays = Number(durationDays);
-    durationWeeks = Number(durationWeeks);
-    durationMonths = Number(durationMonths);
+    durationDays = Number(durationDays || 0);
+    durationWeeks = Number(durationWeeks || 0);
+    durationMonths = Number(durationMonths || 0);
 
-    let totalInterest = 0;
-    let totalPayable = 0;
-    let emiAmount = 0;
+    let interestMonths = 0;
     let totalInstallments = 1;
 
     // ======================================
-    // TOTAL INTEREST
-    // ======================================
-
-    totalInterest = Math.round(
-        (loanAmount * interestRate * loanTenureMonths) / 100
-    );
-
-    totalPayable =
-        loanAmount + totalInterest;
-
-    // ======================================
-    // EMI
+    // DETERMINE ACTUAL INTEREST TENURE
     // ======================================
 
     switch (loanType) {
 
         case "DAILY":
 
-            totalInstallments =
-                durationDays;
+            // Example:
+            // 100 days = 100 / 30 months
+            interestMonths = durationDays / 30;
 
-            emiAmount = Math.ceil(
-                totalPayable /
-                durationDays
-            );
+            totalInstallments = durationDays;
 
             break;
+
 
         case "WEEKLY":
 
-            totalInstallments =
-                durationWeeks;
+            // Example:
+            // 15 weeks = 105 days
+            // 105 / 30 = 3.5 months
+            interestMonths = (durationWeeks * 7) / 30;
 
-            emiAmount = Math.ceil(
-                totalPayable /
-                durationWeeks
-            );
+            totalInstallments = durationWeeks;
 
             break;
+
 
         case "MONTHLY":
 
-            totalInstallments =
-                durationMonths;
+            interestMonths = durationMonths;
 
-            emiAmount = Math.ceil(
-                totalPayable /
-                durationMonths
-            );
+            totalInstallments = durationMonths;
 
             break;
 
-      case "FIXED":
 
-    totalInstallments = loanTenureMonths;
+        case "FIXED":
+
+            interestMonths = loanTenureMonths;
+
+            totalInstallments = loanTenureMonths;
+
+            break;
+
+
+        default:
+
+            throw new Error("Invalid Loan Type");
+    }
+
+
+    // ======================================
+    // TOTAL INTEREST
+    // ======================================
+
+    const totalInterest =
+        (loanAmount * interestRate * interestMonths) / 100;
+
+
+    // ======================================
+    // TOTAL PAYABLE
+    // ======================================
+
+    const totalPayable =
+        loanAmount + totalInterest;
+
+
+    // ======================================
+    // EMI
+    // ======================================
+
+    let emiAmount = 0;
+
+
+    if (loanType === "FIXED") {
+
+        // Fixed = monthly interest only
+        emiAmount =
+            totalInterest / totalInstallments;
+
+    }  else {
 
     emiAmount = Math.ceil(
-        totalInterest / loanTenureMonths
+        totalPayable / totalInstallments
     );
 
-    break;
+  }
 
-    }
 
     return {
 
-        totalInterest,
+        totalInterest: Number(totalInterest.toFixed(2)),
 
-        totalPayable,
+        totalPayable: Number(totalPayable.toFixed(2)),
 
-        emiAmount,
-
+        emiAmount: emiAmount,
         totalInstallments
 
     };
 
 };
-
 
 // ==========================================
 // MONTHLY / FIXED PENALTY HELPER
@@ -2219,31 +2246,40 @@ switch(loan.loanType){
 
 case "DAILY":
 
-interestAmount =
-Math.round(
-loan.totalInterest /
-loan.durationDays
-);
+    interestAmount = Number(
+        (
+            loan.totalInterest /
+            loan.durationDays
+        ).toFixed(2)
+    );
 
-principalAmount =
-loan.emiAmount -
-interestAmount;
+    principalAmount = Number(
+        (
+            loan.emiAmount -
+            interestAmount
+        ).toFixed(2)
+    );
 
-break;
+    break;
+
 
 case "WEEKLY":
 
-interestAmount =
-Math.round(
-loan.totalInterest /
-loan.durationWeeks
-);
+    interestAmount = Number(
+        (
+            loan.totalInterest /
+            loan.durationWeeks
+        ).toFixed(2)
+    );
 
-principalAmount =
-loan.emiAmount -
-interestAmount;
+    principalAmount = Number(
+        (
+            loan.emiAmount -
+            interestAmount
+        ).toFixed(2)
+    );
 
-break;
+    break;
 
 case "MONTHLY":
 
@@ -2938,6 +2974,22 @@ for (const loan of loans) {
     );
 
 }
+
+else if (loan.loanType === "WEEKLY") {
+
+    dueInstallments =
+        Math.floor(
+            (today - loanDate) /
+            (1000 * 60 * 60 * 24 * 7)
+        ) + 1;
+
+    dueInstallments = Math.min(
+        dueInstallments,
+        loan.durationWeeks
+    );
+
+}
+
  else if (
     loan.loanType === "MONTHLY" ||
     loan.loanType === "FIXED"
