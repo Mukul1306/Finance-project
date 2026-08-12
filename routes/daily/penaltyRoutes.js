@@ -1,27 +1,40 @@
-const express =
-require("express");
+const express = require("express");
 
-const router =
-express.Router();
+const router = express.Router();
 
 const {
+    savePenaltySettings,
+    getPenaltySettings
+} = require("../../controllers/daily/penaltyController");
 
-savePenaltySettings,
-getPenaltySettings
+const {
+    getPenaltyManagement
+} = require("../../controllers/daily/penaltyManagementController");
 
-} = require(
-"../../controllers/daily/penaltyController"
+
+// ==========================================
+// PENALTY MANAGEMENT
+// ==========================================
+
+router.get(
+    "/management",
+    getPenaltyManagement
 );
 
+
+// ==========================================
+// PENALTY SETTINGS
+// ==========================================
+
 router.post(
-"/penalty-settings",
-savePenaltySettings
+    "/penalty-settings",
+    savePenaltySettings
 );
 
 router.get(
-"/penalty-settings",
-getPenaltySettings
+    "/penalty-settings",
+    getPenaltySettings
 );
 
-module.exports =
-router;
+
+module.exports = router;
