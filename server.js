@@ -107,13 +107,14 @@ app.use(
 "/api/daily",
 collectionRoutes
 );
-app.use(
-"/api/daily",
-penaltyRoutes
-);
+
 app.use(
   "/api/daily/penalty",
   penaltyRoutes
+);
+app.use(
+  "/api/daily",
+  dailyLoanRoutes
 );
 
 app.use(
