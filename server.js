@@ -112,8 +112,8 @@ app.use(
 penaltyRoutes
 );
 app.use(
-"/api/daily",
-dailyLoanRoutes
+  "/api/daily/penalty",
+  penaltyRoutes
 );
 
 app.use(

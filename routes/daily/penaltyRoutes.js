@@ -3,13 +3,13 @@ const express = require("express");
 const router = express.Router();
 
 const {
-    savePenaltySettings,
-    getPenaltySettings
-} = require("../../controllers/daily/penaltyController");
+  getPenaltyManagement
+} = require("../../controllers/daily/penaltyManagementController");
 
 const {
-    getPenaltyManagement
-} = require("../../controllers/daily/penaltyManagementController");
+  savePenaltySettings,
+  getPenaltySettings
+} = require("../../controllers/daily/penaltyController");
 
 
 // ==========================================
@@ -17,8 +17,8 @@ const {
 // ==========================================
 
 router.get(
-    "/management",
-    getPenaltyManagement
+  "/management",
+  getPenaltyManagement
 );
 
 
@@ -27,13 +27,13 @@ router.get(
 // ==========================================
 
 router.post(
-    "/penalty-settings",
-    savePenaltySettings
+  "/penalty-settings",
+  savePenaltySettings
 );
 
 router.get(
-    "/penalty-settings",
-    getPenaltySettings
+  "/penalty-settings",
+  getPenaltySettings
 );
 
 
