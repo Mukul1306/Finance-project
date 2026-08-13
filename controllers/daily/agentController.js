@@ -1645,17 +1645,418 @@ const dailyTarget =
     savingTarget +
     loanTarget;
 
-    // =========================
-    // PENDING
-    // =========================
+    // ======================================
+// PENDING TILL TODAY
+// SAVING + ALL LOANS
+// ======================================
 
-const pendingTillToday = Math.max(
+let savingPendingTillToday = 0;
+let loanPendingTillToday = 0;
 
-    0,
 
-    dailyTarget - todayCollection
+// ======================================
+// DAILY SAVING PENDING
+// ======================================
 
-);
+for (const saving of members) {
+
+  if (!saving.startDate) {
+    continue;
+  }
+
+  const startDate = new Date(saving.startDate);
+
+  startDate.setHours(0, 0, 0, 0);
+
+  // Saving has not started yet
+  if (startDate > today) {
+    continue;
+  }
+
+  // -----------------------------
+  // LAST DUE DATE
+  // -----------------------------
+
+  let lastDueDate = new Date(today);
+
+  if (saving.endDate) {
+
+    const endDate = new Date(saving.endDate);
+
+    endDate.setHours(0, 0, 0, 0);
+
+    if (endDate < lastDueDate) {
+      lastDueDate = endDate;
+    }
+  }
+
+  // -----------------------------
+  // NUMBER OF DAYS DUE
+  // -----------------------------
+
+  let dueDays =
+    Math.floor(
+      (
+        lastDueDate - startDate
+      ) /
+      (
+        1000 *
+        60 *
+        60 *
+        24
+      )
+    ) + 1;
+
+  dueDays = Math.max(dueDays, 0);
+
+  // Don't exceed saving duration
+  if (saving.durationDays) {
+
+    dueDays = Math.min(
+      dueDays,
+      Number(saving.durationDays)
+    );
+
+  }
+
+  // -----------------------------
+  // PAYMENTS OF THIS SAVING
+  // -----------------------------
+
+  const savingPayments =
+    dailyCollections.filter(
+      tx =>
+        String(tx.savingAccount) ===
+        String(saving._id)
+    );
+
+  // -----------------------------
+  // FIXED SAVING
+  // -----------------------------
+
+  if (saving.collectionType === "FIXED") {
+
+    const expectedAmount =
+      dueDays *
+      Number(saving.fixedAmount || 0);
+
+    const paidAmount =
+      savingPayments.reduce(
+        (sum, tx) =>
+          sum +
+          Number(tx.dailyAmount || 0),
+        0
+      );
+
+    const pendingAmount =
+      Math.max(
+        0,
+        expectedAmount - paidAmount
+      );
+
+    savingPendingTillToday +=
+      pendingAmount;
+  }
+
+  // -----------------------------
+  // FLEXIBLE SAVING
+  // -----------------------------
+
+  else if (
+    saving.collectionType === "FLEXIBLE"
+  ) {
+
+    savingPendingTillToday +=
+      Number(saving.pendingAmount || 0);
+
+  }
+
+}
+// ======================================
+// LOAN PENDING TILL TODAY
+// DAILY / WEEKLY / MONTHLY / FIXED
+// ======================================
+
+const agentLoans = await DailyLoan.find({
+  assignedAgent: agentId,
+
+  status: {
+    $in: [
+      "ACTIVE",
+      "DUE",
+      "OVERDUE"
+    ]
+  }
+});
+
+
+for (const loan of agentLoans) {
+
+  if (!loan.loanDate) {
+    continue;
+  }
+
+  const loanDate = new Date(loan.loanDate);
+
+  loanDate.setHours(0, 0, 0, 0);
+
+  // Loan has not started
+  if (loanDate > today) {
+    continue;
+  }
+
+  // ====================================
+  // TOTAL INSTALLMENTS
+  // ====================================
+
+  let totalInstallments = 0;
+
+  if (loan.loanType === "DAILY") {
+
+    totalInstallments =
+      Number(loan.durationDays || 0);
+
+  }
+
+  else if (loan.loanType === "WEEKLY") {
+
+    totalInstallments =
+      Number(loan.durationWeeks || 0);
+
+  }
+
+  else if (loan.loanType === "MONTHLY") {
+
+    totalInstallments =
+      Number(loan.durationMonths || 0);
+
+  }
+
+  else if (loan.loanType === "FIXED") {
+
+    totalInstallments =
+      Number(loan.loanTenureMonths || 0);
+
+  }
+
+
+  // ====================================
+  // INSTALLMENTS DUE TILL TODAY
+  // ====================================
+
+  let dueInstallments = 0;
+
+
+  // DAILY
+  if (loan.loanType === "DAILY") {
+
+    dueInstallments =
+      Math.floor(
+        (
+          today - loanDate
+        ) /
+        (
+          1000 *
+          60 *
+          60 *
+          24
+        )
+      ) + 1;
+
+  }
+
+
+  // WEEKLY
+  else if (loan.loanType === "WEEKLY") {
+
+    dueInstallments =
+      Math.floor(
+        (
+          today - loanDate
+        ) /
+        (
+          1000 *
+          60 *
+          60 *
+          24 *
+          7
+        )
+      ) + 1;
+
+  }
+
+
+  // MONTHLY + FIXED
+  else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+  ) {
+
+    const monthDiff =
+      (
+        (
+          today.getFullYear() -
+          loanDate.getFullYear()
+        ) * 12
+      ) +
+      (
+        today.getMonth() -
+        loanDate.getMonth()
+      );
+
+
+    if (monthDiff < 0) {
+
+      dueInstallments = 0;
+
+    }
+
+    else if (
+      today.getDate() >=
+      loanDate.getDate()
+    ) {
+
+      dueInstallments =
+        monthDiff + 1;
+
+    }
+
+    else {
+
+      dueInstallments =
+        monthDiff;
+
+    }
+
+  }
+
+
+  dueInstallments =
+    Math.min(
+      Math.max(
+        dueInstallments,
+        0
+      ),
+      totalInstallments
+    );
+
+
+  // ====================================
+  // PAYMENTS OF THIS LOAN
+  // ====================================
+
+  const loanPayments =
+    loanCollections.filter(
+      tx =>
+        String(tx.loan) ===
+        String(loan._id)
+    );
+
+
+  // ====================================
+  // PAID INSTALLMENT NUMBERS
+  // ====================================
+
+  const paidInstallments =
+    new Set(
+      loanPayments
+        .map(tx =>
+          Number(tx.installmentNo)
+        )
+        .filter(Number.isFinite)
+        .filter(no => no > 0)
+    );
+
+
+  // ====================================
+  // PENDING INSTALLMENTS
+  // ====================================
+
+  let pendingLoan = 0;
+
+
+  for (
+    let installmentNo = 1;
+
+    installmentNo <= dueInstallments;
+
+    installmentNo++
+  ) {
+
+    // Already paid
+    if (
+      paidInstallments.has(
+        installmentNo
+      )
+    ) {
+      continue;
+    }
+
+
+    // EMI
+    let emiAmount =
+      Number(
+        loan.emiAmount || 0
+      );
+
+
+    // FIXED LOAN
+    if (
+      loan.loanType === "FIXED"
+    ) {
+
+      if (
+        Number(
+          loan.emiAmount || 0
+        ) > 0
+      ) {
+
+        emiAmount =
+          Number(
+            loan.emiAmount
+          );
+
+      }
+
+      else {
+
+        emiAmount =
+          Number(
+            loan.totalInterest || 0
+          ) /
+          Math.max(
+            Number(
+              loan.loanTenureMonths || 1
+            ),
+            1
+          );
+
+      }
+
+    }
+
+
+    pendingLoan +=
+      Number(emiAmount || 0);
+
+  }
+
+
+  loanPendingTillToday +=
+    pendingLoan;
+
+}
+
+
+// ======================================
+// FINAL PENDING TILL TODAY
+// ======================================
+
+const pendingTillToday =
+  savingPendingTillToday +
+  loanPendingTillToday;
+
+
 
     // =========================
     // RESPONSE
@@ -1667,25 +2068,32 @@ const pendingTillToday = Math.max(
 
       agent,
 
-      summary:{
+   summary: {
 
-        totalMembers:members.length,
+  totalMembers: members.length,
 
-        todayCollection,
+  // COLLECTION
+  todayCollection,
 
-        monthlyCollection,
+  monthlyCollection,
 
-        totalCollection,
+  totalCollection,
 
-           savingTarget,
+  // TARGET
+  savingTarget,
 
-    loanTarget,
+  loanTarget,
 
-    dailyTarget,
+  dailyTarget,
 
-        pendingTillToday
+  // PENDING
+  pendingTillToday,
 
-      },
+  savingPendingTillToday,
+
+  loanPendingTillToday
+
+},
 
     monthlyCollectionHistory,
 
