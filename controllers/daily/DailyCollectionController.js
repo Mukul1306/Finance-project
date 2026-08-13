@@ -109,31 +109,31 @@ if (diffDays > saving.graceDays) {
 
 }
 
+const installmentNo =
+  Math.floor(
+    (current - new Date(saving.startDate)) /
+    (1000 * 60 * 60 * 24)
+  ) + 1;
+
 pendingDays.push({
 
-date:new Date(current),
+  installmentNo,
 
-dailyAmount:
+  date: new Date(current),
 
-saving.collectionType==="FIXED"
+  dailyAmount:
+    saving.collectionType === "FIXED"
+      ? Number(saving.fixedAmount || 0)
+      : 0,
 
-?saving.fixedAmount
+  penalty,
 
-:0,
-
-penalty,
-
-total:
-
-(saving.collectionType==="FIXED"
-
-?saving.fixedAmount
-
-:0)
-
-+
-
-penalty
+  total:
+    (
+      saving.collectionType === "FIXED"
+        ? Number(saving.fixedAmount || 0)
+        : 0
+    ) + Number(penalty || 0)
 
 });
 
