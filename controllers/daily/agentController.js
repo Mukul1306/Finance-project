@@ -880,14 +880,356 @@ exports.getAgents = async (req, res) => {
       }
 
 
-      // =====================================================
-      // TOTAL PENDING TILL TODAY
-      // =====================================================
+// =====================================================
+// PENDING TILL TODAY
+// =====================================================
 
-      const pendingTillToday =
-        savingPendingTillToday +
-        loanPendingTillToday;
+let savingPendingTillToday = 0;
+let loanPendingTillToday = 0;
 
+
+// =====================================================
+// DAILY SAVING PENDING TILL TODAY
+// =====================================================
+
+for (const saving of members) {
+
+    const startDate = new Date(saving.startDate);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Saving has not started
+    if (startDate > today) {
+        continue;
+    }
+
+    // ---------------------------------------------
+    // LAST DUE DATE
+    // ---------------------------------------------
+
+    let lastDueDate = new Date(today);
+
+    if (saving.endDate) {
+
+        const endDate = new Date(saving.endDate);
+        endDate.setHours(0, 0, 0, 0);
+
+        if (endDate < lastDueDate) {
+            lastDueDate = endDate;
+        }
+    }
+
+    // ---------------------------------------------
+    // NUMBER OF DAYS DUE
+    // ---------------------------------------------
+
+    let dueDays =
+        Math.floor(
+            (lastDueDate - startDate) /
+            (1000 * 60 * 60 * 24)
+        ) + 1;
+
+    if (dueDays < 0) {
+        dueDays = 0;
+    }
+
+    // Don't exceed duration
+    if (saving.durationDays) {
+
+        dueDays = Math.min(
+            dueDays,
+            Number(saving.durationDays)
+        );
+    }
+
+    // ---------------------------------------------
+    // GET ALL PAYMENTS FOR THIS SAVING
+    // ---------------------------------------------
+
+    const savingPayments =
+        savingTransactions.filter(tx =>
+            String(tx.savingAccount) ===
+            String(saving._id)
+        );
+
+    // ---------------------------------------------
+    // FIXED SAVING
+    // ---------------------------------------------
+
+    if (saving.collectionType === "FIXED") {
+
+        const expectedAmount =
+            dueDays *
+            Number(saving.fixedAmount || 0);
+
+        const paidAmount =
+            savingPayments.reduce(
+                (sum, tx) =>
+                    sum +
+                    Number(tx.dailyAmount || 0),
+                0
+            );
+
+        const pendingAmount =
+            Math.max(
+                0,
+                expectedAmount - paidAmount
+            );
+
+        savingPendingTillToday += pendingAmount;
+
+    }
+
+    // ---------------------------------------------
+    // FLEXIBLE SAVING
+    // ---------------------------------------------
+    //
+    // For FLEXIBLE, amount is only known when
+    // collection is actually made.
+    //
+    // Therefore we use saving.pendingAmount
+    // if it exists.
+    // ---------------------------------------------
+
+    else if (
+        saving.collectionType === "FLEXIBLE"
+    ) {
+
+        savingPendingTillToday +=
+            Number(
+                saving.pendingAmount || 0
+            );
+    }
+}
+
+
+// =====================================================
+// LOAN PENDING TILL TODAY
+// DAILY + WEEKLY + MONTHLY + FIXED
+// =====================================================
+
+const agentLoans =
+    await DailyLoan.find({
+        assignedAgent: agent._id,
+
+        status: {
+            $in: [
+                "ACTIVE",
+                "DUE",
+                "OVERDUE"
+            ]
+        }
+    });
+
+
+// =====================================================
+// CALCULATE EACH LOAN
+// =====================================================
+
+for (const loan of agentLoans) {
+
+    const loanDate =
+        new Date(loan.loanDate);
+
+    loanDate.setHours(0, 0, 0, 0);
+
+
+    // Loan has not started
+    if (loanDate > today) {
+        continue;
+    }
+
+
+    // ---------------------------------------------
+    // TOTAL INSTALLMENTS
+    // ---------------------------------------------
+
+    let totalInstallments = 0;
+
+    if (loan.loanType === "DAILY") {
+
+        totalInstallments =
+            Number(loan.durationDays || 0);
+
+    }
+    else if (loan.loanType === "WEEKLY") {
+
+        totalInstallments =
+            Number(loan.durationWeeks || 0);
+
+    }
+    else if (loan.loanType === "MONTHLY") {
+
+        totalInstallments =
+            Number(loan.durationMonths || 0);
+
+    }
+    else if (loan.loanType === "FIXED") {
+
+        totalInstallments =
+            Number(loan.loanTenureMonths || 0);
+    }
+
+
+    // ---------------------------------------------
+    // INSTALLMENTS DUE TILL TODAY
+    // ---------------------------------------------
+
+    let dueInstallments = 0;
+
+
+    if (loan.loanType === "DAILY") {
+
+        dueInstallments =
+            Math.floor(
+                (today - loanDate) /
+                (1000 * 60 * 60 * 24)
+            ) + 1;
+
+    }
+
+    else if (loan.loanType === "WEEKLY") {
+
+        dueInstallments =
+            Math.floor(
+                (today - loanDate) /
+                (1000 * 60 * 60 * 24 * 7)
+            ) + 1;
+
+    }
+
+    else if (
+        loan.loanType === "MONTHLY" ||
+        loan.loanType === "FIXED"
+    ) {
+
+        const monthDiff =
+            (
+                (today.getFullYear() -
+                    loanDate.getFullYear()) * 12
+            ) +
+            (
+                today.getMonth() -
+                loanDate.getMonth()
+            );
+
+        if (monthDiff < 0) {
+
+            dueInstallments = 0;
+
+        }
+        else if (
+            today.getDate() >=
+            loanDate.getDate()
+        ) {
+
+            dueInstallments =
+                monthDiff + 1;
+
+        }
+        else {
+
+            dueInstallments =
+                monthDiff;
+        }
+    }
+
+
+    dueInstallments =
+        Math.min(
+            Math.max(dueInstallments, 0),
+            totalInstallments
+        );
+
+
+    // ---------------------------------------------
+    // GET PAID INSTALLMENTS
+    // ---------------------------------------------
+
+    const loanPayments =
+        loanTransactions.filter(tx =>
+            String(tx.loan) ===
+            String(loan._id)
+        );
+
+
+    // ---------------------------------------------
+    // CALCULATE PAID EMI
+    // ---------------------------------------------
+
+    const paidInstallments =
+        new Set(
+            loanPayments
+                .map(tx =>
+                    Number(tx.installmentNo)
+                )
+                .filter(Boolean)
+        );
+
+
+    // ---------------------------------------------
+    // EMI PENDING
+    // ---------------------------------------------
+
+    let pendingLoan = 0;
+
+
+    for (
+        let installmentNo = 1;
+        installmentNo <= dueInstallments;
+        installmentNo++
+    ) {
+
+        // Already paid
+        if (
+            paidInstallments.has(
+                installmentNo
+            )
+        ) {
+            continue;
+        }
+
+
+        // -----------------------------------------
+        // EMI AMOUNT
+        // -----------------------------------------
+
+        let emiAmount =
+            Number(loan.emiAmount || 0);
+
+
+        // FIXED LOAN
+        // Only monthly interest is collected
+        if (
+            loan.loanType === "FIXED"
+        ) {
+
+            emiAmount =
+                Math.round(
+                    Number(
+                        loan.totalInterest || 0
+                    ) /
+                    Number(
+                        loan.loanTenureMonths || 1
+                    )
+                );
+        }
+
+
+        pendingLoan += emiAmount;
+    }
+
+
+    loanPendingTillToday += pendingLoan;
+}
+
+
+// =====================================================
+// FINAL PENDING TILL TODAY
+// =====================================================
+
+const pendingTillToday =
+    savingPendingTillToday +
+    loanPendingTillToday;
 
       // =====================================================
       // EFFICIENCY
