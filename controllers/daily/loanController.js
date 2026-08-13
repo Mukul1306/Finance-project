@@ -3237,12 +3237,12 @@ exports.loanDashboard = async (req, res) => {
                 interest:
                     loanSummary[0]?.interest || 0,
 
-                penalty:
-                    penaltySummary[0]?.penalty || 0,
+               penalty:
+    penaltySummary[0]?.penalty || 0,
 
-                overdueEmiAmount,
+overdueEmiAmount,
 
-                collection
+monthlyCollection: collection
 
             }
 
