@@ -144,6 +144,11 @@ const agentSchema = new mongoose.Schema({
     type: Number,
     default: 10000
   },
+  todayActualCollection: {
+  type: Number,
+  default: 0
+},
+
 todayTarget: {
   type: Number,
   default: 0
