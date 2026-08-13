@@ -319,62 +319,94 @@ exports.getAgents = async (req, res) => {
         });
 
 
-      // =====================================================
-      // TODAY COLLECTION
-      // DAILY SAVING + LOAN EMI
-      // =====================================================
+// =====================================================
+// TODAY COLLECTION
+//
+// IMPORTANT:
+// Count money COLLECTED TODAY,
+// regardless of which due/EMI date it belongs to.
+//
+// Example:
+// Due date = 10 Aug
+// Collection date = 13 Aug
+//
+// It MUST count in 13 Aug Today's Collection.
+// =====================================================
 
-      let todayCollection = 0;
-
-
-      // -----------------------------------------------------
-      // DAILY SAVING COLLECTED TODAY
-      // -----------------------------------------------------
-
-      savingTransactions.forEach(item => {
-
-        const d =
-          new Date(item.collectionDate);
-
-        d.setHours(0, 0, 0, 0);
+let todayCollection = 0;
 
 
-        if (
-          d.getTime() ===
-          today.getTime()
-        ) {
+// =====================================================
+// DAILY SAVING COLLECTIONS MADE TODAY
+// =====================================================
 
-          todayCollection +=
-            Number(item.totalAmount || 0);
+savingTransactions.forEach(item => {
 
-        }
+  if (!item.collectionDate) {
+    return;
+  }
 
-      });
+  const collectionDate =
+    new Date(item.collectionDate);
 
-
-      // -----------------------------------------------------
-      // LOAN EMI COLLECTED TODAY
-      // -----------------------------------------------------
-
-      loanTransactions.forEach(item => {
-
-        const d =
-          new Date(item.paymentDate);
-
-        d.setHours(0, 0, 0, 0);
+  collectionDate.setHours(
+    0,
+    0,
+    0,
+    0
+  );
 
 
-        if (
-          d.getTime() ===
-          today.getTime()
-        ) {
+  if (
+    collectionDate.getTime() ===
+    today.getTime()
+  ) {
 
-          todayCollection +=
-            Number(item.totalAmount || 0);
+    todayCollection +=
+      Number(item.totalAmount || 0);
 
-        }
+  }
 
-      });
+});
+
+
+// =====================================================
+// LOAN EMI COLLECTIONS MADE TODAY
+//
+// paymentDate = actual payment/collection date
+// dueDate     = EMI's original due date
+//
+// DO NOT compare dueDate with today.
+// =====================================================
+
+loanTransactions.forEach(item => {
+
+  if (!item.paymentDate) {
+    return;
+  }
+
+  const collectionDate =
+    new Date(item.paymentDate);
+
+  collectionDate.setHours(
+    0,
+    0,
+    0,
+    0
+  );
+
+
+  if (
+    collectionDate.getTime() ===
+    today.getTime()
+  ) {
+
+    todayCollection +=
+      Number(item.totalAmount || 0);
+
+  }
+
+});
 
 
       // =====================================================
