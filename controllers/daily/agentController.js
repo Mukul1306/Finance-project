@@ -320,24 +320,18 @@ exports.getAgents = async (req, res) => {
 
 
 // =====================================================
-// TODAY COLLECTION
-//
-// IMPORTANT:
-// Count money COLLECTED TODAY,
-// regardless of which due/EMI date it belongs to.
-//
-// Example:
-// Due date = 10 Aug
-// Collection date = 13 Aug
-//
-// It MUST count in 13 Aug Today's Collection.
+// TODAY COLLECTIONS
 // =====================================================
 
-let todayCollection = 0;
+// Actual money physically collected today
+let todayActualCollection = 0;
+
+// Amount collected today that belongs to TODAY'S dues
+let todayDueCollection = 0;
 
 
 // =====================================================
-// DAILY SAVING COLLECTIONS MADE TODAY
+// DAILY SAVING
 // =====================================================
 
 savingTransactions.forEach(item => {
@@ -349,12 +343,7 @@ savingTransactions.forEach(item => {
   const collectionDate =
     new Date(item.collectionDate);
 
-  collectionDate.setHours(
-    0,
-    0,
-    0,
-    0
-  );
+  collectionDate.setHours(0, 0, 0, 0);
 
 
   if (
@@ -362,7 +351,14 @@ savingTransactions.forEach(item => {
     today.getTime()
   ) {
 
-    todayCollection +=
+    // Money actually received today
+    todayActualCollection +=
+      Number(item.totalAmount || 0);
+
+
+    // Daily saving collected today
+    // belongs to today's collection
+    todayDueCollection +=
       Number(item.totalAmount || 0);
 
   }
@@ -371,12 +367,7 @@ savingTransactions.forEach(item => {
 
 
 // =====================================================
-// LOAN EMI COLLECTIONS MADE TODAY
-//
-// paymentDate = actual payment/collection date
-// dueDate     = EMI's original due date
-//
-// DO NOT compare dueDate with today.
+// LOAN EMI
 // =====================================================
 
 loanTransactions.forEach(item => {
@@ -385,29 +376,78 @@ loanTransactions.forEach(item => {
     return;
   }
 
-  const collectionDate =
+
+  const paymentDate =
     new Date(item.paymentDate);
 
-  collectionDate.setHours(
-    0,
-    0,
-    0,
-    0
-  );
+  paymentDate.setHours(0, 0, 0, 0);
 
+
+  // -----------------------------------------------
+  // ACTUAL COLLECTION
+  // -----------------------------------------------
+  // Anything physically collected today
+  // is included here.
+  //
+  // Example:
+  // EMI due 11 Aug
+  // paid 13 Aug
+  // => included in actual collection
+  // -----------------------------------------------
 
   if (
-    collectionDate.getTime() ===
+    paymentDate.getTime() ===
     today.getTime()
   ) {
 
-    todayCollection +=
+    todayActualCollection +=
       Number(item.totalAmount || 0);
+
+
+    // ---------------------------------------------
+    // ONLY TODAY'S DUE
+    // ---------------------------------------------
+    //
+    // Check the EMI due date.
+    //
+    // Old EMI:
+    // dueDate = 11 Aug
+    // paymentDate = 13 Aug
+    //
+    // => Actual Collection YES
+    // => Today's Due Collection NO
+    //
+    // Today's EMI:
+    // dueDate = 13 Aug
+    // paymentDate = 13 Aug
+    //
+    // => Actual Collection YES
+    // => Today's Due Collection YES
+    // ---------------------------------------------
+
+    if (item.dueDate) {
+
+      const dueDate =
+        new Date(item.dueDate);
+
+      dueDate.setHours(0, 0, 0, 0);
+
+
+      if (
+        dueDate.getTime() ===
+        today.getTime()
+      ) {
+
+        todayDueCollection +=
+          Number(item.totalAmount || 0);
+
+      }
+
+    }
 
   }
 
 });
-
 
       // =====================================================
       // TOTAL COLLECTION - ALL TIME
@@ -529,15 +569,12 @@ loanTransactions.forEach(item => {
       // TODAY PENDING
       // =====================================================
 
-      const todayPending =
-        Math.max(
-
-          0,
-
-          todayTarget -
-          todayCollection
-
-        );
+    const todayPending =
+  Math.max(
+    0,
+    todayTarget -
+    todayDueCollection
+  );
 
 
       // =====================================================
@@ -1201,20 +1238,18 @@ loanTransactions.forEach(item => {
       // EFFICIENCY
       // =====================================================
 
-      const efficiency =
+     const efficiency =
 
-        todayTarget > 0
+  todayTarget > 0
 
-          ? Math.round(
+    ? Math.round(
+        (
+          todayDueCollection /
+          todayTarget
+        ) * 100
+      )
 
-              (
-                todayCollection /
-                todayTarget
-              ) * 100
-
-            )
-
-          : 0;
+    : 0;
 
 
       // =====================================================
@@ -1229,8 +1264,11 @@ loanTransactions.forEach(item => {
       // TODAY
       // -----------------------------------------------------
 
-      agent.todayCollection =
-        todayCollection;
+agent.todayCollection =
+  todayDueCollection;
+
+agent.todayActualCollection =
+  todayActualCollection;
 
 
       agent.todayTarget =
