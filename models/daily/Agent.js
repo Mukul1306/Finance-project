@@ -153,6 +153,27 @@ todayPending: {
   type: Number,
   default: 0
 },
+
+// ===========================
+// PENDING TILL TODAY
+// ===========================
+
+pendingTillToday: {
+  type: Number,
+  default: 0
+},
+
+savingPendingTillToday: {
+  type: Number,
+  default: 0
+},
+
+loanPendingTillToday: {
+  type: Number,
+  default: 0
+},
+
+
   efficiency: {
     type: Number,
     default: 0
