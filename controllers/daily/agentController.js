@@ -1645,6 +1645,18 @@ const dailyTarget =
     savingTarget +
     loanTarget;
 
+
+// ======================================
+// TODAY PENDING TARGET
+// ONLY TODAY'S TARGET - TODAY'S COLLECTION
+// ======================================
+
+const todayPending = Math.max(
+  0,
+  dailyTarget - todayCollection
+);
+
+
     // ======================================
 // PENDING TILL TODAY
 // SAVING + ALL LOANS
@@ -2086,12 +2098,17 @@ const pendingTillToday =
 
   dailyTarget,
 
-  // PENDING
-  pendingTillToday,
+// ======================================
+// PENDING
+// ======================================
 
-  savingPendingTillToday,
+todayPending,
 
-  loanPendingTillToday
+pendingTillToday,
+
+savingPendingTillToday,
+
+loanPendingTillToday
 
 },
 
