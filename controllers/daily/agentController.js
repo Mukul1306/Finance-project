@@ -259,211 +259,735 @@ exports.getAgents = async (req, res) => {
 
   try {
 
-    const agents = await Agent.find().sort({ createdAt: -1 });
+    const agents =
+      await Agent.find()
+        .sort({ createdAt: -1 });
+
 
     const today = new Date();
-    today.setHours(0,0,0,0);
+
+    today.setHours(0, 0, 0, 0);
+
 
     for (let agent of agents) {
 
-      // ===========================
-      // ACTIVE SAVING MEMBERS
-      // ===========================
+      // =====================================================
+      // ALL SAVING ACCOUNTS OF THIS AGENT
+      // =====================================================
 
-      const members = await DailySaving.find({
+      const members =
+        await DailySaving.find({
 
-        assignedAgent: agent._id,
-        status: "ACTIVE"
+          assignedAgent: agent._id
 
-      });
+        });
 
-      // ===========================
-      // DAILY SAVING COLLECTION
-      // ===========================
+
+      // =====================================================
+      // ALL DAILY SAVING COLLECTIONS OF AGENT
+      // =====================================================
 
       const savingTransactions =
-      await DailyTransaction.find({
+        await DailyTransaction.find({
 
-        collectorId: agent._id,
-        collectorType: "AGENT"
+          collectorId: agent._id,
 
-      });
+          collectorType: "AGENT"
 
-      // ===========================
-      // LOAN EMI COLLECTION
-      // ===========================
+        });
+
+
+      // =====================================================
+      // ALL LOAN EMI COLLECTIONS OF AGENT
+      // =====================================================
 
       const loanTransactions =
-      await LoanCollection.find({
+        await LoanCollection.find({
 
-        collectorId: agent._id,
-        collectorType: "AGENT"
+          collectorId: agent._id,
 
-      });
+          collectorType: "AGENT"
 
-      // ===========================
+        });
+
+
+      // =====================================================
       // TODAY COLLECTION
-      // ===========================
+      // DAILY SAVING + LOAN EMI
+      // =====================================================
 
       let todayCollection = 0;
 
+
+      // Daily Saving collected today
       savingTransactions.forEach(item => {
 
-        const d = new Date(item.collectionDate);
-        d.setHours(0,0,0,0);
+        const d =
+          new Date(item.collectionDate);
 
-        if(d.getTime() === today.getTime()){
+        d.setHours(0, 0, 0, 0);
 
-          todayCollection += item.totalAmount || 0;
+
+        if (
+          d.getTime() ===
+          today.getTime()
+        ) {
+
+          todayCollection +=
+            Number(item.totalAmount || 0);
 
         }
 
       });
 
+
+      // Loan EMI collected today
       loanTransactions.forEach(item => {
 
-        const d = new Date(item.paymentDate);
-        d.setHours(0,0,0,0);
+        const d =
+          new Date(item.paymentDate);
 
-        if(d.getTime() === today.getTime()){
+        d.setHours(0, 0, 0, 0);
 
-          todayCollection += item.totalAmount || 0;
+
+        if (
+          d.getTime() ===
+          today.getTime()
+        ) {
+
+          todayCollection +=
+            Number(item.totalAmount || 0);
 
         }
 
       });
 
-      // ===========================
-      // TOTAL COLLECTION
-      // ===========================
+
+      // =====================================================
+      // TOTAL COLLECTION - ALL TIME
+      // DAILY SAVING + ALL LOAN EMI
+      // =====================================================
 
       const totalCollection =
 
         savingTransactions.reduce(
-          (sum,item)=>sum+(item.totalAmount||0),
+          (sum, item) =>
+            sum +
+            Number(item.totalAmount || 0),
           0
         )
 
         +
 
         loanTransactions.reduce(
-          (sum,item)=>sum+(item.totalAmount||0),
+          (sum, item) =>
+            sum +
+            Number(item.totalAmount || 0),
           0
         );
 
-      // ===========================
-      // DAILY SAVING TARGET
-      // ===========================
+
+      // =====================================================
+      // TODAY'S DAILY SAVING TARGET
+      // =====================================================
 
       let savingTarget = 0;
 
-      members.forEach(item=>{
 
-        savingTarget += Number(
-          item.fixedAmount || 0
+      const activeSavings =
+        members.filter(
+          saving =>
+            saving.status === "ACTIVE"
         );
+
+
+      activeSavings.forEach(item => {
+
+        if (
+          item.collectionType ===
+          "FIXED"
+        ) {
+
+          savingTarget +=
+            Number(
+              item.fixedAmount || 0
+            );
+
+        }
 
       });
 
-      // ===========================
-      // DAILY LOAN EMI TARGET
-      // ===========================
-let loanTarget = 0;
 
-const loans = await DailyLoan.find({
+      // =====================================================
+      // TODAY'S LOAN TARGET
+      // =====================================================
 
-    assignedAgent: agent._id,
-
-    loanType: "DAILY",
-
-    status: {
-        $in: ["ACTIVE", "DUE", "OVERDUE"]
-    }
-
-});
-
-loanTarget = loans.reduce(
-
-    (sum, loan) => sum + Number(loan.emiAmount || 0),
-
-    0
-
-);
+      let loanTarget = 0;
 
 
-console.log("================================");
-console.log("Agent:", agent.name);
-console.log("Saving Target:", savingTarget);
-console.log("Loans Found:", loans.length);
+      // Get active/due/overdue loans
+      // of this agent
+      const loans =
+        await DailyLoan.find({
 
-loans.forEach((loan) => {
-  console.log({
-    loanNumber: loan.loanNumber,
-    emiAmount: loan.emiAmount,
-    loanType: loan.loanType,
-    assignedAgent: loan.assignedAgent,
-    status: loan.status,
-    completedInstallments: loan.completedInstallments,
-    loanDate: loan.loanDate
-  });
-});
+          assignedAgent: agent._id,
 
-      // ===========================
-      // FINAL TARGET
-      // ===========================
+          loanType: "DAILY",
 
- console.log("Loan Target:", loanTarget);
+          status: {
+            $in: [
+              "ACTIVE",
+              "DUE",
+              "OVERDUE"
+            ]
+          }
 
-const todayTarget = savingTarget + loanTarget;
+        });
 
-console.log("Today Target:", todayTarget);
+
+      loanTarget =
+        loans.reduce(
+
+          (sum, loan) =>
+            sum +
+            Number(
+              loan.emiAmount || 0
+            ),
+
+          0
+
+        );
+
+
+      // =====================================================
+      // TODAY TARGET
+      // =====================================================
+
+      const todayTarget =
+        savingTarget +
+        loanTarget;
+
+
+      // =====================================================
+      // TODAY PENDING
+      // =====================================================
 
       const todayPending =
-      Math.max(0, todayTarget - todayCollection);
+        Math.max(
+          0,
+          todayTarget -
+          todayCollection
+        );
 
-      // ===========================
-      // ASSIGN VALUES
-      // ===========================
 
-      agent.totalMembers = members.length;
+      // =====================================================
+      // PENDING TILL TODAY
+      // =====================================================
 
-      agent.todayCollection = todayCollection;
+      let savingPendingTillToday = 0;
 
-      agent.totalCollection = totalCollection;
+      let loanPendingTillToday = 0;
 
-      agent.todayTarget = todayTarget;
 
-      agent.todayPending = todayPending;
+      // =====================================================
+      // DAILY SAVING PENDING TILL TODAY
+      // =====================================================
+
+      for (
+        const saving of members
+      ) {
+
+        const startDate =
+          new Date(
+            saving.startDate
+          );
+
+        startDate.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+
+        // Saving has not started
+        if (
+          startDate >
+          today
+        ) {
+          continue;
+        }
+
+
+        // ---------------------------------------------
+        // END DATE
+        // ---------------------------------------------
+
+        let lastDueDate =
+          new Date(today);
+
+
+        if (saving.endDate) {
+
+          const endDate =
+            new Date(
+              saving.endDate
+            );
+
+          endDate.setHours(
+            0,
+            0,
+            0,
+            0
+          );
+
+
+          if (
+            endDate <
+            lastDueDate
+          ) {
+
+            lastDueDate =
+              endDate;
+
+          }
+
+        }
+
+
+        // ---------------------------------------------
+        // NUMBER OF DAYS DUE
+        // ---------------------------------------------
+
+        let dueDays =
+          Math.floor(
+
+            (
+              lastDueDate -
+              startDate
+            ) /
+            (1000 * 60 * 60 * 24)
+
+          ) + 1;
+
+
+        if (
+          dueDays < 0
+        ) {
+
+          dueDays = 0;
+
+        }
+
+
+        // Never exceed saving duration
+        if (
+          saving.durationDays
+        ) {
+
+          dueDays =
+            Math.min(
+
+              dueDays,
+
+              Number(
+                saving.durationDays
+              )
+
+            );
+
+        }
+
+
+        // ---------------------------------------------
+        // EXPECTED SAVING
+        // ---------------------------------------------
+
+        let expectedSaving = 0;
+
+
+        if (
+          saving.collectionType ===
+          "FIXED"
+        ) {
+
+          expectedSaving =
+            dueDays *
+            Number(
+              saving.fixedAmount || 0
+            );
+
+        }
+
+
+        // ---------------------------------------------
+        // SAVING ACTUALLY PAID
+        // ---------------------------------------------
+        //
+        // IMPORTANT:
+        // We use dailyAmount only.
+        // Penalty is NOT considered as saving paid.
+        //
+
+        const paidSaving =
+          savingTransactions
+            .filter(tx => {
+
+              return (
+                String(
+                  tx.savingAccount
+                ) ===
+                String(
+                  saving._id
+                )
+              );
+
+            })
+            .filter(tx => {
+
+              const collectionDate =
+                new Date(
+                  tx.collectionDate
+                );
+
+              collectionDate.setHours(
+                0,
+                0,
+                0,
+                0
+              );
+
+
+              return (
+                collectionDate <=
+                today
+              );
+
+            })
+            .reduce(
+
+              (sum, tx) =>
+                sum +
+                Number(
+                  tx.dailyAmount || 0
+                ),
+
+              0
+
+            );
+
+
+        // ---------------------------------------------
+        // SAVING PENDING
+        // ---------------------------------------------
+
+        const pendingSaving =
+          Math.max(
+
+            0,
+
+            expectedSaving -
+            paidSaving
+
+          );
+
+
+        savingPendingTillToday +=
+          pendingSaving;
+
+      }
+
+
+      // =====================================================
+      // DAILY LOAN EMI PENDING TILL TODAY
+      // =====================================================
+
+      const dailyLoans =
+        await DailyLoan.find({
+
+          assignedAgent:
+            agent._id,
+
+          loanType:
+            "DAILY",
+
+          status: {
+            $in: [
+              "ACTIVE",
+              "DUE",
+              "OVERDUE"
+            ]
+          }
+
+        });
+
+
+      // =====================================================
+      // CALCULATE EACH DAILY LOAN
+      // =====================================================
+
+      for (
+        const loan of dailyLoans
+      ) {
+
+        const loanDate =
+          new Date(
+            loan.loanDate
+          );
+
+        loanDate.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+
+        if (
+          loanDate >
+          today
+        ) {
+          continue;
+        }
+
+
+        // ---------------------------------------------
+        // HOW MANY DAILY EMI SHOULD BE DUE
+        // ---------------------------------------------
+
+        let dueInstallments =
+          Math.floor(
+
+            (
+              today -
+              loanDate
+            ) /
+            (1000 * 60 * 60 * 24)
+
+          ) + 1;
+
+
+        dueInstallments =
+          Math.min(
+
+            dueInstallments,
+
+            Number(
+              loan.durationDays || 0
+            )
+
+          );
+
+
+        if (
+          dueInstallments < 0
+        ) {
+
+          dueInstallments = 0;
+
+        }
+
+
+        // ---------------------------------------------
+        // EXPECTED EMI TILL TODAY
+        // ---------------------------------------------
+
+        const expectedLoanEMI =
+          dueInstallments *
+          Number(
+            loan.emiAmount || 0
+          );
+
+
+        // ---------------------------------------------
+        // ACTUAL EMI PAID
+        // ---------------------------------------------
+        //
+        // IMPORTANT:
+        // penalty is NOT included.
+        //
+        // principal + interest = actual EMI
+        //
+
+        const paidLoanEMI =
+          loanTransactions
+            .filter(tx => {
+
+              return (
+                String(tx.loan) ===
+                String(loan._id)
+              );
+
+            })
+            .filter(tx => {
+
+              const paymentDate =
+                new Date(
+                  tx.paymentDate
+                );
+
+              paymentDate.setHours(
+                0,
+                0,
+                0,
+                0
+              );
+
+
+              return (
+                paymentDate <=
+                today
+              );
+
+            })
+            .reduce(
+
+              (sum, tx) =>
+
+                sum +
+
+                Number(
+                  tx.principalAmount || 0
+                ) +
+
+                Number(
+                  tx.interestAmount || 0
+                ),
+
+              0
+
+            );
+
+
+        // ---------------------------------------------
+        // LOAN EMI PENDING
+        // ---------------------------------------------
+
+        const pendingLoan =
+          Math.max(
+
+            0,
+
+            expectedLoanEMI -
+            paidLoanEMI
+
+          );
+
+
+        loanPendingTillToday +=
+          pendingLoan;
+
+      }
+
+
+      // =====================================================
+      // TOTAL PENDING TILL TODAY
+      // =====================================================
+
+      const pendingTillToday =
+        savingPendingTillToday +
+        loanPendingTillToday;
+
+
+      // =====================================================
+      // EFFICIENCY
+      // =====================================================
+
+      const efficiency =
+        todayTarget > 0
+
+          ? Math.round(
+
+              (
+                todayCollection /
+                todayTarget
+              ) * 100
+
+            )
+
+          : 0;
+
+
+      // =====================================================
+      // ASSIGN VALUES TO AGENT
+      // =====================================================
+
+      agent.totalMembers =
+        members.length;
+
+
+      // TODAY
+      agent.todayCollection =
+        todayCollection;
+
+
+      agent.todayTarget =
+        todayTarget;
+
+
+      agent.todayPending =
+        todayPending;
+
 
       agent.efficiency =
-      todayTarget > 0
-      ? Math.round((todayCollection / todayTarget) * 100)
-      : 0;
+        efficiency;
+
+
+      // ALL TIME
+      agent.totalCollection =
+        totalCollection;
+
+
+      // TILL TODAY
+      agent.pendingTillToday =
+        pendingTillToday;
+
+
+      agent.savingPendingTillToday =
+        savingPendingTillToday;
+
+
+      agent.loanPendingTillToday =
+        loanPendingTillToday;
 
     }
+
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
 
     res.status(200).json({
 
-      success:true,
+      success: true,
+
       agents
 
     });
 
   }
 
-  catch(error){
+
+  catch(error) {
+
+    console.error(
+      "GET AGENTS ERROR:",
+      error
+    );
+
 
     res.status(500).json({
 
-      success:false,
-      message:error.message
+      success: false,
+
+      message:
+        error.message
 
     });
 
   }
 
 };
-
 
 
 exports.getAgent = async (req, res) => {
@@ -526,12 +1050,9 @@ exports.getAgentProfile = async (req, res) => {
     // MEMBERS
     // =========================
 
-    const members = await DailySaving.find({
-
-      assignedAgent: agentId,
-      status: "ACTIVE"
-
-    })
+  const members = await DailySaving.find({
+    assignedAgent: agent._id
+})
 
     .populate("member")
     .populate("areaGroup", "areaName");
