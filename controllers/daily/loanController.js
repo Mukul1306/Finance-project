@@ -1572,6 +1572,7 @@ message:error.message
 }
 
 };
+
 // ==========================================
 // GET PENDING INSTALLMENTS
 // ==========================================
@@ -2850,298 +2851,423 @@ message:error.message
 // ==========================================
 // LOAN DASHBOARD
 // ==========================================
+// ==========================================
+// LOAN DASHBOARD - TYPE WISE
+// ==========================================
 
-exports.loanDashboard = async(req,res)=>{
+exports.loanDashboard = async (req, res) => {
 
-try{
+    try {
 
-const totalLoans =
-await DailyLoan.countDocuments();
+        // ==========================================
+        // GET LOAN TYPE
+        // ==========================================
 
-const activeLoans =
-await DailyLoan.countDocuments({
+        const loanType = req.query.loanType || "DAILY";
 
-status:"ACTIVE"
+        const allowedTypes = [
+            "DAILY",
+            "WEEKLY",
+            "MONTHLY",
+            "FIXED"
+        ];
 
-});
+        if (!allowedTypes.includes(loanType)) {
 
-const closedLoans =
-await DailyLoan.countDocuments({
+            return res.status(400).json({
+                success: false,
+                message: "Invalid loan type"
+            });
 
-status:"CLOSED"
-
-});
-
-const overdueLoans =
-await DailyLoan.countDocuments({
-
-status:"OVERDUE"
-
-});
-
-const loanSummary =
-await DailyLoan.aggregate([
-
-{
-
-$group:{
-
-_id:null,
-
-loanAmount:{
-
-$sum:"$loanAmount"
-
-},
-
-outstanding:{
-
-$sum:"$outstandingAmount"
-
-},
-
-totalPaid:{
-
-$sum:"$totalPaid"
-
-},
-
-interest:{
-
-$sum:"$totalInterest"
-
-}
-
-}
-
-}
-
-]);
+        }
 
 
-const penaltySummary =
-await LoanCollection.aggregate([
+        // ==========================================
+        // BASIC LOAN COUNTS
+        // ==========================================
 
-{
+        const totalLoans =
+            await DailyLoan.countDocuments({
+                loanType
+            });
 
-$group:{
 
-_id:null,
+        const activeLoans =
+            await DailyLoan.countDocuments({
+                loanType,
+                status: "ACTIVE"
+            });
 
-penalty:{
 
-$sum:"$pendingPenalty"
+        const closedLoans =
+            await DailyLoan.countDocuments({
+                loanType,
+                status: "CLOSED"
+            });
 
-}
 
-}
+        const overdueLoans =
+            await DailyLoan.countDocuments({
+                loanType,
+                status: "OVERDUE"
+            });
 
-}
 
-]);
+        // ==========================================
+        // LOAN FINANCIAL SUMMARY
+        // ==========================================
 
-// ======================================
-// PAST DUE EMI (Only overdue installments)
-// ======================================
+        const loanSummary =
+            await DailyLoan.aggregate([
 
-const loans = await DailyLoan.find({
-  status: { $in: ["ACTIVE", "OVERDUE"] }
-});
+                {
+                    $match: {
+                        loanType
+                    }
+                },
 
-const today = new Date();
-today.setHours(0, 0, 0, 0);
+                {
+                    $group: {
 
-let overdueEmiAmount = 0;
+                        _id: null,
 
-for (const loan of loans) {
+                        loanAmount: {
+                            $sum: "$loanAmount"
+                        },
 
-  let dueInstallments = 0;
+                        outstanding: {
+                            $sum: "$outstandingAmount"
+                        },
 
-  const loanDate = new Date(loan.loanDate);
-  loanDate.setHours(0, 0, 0, 0);
+                        totalPaid: {
+                            $sum: "$totalPaid"
+                        },
 
- if (loan.loanType === "DAILY") {
+                        interest: {
+                            $sum: "$totalInterest"
+                        }
 
-    dueInstallments =
-      Math.floor(
-        (today - loanDate) /
-        (1000 * 60 * 60 * 24)
-      ) + 1;
+                    }
+                }
 
-    dueInstallments = Math.min(
-      dueInstallments,
-      loan.durationDays
-    );
+            ]);
 
-}
 
-else if (loan.loanType === "WEEKLY") {
+        // ==========================================
+        // GET ONLY SELECTED TYPE LOANS
+        // ==========================================
 
-    dueInstallments =
-        Math.floor(
-            (today - loanDate) /
-            (1000 * 60 * 60 * 24 * 7)
-        ) + 1;
+        const selectedLoans =
+            await DailyLoan.find({
+                loanType
+            }).select("_id");
 
-    dueInstallments = Math.min(
-        dueInstallments,
-        loan.durationWeeks
-    );
 
-}
+        const loanIds =
+            selectedLoans.map(
+                loan => loan._id
+            );
 
- else if (
-    loan.loanType === "MONTHLY" ||
-    loan.loanType === "FIXED"
-) {
 
-    const monthDiff =
-        (today.getFullYear() - loanDate.getFullYear()) * 12 +
-        (today.getMonth() - loanDate.getMonth());
+        // ==========================================
+        // PENALTY - ONLY SELECTED LOAN TYPE
+        // ==========================================
 
-    if (today.getDate() >= loanDate.getDate()) {
+        const penaltySummary =
+            await LoanCollection.aggregate([
 
-        dueInstallments = monthDiff;
+                {
+                    $match: {
+                        loan: {
+                            $in: loanIds
+                        }
+                    }
+                },
 
-    } else {
+                {
+                    $group: {
 
-        dueInstallments = monthDiff - 1;
+                        _id: null,
+
+                        penalty: {
+                            $sum: "$penalty"
+                        }
+
+                    }
+                }
+
+            ]);
+
+
+        // ==========================================
+        // TODAY
+        // ==========================================
+
+        const today = new Date();
+
+        today.setHours(0, 0, 0, 0);
+
+
+        // ==========================================
+        // PENDING / OVERDUE EMI
+        // ONLY SELECTED LOAN TYPE
+        // ==========================================
+
+        const loans =
+            await DailyLoan.find({
+                loanType,
+                status: {
+                    $in: ["ACTIVE", "OVERDUE"]
+                }
+            });
+
+
+        let overdueEmiAmount = 0;
+
+
+        for (const loan of loans) {
+
+            let dueInstallments = 0;
+
+
+            const loanDate =
+                new Date(loan.loanDate);
+
+            loanDate.setHours(0, 0, 0, 0);
+
+
+            // ======================================
+            // DAILY
+            // ======================================
+
+            if (loan.loanType === "DAILY") {
+
+                dueInstallments =
+                    Math.floor(
+                        (today - loanDate) /
+                        (1000 * 60 * 60 * 24)
+                    ) + 1;
+
+
+                dueInstallments =
+                    Math.min(
+                        dueInstallments,
+                        loan.durationDays || 0
+                    );
+
+            }
+
+
+            // ======================================
+            // WEEKLY
+            // ======================================
+
+            else if (loan.loanType === "WEEKLY") {
+
+                dueInstallments =
+                    Math.floor(
+                        (today - loanDate) /
+                        (1000 * 60 * 60 * 24 * 7)
+                    ) + 1;
+
+
+                dueInstallments =
+                    Math.min(
+                        dueInstallments,
+                        loan.durationWeeks || 0
+                    );
+
+            }
+
+
+            // ======================================
+            // MONTHLY
+            // ======================================
+
+            else if (loan.loanType === "MONTHLY") {
+
+                dueInstallments =
+                    (
+                        (today.getFullYear() -
+                        loanDate.getFullYear()) * 12
+                    ) +
+                    (
+                        today.getMonth() -
+                        loanDate.getMonth()
+                    ) + 1;
+
+
+                dueInstallments =
+                    Math.min(
+                        dueInstallments,
+                        loan.durationMonths || 0
+                    );
+
+            }
+
+
+            // ======================================
+            // FIXED
+            // ======================================
+
+            else if (loan.loanType === "FIXED") {
+
+                dueInstallments =
+                    (
+                        (today.getFullYear() -
+                        loanDate.getFullYear()) * 12
+                    ) +
+                    (
+                        today.getMonth() -
+                        loanDate.getMonth()
+                    ) + 1;
+
+
+                dueInstallments =
+                    Math.min(
+                        dueInstallments,
+                        loan.loanTenureMonths || 0
+                    );
+
+            }
+
+
+            if (dueInstallments < 0) {
+                dueInstallments = 0;
+            }
+
+
+            const pendingInstallments =
+                Math.max(
+                    0,
+                    dueInstallments -
+                    (loan.completedInstallments || 0)
+                );
+
+
+            const pending =
+                pendingInstallments *
+                (loan.emiAmount || 0);
+
+
+            overdueEmiAmount += pending;
+
+        }
+
+
+        // ==========================================
+        // CURRENT MONTH COLLECTION
+        // ONLY SELECTED LOAN TYPE
+        // ==========================================
+
+        const firstDay =
+            new Date(
+                today.getFullYear(),
+                today.getMonth(),
+                1
+            );
+
+
+        const currentMonthCollection =
+            await LoanCollection.aggregate([
+
+                {
+                    $match: {
+
+                        loan: {
+                            $in: loanIds
+                        },
+
+                        paymentDate: {
+                            $gte: firstDay,
+                            $lte: new Date()
+                        }
+
+                    }
+                },
+
+                {
+                    $group: {
+
+                        _id: null,
+
+                        total: {
+                            $sum: "$totalAmount"
+                        }
+
+                    }
+                }
+
+            ]);
+
+
+        const collection =
+            currentMonthCollection[0]?.total || 0;
+
+
+        // ==========================================
+        // RESPONSE
+        // ==========================================
+
+        res.json({
+
+            success: true,
+
+            dashboard: {
+
+                loanType,
+
+                totalLoans,
+
+                activeLoans,
+
+                closedLoans,
+
+                overdueLoans,
+
+                loanAmount:
+                    loanSummary[0]?.loanAmount || 0,
+
+                outstanding:
+                    loanSummary[0]?.outstanding || 0,
+
+                totalPaid:
+                    loanSummary[0]?.totalPaid || 0,
+
+                interest:
+                    loanSummary[0]?.interest || 0,
+
+                penalty:
+                    penaltySummary[0]?.penalty || 0,
+
+                overdueEmiAmount,
+
+                collection
+
+            }
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Loan Dashboard Error:",
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message: error.message
+
+        });
 
     }
-
-    const totalInstallments =
-        loan.loanType === "MONTHLY"
-            ? loan.durationMonths
-            : loan.loanTenureMonths;
-
-    dueInstallments = Math.min(
-        Math.max(dueInstallments, 0),
-        totalInstallments
-    );
-}
-
-
-  if (dueInstallments < 0) dueInstallments = 0;
-
-  const shouldHaveCollected =
-    dueInstallments * loan.emiAmount;
-
-
-const pendingInstallments = Math.max(
-  0,
-  dueInstallments - loan.completedInstallments
-);
-
-console.log("Pending Installments:", pendingInstallments);
-
-const pending = pendingInstallments * loan.emiAmount;
-
-console.log("Pending Amount:", pending);
-
-overdueEmiAmount += pending;
-}
-
-
-const allCollections = await LoanCollection.find();
-
-console.log("========== LOAN COLLECTIONS ==========");
-
-allCollections.forEach(item => {
-  console.log(item);
-});
-
-
-// ==========================
-// MONTHLY LOAN COLLECTION
-// ==========================
-
-
-
-const firstDay = new Date(
-  today.getFullYear(),
-  today.getMonth(),
-  1
-);
-
-const monthlyLoanCollection = await LoanCollection.aggregate([
-  {
-    $match: {
-      paymentDate: {
-        $gte: firstDay,
-        $lte: new Date()
-      }
-    }
-  },
-  {
-    $group: {
-      _id: null,
-      total: {
-        $sum: "$totalAmount"
-      }
-    }
-  }
-]);
-
-const monthlyCollection =
-  monthlyLoanCollection[0]?.total || 0;
-
-console.log("Monthly Loan Collection:", monthlyCollection);
-
-
-res.json({
-
-success:true,
-
-dashboard:{
-
-totalLoans,
-
-activeLoans,
-
-closedLoans,
-
-overdueLoans,
-
-loanAmount:
-
-loanSummary[0]?.loanAmount||0,
-
-outstanding:
-
-loanSummary[0]?.outstanding||0,
-
-totalPaid:
-
-loanSummary[0]?.totalPaid||0,
-
-interest:
-
-loanSummary[0]?.interest||0,
-
-penalty:
-
-penaltySummary[0]?.penalty||0, 
-   overdueEmiAmount,
-
-  monthlyCollection  
-
-}
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-
-message:error.message
-
-});
-
-}
 
 };
+
 // ==========================================
 // CLOSE LOAN
 // ==========================================
@@ -3273,3 +3399,4 @@ exports.getAgentLoans = async (req, res) => {
   }
 
 };
+
