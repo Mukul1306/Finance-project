@@ -1564,22 +1564,79 @@ Object.values(monthlyHistory).sort(
 
     today.setHours(0,0,0,0);
 
-    let todayCollection = 0;
+   // ======================================
+// TODAY COLLECTIONS
+// ======================================
 
-    collections.forEach(item => {
+// Today's scheduled/due collection
+let todayCollection = 0;
 
-      const d = new Date(item.collectionDate);
+// All money actually collected today
+let todayActualCollection = 0;
 
-      d.setHours(0,0,0,0);
+collections.forEach(item => {
 
-      if(d.getTime() === today.getTime()){
+  if (!item.collectionDate) return;
 
-        todayCollection += item.totalAmount;
+  const collectionDate = new Date(item.collectionDate);
+
+  collectionDate.setHours(0, 0, 0, 0);
+
+  // Only collections physically received today
+  if (collectionDate.getTime() !== today.getTime()) {
+    return;
+  }
+
+  // ======================================
+  // ACTUAL COLLECTION
+  // Everything collected today
+  // ======================================
+
+  todayActualCollection += Number(
+    item.totalAmount || 0
+  );
+
+
+  // ======================================
+  // TODAY'S DUE COLLECTION
+  // ======================================
+
+  // DAILY SAVING
+  if (item.type === "DAILY") {
+
+    todayCollection += Number(
+      item.totalAmount || 0
+    );
+
+  }
+
+
+  // LOAN EMI
+  else if (item.type === "LOAN EMI") {
+
+    if (item.paymentForDate) {
+
+      const dueDate = new Date(
+        item.paymentForDate
+      );
+
+      dueDate.setHours(0, 0, 0, 0);
+
+      if (
+        dueDate.getTime() === today.getTime()
+      ) {
+
+        todayCollection += Number(
+          item.totalAmount || 0
+        );
 
       }
 
-    });
+    }
 
+  }
+
+});
     // =========================
     // TOTAL
     // =========================
@@ -2124,29 +2181,20 @@ const pendingTillToday =
 
   // COLLECTION
   todayCollection,
-
+  todayActualCollection,
   monthlyCollection,
-
   totalCollection,
 
   // TARGET
   savingTarget,
-
   loanTarget,
-
   dailyTarget,
 
-// ======================================
-// PENDING
-// ======================================
-
-todayPending,
-
-pendingTillToday,
-
-savingPendingTillToday,
-
-loanPendingTillToday
+  // PENDING
+  todayPending,
+  pendingTillToday,
+  savingPendingTillToday,
+  loanPendingTillToday
 
 },
 
