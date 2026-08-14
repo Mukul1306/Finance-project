@@ -229,12 +229,9 @@ await DailyTransaction.findOne({
 
 savingAccount: saving._id,
 
-collectionDate: {
-
-$gte: paymentDate,
-
-$lt: nextDay
-
+paymentForDate: {
+    $gte: paymentDate,
+    $lt: nextDay
 }
 
 });
@@ -300,31 +297,32 @@ dailyAmount+penalty;
 
 await DailyTransaction.create({
 
-savingAccount:saving._id,
+    savingAccount: saving._id,
 
-member:saving.member._id,
+    member: saving.member._id,
 
-area:saving.areaGroup._id,
+    area: saving.areaGroup._id,
 
-collectorType,
+    collectorType,
 
-collectorId:
+    collectorId:
+        collectorType === "ADMIN"
+            ? null
+            : collectorId,
 
-collectorType==="ADMIN"
+    // Actual date money was collected
+    collectionDate: new Date(),
 
-?null
+    // Keep the pending/due date separately
+    paymentForDate: paymentDate,
 
-:collectorId,
+    dailyAmount,
 
-collectionDate:paymentDate,
+    penalty,
 
-dailyAmount,
+    totalAmount,
 
-penalty,
-
-totalAmount,
-
-paymentMethod
+    paymentMethod
 
 });
 
