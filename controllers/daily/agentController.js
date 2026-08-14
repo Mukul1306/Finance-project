@@ -330,38 +330,53 @@ let todayActualCollection = 0;
 let todayDueCollection = 0;
 
 
-// =====================================================
-// DAILY SAVING
-// =====================================================
-
 savingTransactions.forEach(item => {
 
-  if (!item.collectionDate) {
-    return;
-  }
+    if (!item.collectionDate) {
+        return;
+    }
 
-  const collectionDate =
-    new Date(item.collectionDate);
+    // ======================================
+    // ACTUAL COLLECTION DATE
+    // ======================================
 
-  collectionDate.setHours(0, 0, 0, 0);
+    const collectionDate = new Date(item.collectionDate);
+    collectionDate.setHours(0, 0, 0, 0);
 
+    // ======================================
+    // MONEY ACTUALLY COLLECTED TODAY
+    // ======================================
 
-  if (
-    collectionDate.getTime() ===
-    today.getTime()
-  ) {
+    if (collectionDate.getTime() === today.getTime()) {
 
-    // Money actually received today
-    todayActualCollection +=
-      Number(item.totalAmount || 0);
+        todayActualCollection +=
+            Number(item.totalAmount || 0);
 
+        // ======================================
+        // TODAY'S DUE DATE
+        // ======================================
 
-    // Daily saving collected today
-    // belongs to today's collection
-    todayDueCollection +=
-      Number(item.totalAmount || 0);
+        if (item.paymentForDate) {
 
-  }
+            const paymentForDate =
+                new Date(item.paymentForDate);
+
+            paymentForDate.setHours(0, 0, 0, 0);
+
+            // Only count if payment belongs to today
+            if (
+                paymentForDate.getTime() ===
+                today.getTime()
+            ) {
+
+                todayDueCollection +=
+                    Number(item.totalAmount || 0);
+
+            }
+
+        }
+
+    }
 
 });
 
