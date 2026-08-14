@@ -46,14 +46,16 @@ savingAccount:saving._id
 });
 
 const paidDates =
-transactions.map(item=>{
+transactions.map(item => {
 
-const d =
-new Date(item.collectionDate);
+    // Payment belongs to this saving date
+    const d = new Date(
+        item.paymentForDate || item.collectionDate
+    );
 
-d.setHours(0,0,0,0);
+    d.setHours(0, 0, 0, 0);
 
-return d.getTime();
+    return d.getTime();
 
 });
 
