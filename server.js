@@ -73,7 +73,8 @@ const societyExpenseRoutes =
 require("./routes/expenseRoutes");
 const agentDepositRoutes = require("./routes/daily/agentDepositRoutes");
 const businessFundRoutes = require("./routes/daily/businessFundRoutes");
-
+const salaryRoutes =
+    require("./routes/daily/salaryRoutes");
 const societyProfitLossRoutes =
 require("./routes/profitLossRoutes");
 // const dashboardRoutes = require("./routes/dashboardRoutes");
@@ -116,7 +117,10 @@ app.use(
   "/api/daily",
   dailyLoanRoutes
 );
-
+app.use(
+    "/api/daily/salary",
+    salaryRoutes
+);
 app.use(
 "/api/notifications",
 notificationRoutes
