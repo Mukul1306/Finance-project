@@ -56,8 +56,11 @@ exports.getAgentMembers = async (req, res) => {
       const paidDates = new Set(
         transactions.map(transaction => {
 
-          const date =
-            new Date(transaction.collectionDate);
+        const date =
+  new Date(
+    transaction.paymentForDate ||
+    transaction.collectionDate
+  );
 
           date.setHours(0, 0, 0, 0);
 
@@ -188,222 +191,406 @@ exports.getAgentMembers = async (req, res) => {
 
 };
 
+
 exports.collectPayment =
-async(req,res)=>{
+async (req, res) => {
 
-try{
+  try {
 
-const {
-
-memberId,
-collectorType,
-collectorId,
-paymentMethod,
-
-amount
-
-}=req.body;
-
-const member =
-await DailyMember.findById(
-memberId
-);
-
-if(!member){
-
-return res.status(404).json({
-
-success:false,
-message:"Member Not Found"
-
-});
-
-}
-
-let dailyAmount = 0;
-
-if(member.isFlexibleAmount){
-
-dailyAmount =
-Number(amount);
-
-}else{
-
-dailyAmount =
-member.fixedDailyAmount;
-
-}
-
-let penalty = 0;
-
-const setting =
-await PenaltySetting.findOne();
-
-if(
-member.lastCollectionDate &&
-setting &&
-setting.autoPenalty
-){
-
-const today =
-new Date();
-
-const last =
-new Date(
-member.lastCollectionDate
-);
-
-today.setHours(
-0,0,0,0
-);
-
-last.setHours(
-0,0,0,0
-);
-
-const diffDays =
-Math.floor(
-
-(today-last)
-/(1000*60*60*24)
-
-);
-
-if(
-diffDays >
-setting.graceDays
-){
-
-const chargeableDays =
-diffDays -
-setting.graceDays;
-
-penalty =
-chargeableDays *
-setting.fineAmount;
-
-if(
-penalty >
-setting.maxPenalty
-){
-
-penalty =
-setting.maxPenalty;
-
-}
-
-}
-
-}
+    const {
+      memberId,
+      savingId,
+      agentId,
+      collectorType = "AGENT",
+      amount,
+      paymentMethod,
+      paymentForDate
+    } = req.body;
 
 
-const today = new Date();
+    // ==========================================
+    // VALIDATION
+    // ==========================================
 
-today.setHours(0,0,0,0);
+    if (!memberId) {
 
-const tomorrow = new Date(today);
+      return res.status(400).json({
+        success: false,
+        message: "Member ID is required"
+      });
 
-tomorrow.setDate(
-  tomorrow.getDate() + 1
-);
+    }
 
-const existingPayment =
-await DailyTransaction.findOne({
 
-  member: member._id,
+    if (!savingId) {
 
-  collectionDate: {
-    $gte: today,
-    $lt: tomorrow
+      return res.status(400).json({
+        success: false,
+        message: "Saving ID is required"
+      });
+
+    }
+
+
+    // ==========================================
+    // MEMBER
+    // ==========================================
+
+    const member =
+      await DailyMember.findById(
+        memberId
+      );
+
+
+    if (!member) {
+
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+
+    }
+
+
+    // ==========================================
+    // SAVING
+    // ==========================================
+
+    const saving =
+      await DailySaving.findById(
+        savingId
+      );
+
+
+    if (!saving) {
+
+      return res.status(404).json({
+        success: false,
+        message: "Saving Account Not Found"
+      });
+
+    }
+
+
+    // ==========================================
+    // MAKE SURE SAVING BELONGS TO MEMBER
+    // ==========================================
+
+    if (
+      saving.member.toString() !==
+      member._id.toString()
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Saving account does not belong to this member"
+      });
+
+    }
+
+
+    // ==========================================
+    // DAILY AMOUNT
+    // ==========================================
+
+    let dailyAmount = 0;
+
+
+    if (
+      saving.collectionType ===
+      "FIXED"
+    ) {
+
+      dailyAmount =
+        Number(
+          saving.fixedAmount || 0
+        );
+
+    } else {
+
+      dailyAmount =
+        Number(amount || 0);
+
+    }
+
+
+    if (
+      !dailyAmount ||
+      dailyAmount <= 0
+    ) {
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment amount"
+      });
+
+    }
+
+
+    // ==========================================
+    // PAYMENT FOR DATE
+    // ==========================================
+
+    const paidDate =
+      paymentForDate
+        ? new Date(paymentForDate)
+        : new Date();
+
+
+    paidDate.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+
+    const nextDay =
+      new Date(paidDate);
+
+    nextDay.setDate(
+      nextDay.getDate() + 1
+    );
+
+
+    // ==========================================
+    // CHECK THAT SPECIFIC DAY
+    // ==========================================
+
+    const existingPayment =
+      await DailyTransaction.findOne({
+
+        savingAccount:
+          saving._id,
+
+        paymentForDate: {
+          $gte: paidDate,
+          $lt: nextDay
+        }
+
+      });
+
+
+    if (existingPayment) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "This day's payment is already collected"
+
+      });
+
+    }
+
+
+    // ==========================================
+    // PENALTY
+    // ==========================================
+
+    let penalty = 0;
+
+
+    const today =
+      new Date();
+
+    today.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+
+    const diffDays =
+      Math.floor(
+        (today - paidDate) /
+        (1000 * 60 * 60 * 24)
+      );
+
+
+    if (
+      diffDays >
+      Number(saving.graceDays || 0)
+    ) {
+
+      if (
+        saving.penaltyType ===
+        "FIXED"
+      ) {
+
+        penalty =
+          Number(
+            saving.penaltyValue || 0
+          );
+
+      } else {
+
+        penalty =
+          Math.round(
+            dailyAmount *
+            Number(
+              saving.penaltyValue || 0
+            ) /
+            100
+          );
+
+      }
+
+    }
+
+
+    // ==========================================
+    // TOTAL
+    // ==========================================
+
+    const totalAmount =
+      dailyAmount +
+      penalty;
+
+
+    // ==========================================
+    // CREATE TRANSACTION
+    // ==========================================
+
+    await DailyTransaction.create({
+
+      savingAccount:
+        saving._id,
+
+      member:
+        member._id,
+
+      area:
+        saving.areaGroup,
+
+      collectorType,
+
+      collectorId:
+        collectorType === "ADMIN"
+          ? null
+          : agentId,
+
+      collectionDate:
+        new Date(),
+
+      paymentForDate:
+        paidDate,
+
+      dailyAmount,
+
+      penalty,
+
+      totalAmount,
+
+      paymentMethod
+
+    });
+
+
+    // ==========================================
+    // UPDATE MEMBER
+    // ==========================================
+
+    member.totalPaid =
+      Number(
+        member.totalPaid || 0
+      ) +
+      dailyAmount;
+
+    member.totalPenalty =
+      Number(
+        member.totalPenalty || 0
+      ) +
+      penalty;
+
+    member.totalDaysPaid =
+      Number(
+        member.totalDaysPaid || 0
+      ) +
+      1;
+
+    member.lastCollectionDate =
+      new Date();
+
+
+    await member.save();
+
+
+    // ==========================================
+    // UPDATE SAVING
+    // ==========================================
+
+    saving.totalSaved =
+      Number(
+        saving.totalSaved || 0
+      ) +
+      dailyAmount;
+
+    saving.totalPenalty =
+      Number(
+        saving.totalPenalty || 0
+      ) +
+      penalty;
+
+    saving.totalDaysPaid =
+      Number(
+        saving.totalDaysPaid || 0
+      ) +
+      1;
+
+    saving.completedDays =
+      saving.totalDaysPaid;
+
+    saving.lastCollectionDate =
+      new Date();
+
+
+    await saving.save();
+
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    res.status(201).json({
+
+      success: true,
+
+      message:
+        "Payment Collected Successfully",
+
+      dailyAmount,
+
+      penalty,
+
+      totalAmount,
+
+      paymentForDate:
+        paidDate
+
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      "DAILY COLLECTION ERROR:",
+      error
+    );
+
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
   }
-
-});
-
-if(existingPayment){
-
-  return res.status(400).json({
-
-    success:false,
-
-    message:
-    "Today's payment already collected for this member"
-
-  });
-
-}
-
-const totalAmount =
-dailyAmount + penalty;
-
-await DailyTransaction.create({
-
-  member: member._id,
-
-  area: member.areaGroup,
-
-  collectorType,
-
-  collectorId:
-    collectorType === "ADMIN"
-      ? null
-      : collectorId,
-
-  // Date when payment is actually collected
-  collectionDate: new Date(),
-
-  // Date for which payment is collected
-  paymentForDate:
-    req.body.paymentForDate || new Date(),
-
-  dailyAmount,
-
-  penalty,
-
-  totalAmount,
-
-  paymentMethod
-
-});
-
-member.totalPaid +=
-dailyAmount;
-
-member.totalPenalty +=
-penalty;
-
-
-
-member.totalDaysPaid += 1;
-
-member.lastCollectionDate =
-new Date();
-
-await member.save();
-
-res.status(201).json({
-
-success:true,
-
-message:"Payment Collected",
-
-dailyAmount,
-
-penalty,
-
-totalAmount
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
 
 };
 
