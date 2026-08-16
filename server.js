@@ -78,7 +78,8 @@ const salaryRoutes =
 const societyProfitLossRoutes =
 require("./routes/profitLossRoutes");
 // const dashboardRoutes = require("./routes/dashboardRoutes");
-
+const attendanceRoutes =
+require("./routes/daily/attendanceRoutes");
 const userRoutes =
 require("./routes/daily/userRoutes");
 
@@ -120,6 +121,10 @@ app.use(
 app.use(
     "/api/daily/salary",
     salaryRoutes
+);
+app.use(
+  "/api/daily/attendance",
+  attendanceRoutes
 );
 app.use(
 "/api/notifications",
