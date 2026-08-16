@@ -336,32 +336,107 @@ saving.totalDaysPaid += 1;
 
 saving.completedDays = saving.totalDaysPaid;
 
-// Calculate how many days are due up to today
+// ==========================================
+// RECALCULATE ACTUAL PENDING DAYS
+// ==========================================
+
+const allTransactions =
+  await DailyTransaction.find({
+    savingAccount: saving._id
+  });
+
+const paidDates = new Set(
+  allTransactions.map(transaction => {
+
+    const paidDate =
+      new Date(
+        transaction.paymentForDate ||
+        transaction.collectionDate
+      );
+
+    paidDate.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    return paidDate.getTime();
+
+  })
+);
 
 
+const startDate =
+  new Date(saving.startDate);
 
-const startDate = new Date(saving.startDate);
-startDate.setHours(0, 0, 0, 0);
+startDate.setHours(
+  0,
+  0,
+  0,
+  0
+);
 
-let dueDays = Math.floor(
-  (today - startDate) / (1000 * 60 * 60 * 24)
-) + 1;
 
-// Don't exceed the total duration
-if (dueDays > saving.durationDays) {
-  dueDays = saving.durationDays;
+const endDate =
+  new Date(saving.endDate);
+
+endDate.setHours(
+  0,
+  0,
+  0,
+  0
+);
+
+
+let actualPendingDays = 0;
+
+
+let current =
+  new Date(startDate);
+
+
+while (
+  current <= today &&
+  current <= endDate
+) {
+
+  if (
+    !paidDates.has(
+      current.getTime()
+    )
+  ) {
+
+    actualPendingDays++;
+
+  }
+
+  current.setDate(
+    current.getDate() + 1
+  );
+
 }
 
-saving.pendingDays = dueDays - saving.totalDaysPaid;
 
-if (saving.pendingDays < 0) {
-  saving.pendingDays = 0;
-}
+saving.pendingDays =
+  actualPendingDays;
 
-if (saving.collectionType === "FIXED") {
-  saving.pendingAmount = saving.pendingDays * saving.fixedAmount;
+
+if (
+  saving.collectionType ===
+  "FIXED"
+) {
+
+  saving.pendingAmount =
+    actualPendingDays *
+    Number(
+      saving.fixedAmount || 0
+    );
+
 } else {
+
   saving.pendingAmount = 0;
+
 }
 
 if (saving.totalDaysPaid >= saving.durationDays) {
@@ -524,20 +599,103 @@ exports.getCollectionMembers = async (req, res) => {
         dueDays = saving.durationDays;
       }
 
-      saving.completedDays = saving.totalDaysPaid;
+// ==========================================
+// CALCULATE ACTUAL PAID DATES
+// ==========================================
 
-      saving.pendingDays = dueDays - saving.totalDaysPaid;
+const transactions =
+  await DailyTransaction.find({
+    savingAccount: saving._id
+  });
 
-      if (saving.pendingDays < 0) {
-        saving.pendingDays = 0;
-      }
+const paidDates = new Set(
+  transactions.map(transaction => {
 
-      if (saving.collectionType === "FIXED") {
-        saving.pendingAmount =
-          saving.pendingDays * saving.fixedAmount;
-      } else {
-        saving.pendingAmount = 0;
-      }
+    const paidDate = new Date(
+      transaction.paymentForDate ||
+      transaction.collectionDate
+    );
+
+    paidDate.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+    return paidDate.getTime();
+
+  })
+);
+
+
+// ==========================================
+// CALCULATE ACTUAL PENDING DAYS
+// ==========================================
+
+const startDate =
+  new Date(saving.startDate);
+
+startDate.setHours(
+  0,
+  0,
+  0,
+  0
+);
+
+const endDate =
+  new Date(saving.endDate);
+
+endDate.setHours(
+  0,
+  0,
+  0,
+  0
+);
+
+let actualPendingDays = 0;
+
+let current =
+  new Date(startDate);
+
+while (
+  current <= today &&
+  current <= endDate
+) {
+
+  if (
+    !paidDates.has(
+      current.getTime()
+    )
+  ) {
+    actualPendingDays++;
+  }
+
+  current.setDate(
+    current.getDate() + 1
+  );
+}
+
+
+saving.completedDays =
+  transactions.length;
+
+saving.pendingDays =
+  actualPendingDays;
+
+if (
+  saving.collectionType === "FIXED"
+) {
+  saving.pendingAmount =
+    actualPendingDays *
+    Number(
+      saving.fixedAmount || 0
+    );
+} else {
+  saving.pendingAmount = 0;
+}
+
+await saving.save();
 
       await saving.save();
     }
