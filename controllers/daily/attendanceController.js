@@ -617,3 +617,300 @@ exports.getAttendance = async (
   }
 
 };
+// =====================================================
+// MONTHLY ATTENDANCE REPORT
+// =====================================================
+
+exports.getMonthlyAttendance = async (req, res) => {
+
+  try {
+
+    const {
+      month,
+      year,
+      agentId
+    } = req.query;
+
+
+    // ==========================================
+    // VALIDATION
+    // ==========================================
+
+    if (!month || !year) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "Month and year are required"
+
+      });
+
+    }
+
+
+    const selectedMonth =
+      Number(month);
+
+    const selectedYear =
+      Number(year);
+
+
+    if (
+      selectedMonth < 1 ||
+      selectedMonth > 12
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message: "Invalid month"
+
+      });
+
+    }
+
+
+    // ==========================================
+    // MONTH RANGE
+    // ==========================================
+
+    const start =
+      new Date(
+        selectedYear,
+        selectedMonth - 1,
+        1
+      );
+
+    const end =
+      new Date(
+        selectedYear,
+        selectedMonth,
+        1
+      );
+
+
+    // ==========================================
+    // FILTER
+    // ==========================================
+
+    const filter = {
+
+      attendanceDate: {
+        $gte: start,
+        $lt: end
+      }
+
+    };
+
+
+    // ==========================================
+    // SPECIFIC AGENT
+    // ==========================================
+
+    if (agentId) {
+
+      filter.agent = agentId;
+
+    }
+
+
+    // ==========================================
+    // GET ATTENDANCE
+    // ==========================================
+
+    const attendance =
+      await DailyAttendance.find(
+        filter
+      )
+      .populate(
+        "agent",
+        "name mobile operationalArea status"
+      )
+      .sort({
+        attendanceDate: 1,
+        checkInTime: 1
+      });
+
+
+    // ==========================================
+    // GROUP BY AGENT
+    // ==========================================
+
+    const agentMap = {};
+
+
+    attendance.forEach(
+      record => {
+
+        if (!record.agent) {
+          return;
+        }
+
+
+        const id =
+          record.agent._id.toString();
+
+
+        if (!agentMap[id]) {
+
+          agentMap[id] = {
+
+            agent: record.agent,
+
+            attendance: [],
+
+            present: 0,
+
+            absent: 0,
+
+            halfDay: 0,
+
+            totalWorkingMinutes: 0
+
+          };
+
+        }
+
+
+        agentMap[id].attendance.push(
+          record
+        );
+
+
+        if (
+          record.status ===
+          "PRESENT"
+        ) {
+
+          agentMap[id].present++;
+
+        }
+
+
+        if (
+          record.status ===
+          "ABSENT"
+        ) {
+
+          agentMap[id].absent++;
+
+        }
+
+
+        if (
+          record.status ===
+          "HALF_DAY"
+        ) {
+
+          agentMap[id].halfDay++;
+
+        }
+
+
+        agentMap[id].totalWorkingMinutes +=
+          record.workingMinutes || 0;
+
+      }
+    );
+
+
+    // ==========================================
+    // FINAL MONTHLY REPORT
+    // ==========================================
+
+    const report =
+      Object.values(
+        agentMap
+      ).map(item => {
+
+        const totalRecords =
+          item.attendance.length;
+
+
+        const attendanceRate =
+          totalRecords > 0
+
+            ? (
+                (
+                  item.present +
+                  item.halfDay * 0.5
+                ) /
+                totalRecords
+              ) * 100
+
+            : 0;
+
+
+        return {
+
+          agent:
+            item.agent,
+
+          present:
+            item.present,
+
+          absent:
+            item.absent,
+
+          halfDay:
+            item.halfDay,
+
+          totalRecords,
+
+          attendanceRate:
+            Number(
+              attendanceRate.toFixed(2)
+            ),
+
+          totalWorkingMinutes:
+            item.totalWorkingMinutes,
+
+          attendance:
+            item.attendance
+
+        };
+
+      });
+
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    res.json({
+
+      success: true,
+
+      month: selectedMonth,
+
+      year: selectedYear,
+
+      totalAgents:
+        report.length,
+
+      report
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "MONTHLY ATTENDANCE ERROR:",
+      error
+    );
+
+
+    res.status(500).json({
+
+      success: false,
+
+      message: error.message
+
+    });
+
+  }
+
+};

@@ -6,7 +6,8 @@ const {
   markAttendance,
   getTodayAttendance,
   checkOut,
-  getAttendance
+  getAttendance,
+  getMonthlyAttendance
 } = require(
   "../../controllers/daily/attendanceController"
 );
@@ -47,5 +48,9 @@ router.get(
   getAttendance
 );
 
+router.get(
+  "/monthly",
+  getMonthlyAttendance
+);
 
 module.exports = router;
