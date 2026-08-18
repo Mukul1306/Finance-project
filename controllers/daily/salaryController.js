@@ -15,11 +15,12 @@ exports.addAgentToSalary = async (req, res) => {
 
     try {
 
-        const {
-            agentId,
-            commissionRate
-        } = req.body;
-
+      const {
+    agentId,
+    salaryType,
+    commissionRate,
+    fixedSalary
+} = req.body;
 
         if (!agentId) {
 
@@ -61,28 +62,37 @@ exports.addAgentToSalary = async (req, res) => {
         }
 
 
-        const salary =
-            await AgentSalary.create({
+    const salary =
+    await AgentSalary.create({
 
-                agent: agentId,
+        agent: agentId,
 
-                commissionRate:
-                    Number(commissionRate || 2),
+        salaryType:
+            salaryType || "COMMISSION",
 
-                includeDailySaving: true,
+        commissionRate:
+            salaryType === "COMMISSION"
+                ? Number(commissionRate || 2)
+                : 0,
 
-                includeDailyLoan: true,
+        fixedSalary:
+            salaryType === "FIXED"
+                ? Number(fixedSalary || 0)
+                : 0,
 
-                includeWeeklyLoan: true,
+        includeDailySaving: true,
 
-                excludePenalty: true,
+        includeDailyLoan: true,
 
-                excludeMonthlyLoan: true,
+        includeWeeklyLoan: true,
 
-                excludeFixedLoan: true
+        excludePenalty: true,
 
-            });
+        excludeMonthlyLoan: true,
 
+        excludeFixedLoan: true
+
+    });
 
         res.status(201).json({
 
@@ -395,13 +405,34 @@ const calculateAgentSalary = async (
     // COMMISSION
     // =================================================
 
-    const commissionRate =
-        Number(
-            salaryProfile.commissionRate || 0
-        );
+const commissionRate =
+    Number(
+        salaryProfile.commissionRate || 0
+    );
+
+const fixedSalary =
+    Number(
+        salaryProfile.fixedSalary || 0
+    );
 
 
-    const calculatedSalary =
+// =================================================
+// SALARY CALCULATION
+// =================================================
+
+let calculatedSalary = 0;
+
+if (
+    salaryProfile.salaryType === "FIXED"
+) {
+
+    // Fixed monthly salary
+    calculatedSalary = fixedSalary;
+
+} else {
+
+    // Commission salary
+    calculatedSalary =
         Number(
             (
                 eligibleCollection *
@@ -409,6 +440,8 @@ const calculateAgentSalary = async (
                 100
             ).toFixed(2)
         );
+
+}
 
 
     return {
@@ -448,9 +481,14 @@ const calculateAgentSalary = async (
                 eligibleCollection.toFixed(2)
             ),
 
-        commissionRate,
+       salaryType:
+    salaryProfile.salaryType,
 
-        calculatedSalary
+commissionRate,
+
+fixedSalary,
+
+calculatedSalary
 
     };
 
@@ -577,11 +615,17 @@ exports.getMonthlySalary = async (req, res) => {
                 monthlySalary.eligibleCollection =
                     calculation.eligibleCollection;
 
-                monthlySalary.commissionRate =
-                    calculation.commissionRate;
+             monthlySalary.salaryType =
+    calculation.salaryType;
 
-                monthlySalary.calculatedSalary =
-                    calculation.calculatedSalary;
+monthlySalary.fixedSalary =
+    calculation.fixedSalary;
+
+monthlySalary.commissionRate =
+    calculation.commissionRate;
+
+monthlySalary.calculatedSalary =
+    calculation.calculatedSalary;
 
 
                 monthlySalary.pendingAmount =
@@ -625,13 +669,18 @@ exports.getMonthlySalary = async (req, res) => {
             salaries.push({
 
                 agent: profile.agent,
+salaryProfile: {
 
-                salaryProfile: {
+    salaryType:
+        profile.salaryType,
 
-                    commissionRate:
-                        profile.commissionRate
+    commissionRate:
+        profile.commissionRate,
 
-                },
+    fixedSalary:
+        profile.fixedSalary
+
+},
 
                 salary: monthlySalary
 

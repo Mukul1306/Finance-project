@@ -9,12 +9,21 @@ const agentSalarySchema = new mongoose.Schema(
       unique: true
     },
 
-    commissionRate: {
-      type: Number,
-      required: true,
-      default: 2
-    },
+ salaryType: {
+    type: String,
+    enum: ["COMMISSION", "FIXED"],
+    default: "COMMISSION"
+},
 
+commissionRate: {
+    type: Number,
+    default: 0
+},
+
+fixedSalary: {
+    type: Number,
+    default: 0
+},
     // Salary eligibility settings
     includeDailySaving: {
       type: Boolean,
