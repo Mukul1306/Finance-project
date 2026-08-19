@@ -1,3 +1,5 @@
+// controllers/daily/attendanceController.js
+
 const DailyAttendance = require(
   "../../models/daily/Attendance"
 );
@@ -8,15 +10,31 @@ const DailyAgent = require(
 
 
 // =====================================================
-// HELPER — START OF TODAY
+// CONFIGURATION
+// =====================================================
+
+const CHECK_IN_START = 9 * 60 + 30;   // 09:30
+const FULL_DAY_CHECK_IN_LIMIT = 10 * 60; // 10:00
+const ABSENT_CUTOFF = 13 * 60;        // 13:00
+
+const FULL_DAY_CHECK_OUT_START = 18 * 60; // 18:00
+const CHECK_OUT_END = 18 * 60 + 30;       // 18:30
+
+
+// =====================================================
+// TODAY RANGE
 // =====================================================
 
 const getTodayRange = () => {
 
   const start = new Date();
 
-  start.setHours(0, 0, 0, 0);
-
+  start.setHours(
+    0,
+    0,
+    0,
+    0
+  );
 
   const end = new Date(start);
 
@@ -24,12 +42,131 @@ const getTodayRange = () => {
     end.getDate() + 1
   );
 
-
   return {
     start,
     end
   };
+};
 
+
+// =====================================================
+// TIME -> MINUTES
+// =====================================================
+
+const getMinutesFromDate = (
+  date = new Date()
+) => {
+
+  return (
+    date.getHours() * 60 +
+    date.getMinutes()
+  );
+};
+
+
+// =====================================================
+// CHECK-IN STATUS
+// =====================================================
+
+const getCheckInStatus = (
+  checkInTime
+) => {
+
+  const minutes =
+    getMinutesFromDate(
+      checkInTime
+    );
+
+  if (
+    minutes >= CHECK_IN_START &&
+    minutes < FULL_DAY_CHECK_IN_LIMIT
+  ) {
+
+    return "PRESENT";
+
+  }
+
+
+  if (
+    minutes >= FULL_DAY_CHECK_IN_LIMIT &&
+    minutes < ABSENT_CUTOFF
+  ) {
+
+    return "HALF_DAY";
+
+  }
+
+
+  return "ABSENT";
+};
+
+
+// =====================================================
+// FINAL STATUS AT CHECKOUT
+// =====================================================
+
+const getFinalStatus = ({
+  checkInTime,
+  checkOutTime
+}) => {
+
+  const checkInMinutes =
+    getMinutesFromDate(
+      checkInTime
+    );
+
+  const checkOutMinutes =
+    getMinutesFromDate(
+      checkOutTime
+    );
+
+
+  // Late check-in can never become full day
+  if (
+    checkInMinutes >=
+    ABSENT_CUTOFF
+  ) {
+
+    return "ABSENT";
+
+  }
+
+
+  // Checkout before 6 PM = half day
+  if (
+    checkOutMinutes <
+    FULL_DAY_CHECK_OUT_START
+  ) {
+
+    return "HALF_DAY";
+
+  }
+
+
+  // 6:00 PM - 6:30 PM
+  if (
+    checkOutMinutes >=
+      FULL_DAY_CHECK_OUT_START &&
+    checkOutMinutes <=
+      CHECK_OUT_END
+  ) {
+
+    // Only an on-time check-in can receive full day
+    if (
+      checkInMinutes >= CHECK_IN_START &&
+      checkInMinutes < FULL_DAY_CHECK_IN_LIMIT
+    ) {
+
+      return "PRESENT";
+
+    }
+
+    return "HALF_DAY";
+
+  }
+
+
+  return "INVALID";
 };
 
 
@@ -37,7 +174,10 @@ const getTodayRange = () => {
 // MARK ATTENDANCE
 // =====================================================
 
-exports.markAttendance = async (req, res) => {
+exports.markAttendance = async (
+  req,
+  res
+) => {
 
   try {
 
@@ -49,9 +189,9 @@ exports.markAttendance = async (req, res) => {
     } = req.body;
 
 
-    // ==========================================
+    // ================================================
     // VALIDATION
-    // ==========================================
+    // ================================================
 
     if (!agentId) {
 
@@ -59,7 +199,8 @@ exports.markAttendance = async (req, res) => {
 
         success: false,
 
-        message: "Agent ID is required"
+        message:
+          "Agent ID is required"
 
       });
 
@@ -83,8 +224,11 @@ exports.markAttendance = async (req, res) => {
     }
 
 
-    const lat = Number(latitude);
-    const lng = Number(longitude);
+    const lat =
+      Number(latitude);
+
+    const lng =
+      Number(longitude);
 
 
     if (
@@ -96,19 +240,73 @@ exports.markAttendance = async (req, res) => {
 
         success: false,
 
-        message: "Invalid location"
+        message:
+          "Invalid location"
 
       });
 
     }
 
 
-    // ==========================================
+    // ================================================
+    // SERVER TIME
+    // ================================================
+
+    const now =
+      new Date();
+
+    const currentMinutes =
+      getMinutesFromDate(
+        now
+      );
+
+
+    // ================================================
+    // CHECK-IN TIME WINDOW
+    // ================================================
+
+    if (
+      currentMinutes <
+      CHECK_IN_START
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "Attendance can be marked from 9:30 AM"
+
+      });
+
+    }
+
+
+    if (
+      currentMinutes >=
+      ABSENT_CUTOFF
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "Attendance time is over. You are absent for today."
+
+      });
+
+    }
+
+
+    // ================================================
     // CHECK AGENT
-    // ==========================================
+    // ================================================
 
     const agent =
-      await DailyAgent.findById(agentId);
+      await DailyAgent.findById(
+        agentId
+      );
 
 
     if (!agent) {
@@ -117,7 +315,8 @@ exports.markAttendance = async (req, res) => {
 
         success: false,
 
-        message: "Agent not found"
+        message:
+          "Agent not found"
 
       });
 
@@ -141,9 +340,9 @@ exports.markAttendance = async (req, res) => {
     }
 
 
-    // ==========================================
+    // ================================================
     // TODAY
-    // ==========================================
+    // ================================================
 
     const {
       start,
@@ -151,9 +350,9 @@ exports.markAttendance = async (req, res) => {
     } = getTodayRange();
 
 
-    // ==========================================
+    // ================================================
     // CHECK EXISTING ATTENDANCE
-    // ==========================================
+    // ================================================
 
     const existing =
       await DailyAttendance.findOne({
@@ -177,31 +376,48 @@ exports.markAttendance = async (req, res) => {
         message:
           "Today's attendance is already marked",
 
-        attendance: existing
+        attendance:
+          existing
 
       });
 
     }
 
 
-    // ==========================================
+    // ================================================
+    // INITIAL STATUS
+    // ================================================
+
+    const initialStatus =
+      getCheckInStatus(
+        now
+      );
+
+
+    // ================================================
     // CREATE ATTENDANCE
-    // ==========================================
+    // GPS IS KEPT
+    // ================================================
 
     const attendance =
       await DailyAttendance.create({
 
-        agent: agentId,
+        agent:
+          agentId,
 
-        attendanceDate: start,
+        attendanceDate:
+          start,
 
-        checkInTime: new Date(),
+        checkInTime:
+          now,
 
         checkInLocation: {
 
-          latitude: lat,
+          latitude:
+            lat,
 
-          longitude: lng,
+          longitude:
+            lng,
 
           accuracy:
             accuracy !== undefined
@@ -210,21 +426,24 @@ exports.markAttendance = async (req, res) => {
 
         },
 
-        status: "PRESENT"
+        status:
+          initialStatus
 
       });
 
 
-    // ==========================================
+    // ================================================
     // RESPONSE
-    // ==========================================
+    // ================================================
 
-    res.status(201).json({
+    return res.status(201).json({
 
       success: true,
 
       message:
-        "Attendance marked successfully",
+        initialStatus === "PRESENT"
+          ? "Attendance marked successfully"
+          : "Half-day attendance marked successfully",
 
       attendance
 
@@ -238,8 +457,9 @@ exports.markAttendance = async (req, res) => {
     );
 
 
-    // Duplicate index protection
-    if (error.code === 11000) {
+    if (
+      error.code === 11000
+    ) {
 
       return res.status(400).json({
 
@@ -253,11 +473,12 @@ exports.markAttendance = async (req, res) => {
     }
 
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: error.message
+      message:
+        error.message
 
     });
 
@@ -270,7 +491,8 @@ exports.markAttendance = async (req, res) => {
 // GET TODAY ATTENDANCE
 // =====================================================
 
-exports.getTodayAttendance = async (
+exports.getTodayAttendance =
+async (
   req,
   res
 ) => {
@@ -291,7 +513,8 @@ exports.getTodayAttendance = async (
     const attendance =
       await DailyAttendance.findOne({
 
-        agent: agentId,
+        agent:
+          agentId,
 
         attendanceDate: {
           $gte: start,
@@ -300,11 +523,11 @@ exports.getTodayAttendance = async (
 
       }).populate(
         "agent",
-        "name mobile operationalArea"
+        "name mobile operationalArea status"
       );
 
 
-    res.json({
+    return res.json({
 
       success: true,
 
@@ -320,11 +543,12 @@ exports.getTodayAttendance = async (
     );
 
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: error.message
+      message:
+        error.message
 
     });
 
@@ -337,7 +561,8 @@ exports.getTodayAttendance = async (
 // CHECK OUT
 // =====================================================
 
-exports.checkOut = async (
+exports.checkOut =
+async (
   req,
   res
 ) => {
@@ -363,6 +588,61 @@ exports.checkOut = async (
     }
 
 
+    // ================================================
+    // SERVER TIME
+    // ================================================
+
+    const now =
+      new Date();
+
+    const currentMinutes =
+      getMinutesFromDate(
+        now
+      );
+
+
+    // ================================================
+    // CHECKOUT WINDOW
+    // ================================================
+
+    if (
+      currentMinutes <
+      CHECK_IN_START
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "Checkout is not available yet"
+
+      });
+
+    }
+
+
+    if (
+      currentMinutes >
+      CHECK_OUT_END
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "Checkout is allowed only until 6:30 PM"
+
+      });
+
+    }
+
+
+    // ================================================
+    // TODAY
+    // ================================================
+
     const {
       start,
       end
@@ -372,7 +652,8 @@ exports.checkOut = async (
     const attendance =
       await DailyAttendance.findOne({
 
-        agent: agentId,
+        agent:
+          agentId,
 
         attendanceDate: {
           $gte: start,
@@ -396,7 +677,9 @@ exports.checkOut = async (
     }
 
 
-    if (attendance.checkOutTime) {
+    if (
+      attendance.checkOutTime
+    ) {
 
       return res.status(400).json({
 
@@ -410,17 +693,21 @@ exports.checkOut = async (
     }
 
 
+    // ================================================
+    // CHECKOUT
+    // ================================================
+
     const checkOutTime =
-      new Date();
+      now;
 
 
     attendance.checkOutTime =
       checkOutTime;
 
 
-    // ==========================================
+    // ================================================
     // WORKING MINUTES
-    // ==========================================
+    // ================================================
 
     const difference =
       checkOutTime -
@@ -431,20 +718,64 @@ exports.checkOut = async (
       Math.max(
         0,
         Math.floor(
-          difference / 60000
+          difference /
+          60000
         )
       );
+
+
+    // ================================================
+    // FINAL STATUS
+    // ================================================
+
+    const finalStatus =
+      getFinalStatus({
+
+        checkInTime:
+          attendance.checkInTime,
+
+        checkOutTime:
+          checkOutTime
+
+      });
+
+
+    if (
+      finalStatus ===
+      "INVALID"
+    ) {
+
+      return res.status(400).json({
+
+        success: false,
+
+        message:
+          "Invalid checkout time"
+
+      });
+
+    }
+
+
+    attendance.status =
+      finalStatus;
 
 
     await attendance.save();
 
 
-    res.json({
+    // ================================================
+    // RESPONSE
+    // ================================================
+
+    return res.json({
 
       success: true,
 
       message:
-        "Checked out successfully",
+        finalStatus === "PRESENT"
+          ? "Full-day attendance completed"
+          : "Half-day attendance completed",
 
       attendance
 
@@ -458,11 +789,12 @@ exports.checkOut = async (
     );
 
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: error.message
+      message:
+        error.message
 
     });
 
@@ -475,7 +807,8 @@ exports.checkOut = async (
 // ADMIN — GET ATTENDANCE
 // =====================================================
 
-exports.getAttendance = async (
+exports.getAttendance =
+async (
   req,
   res
 ) => {
@@ -493,20 +826,21 @@ exports.getAttendance = async (
     let filter = {};
 
 
-    // ==========================================
-    // SPECIFIC AGENT
-    // ==========================================
+    // ================================================
+    // AGENT FILTER
+    // ================================================
 
     if (agentId) {
 
-      filter.agent = agentId;
+      filter.agent =
+        agentId;
 
     }
 
 
-    // ==========================================
-    // SPECIFIC DATE
-    // ==========================================
+    // ================================================
+    // DATE FILTER
+    // ================================================
 
     if (date) {
 
@@ -531,18 +865,19 @@ exports.getAttendance = async (
 
       filter.attendanceDate = {
 
-        $gte: start,
+        $gte:
+          start,
 
-        $lt: end
+        $lt:
+          end
 
       };
 
     }
 
-
-    // ==========================================
-    // MONTH + YEAR
-    // ==========================================
+    // ================================================
+    // MONTH FILTER
+    // ================================================
 
     else if (
       month &&
@@ -567,14 +902,20 @@ exports.getAttendance = async (
 
       filter.attendanceDate = {
 
-        $gte: start,
+        $gte:
+          start,
 
-        $lt: end
+        $lt:
+          end
 
       };
 
     }
 
+
+    // ================================================
+    // GET EXISTING RECORDS
+    // ================================================
 
     const attendance =
       await DailyAttendance.find(
@@ -590,7 +931,7 @@ exports.getAttendance = async (
       });
 
 
-    res.json({
+    return res.json({
 
       success: true,
 
@@ -606,22 +947,29 @@ exports.getAttendance = async (
     );
 
 
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: error.message
+      message:
+        error.message
 
     });
 
   }
 
 };
+
+
 // =====================================================
 // MONTHLY ATTENDANCE REPORT
 // =====================================================
 
-exports.getMonthlyAttendance = async (req, res) => {
+exports.getMonthlyAttendance =
+async (
+  req,
+  res
+) => {
 
   try {
 
@@ -632,11 +980,10 @@ exports.getMonthlyAttendance = async (req, res) => {
     } = req.query;
 
 
-    // ==========================================
-    // VALIDATION
-    // ==========================================
-
-    if (!month || !year) {
+    if (
+      !month ||
+      !year
+    ) {
 
       return res.status(400).json({
 
@@ -666,25 +1013,26 @@ exports.getMonthlyAttendance = async (req, res) => {
 
         success: false,
 
-        message: "Invalid month"
+        message:
+          "Invalid month"
 
       });
 
     }
 
 
-    // ==========================================
+    // ================================================
     // MONTH RANGE
-    // ==========================================
+    // ================================================
 
-    const start =
+    const monthStart =
       new Date(
         selectedYear,
         selectedMonth - 1,
         1
       );
 
-    const end =
+    const monthEnd =
       new Date(
         selectedYear,
         selectedMonth,
@@ -692,38 +1040,83 @@ exports.getMonthlyAttendance = async (req, res) => {
       );
 
 
-    // ==========================================
-    // FILTER
-    // ==========================================
+    // ================================================
+    // REPORT ONLY UP TO TODAY
+    // FUTURE DAYS = UPCOMING
+    // ================================================
 
-    const filter = {
+    const now =
+      new Date();
+
+    const todayStart =
+      new Date(now);
+
+    todayStart.setHours(
+      0,
+      0,
+      0,
+      0
+    );
+
+
+    const lastReportDate =
+      todayStart <
+      monthEnd
+        ? todayStart
+        : new Date(
+            monthEnd
+          );
+
+
+    // ================================================
+    // GET AGENTS
+    // ================================================
+
+    const agentFilter =
+      agentId
+        ? { _id: agentId }
+        : {};
+
+
+    const agents =
+      await DailyAgent.find(
+        agentFilter
+      )
+      .select(
+        "name mobile operationalArea status"
+      );
+
+
+    // ================================================
+    // GET REAL ATTENDANCE
+    // ================================================
+
+    const attendanceFilter = {
 
       attendanceDate: {
-        $gte: start,
-        $lt: end
+
+        $gte:
+          monthStart,
+
+        $lt:
+          monthEnd
+
       }
 
     };
 
 
-    // ==========================================
-    // SPECIFIC AGENT
-    // ==========================================
-
     if (agentId) {
 
-      filter.agent = agentId;
+      attendanceFilter.agent =
+        agentId;
 
     }
 
 
-    // ==========================================
-    // GET ATTENDANCE
-    // ==========================================
-
     const attendance =
       await DailyAttendance.find(
-        filter
+        attendanceFilter
       )
       .populate(
         "agent",
@@ -735,11 +1128,12 @@ exports.getMonthlyAttendance = async (req, res) => {
       });
 
 
-    // ==========================================
-    // GROUP BY AGENT
-    // ==========================================
+    // ================================================
+    // MAP REAL ATTENDANCE
+    // ================================================
 
-    const agentMap = {};
+    const attendanceMap =
+      new Map();
 
 
     attendance.forEach(
@@ -750,143 +1144,338 @@ exports.getMonthlyAttendance = async (req, res) => {
         }
 
 
-        const id =
+        const agentKey =
           record.agent._id.toString();
 
 
-        if (!agentMap[id]) {
-
-          agentMap[id] = {
-
-            agent: record.agent,
-
-            attendance: [],
-
-            present: 0,
-
-            absent: 0,
-
-            halfDay: 0,
-
-            totalWorkingMinutes: 0
-
-          };
-
-        }
+        const dateKey =
+          record.attendanceDate
+            .toISOString()
+            .slice(0, 10);
 
 
-        agentMap[id].attendance.push(
+        attendanceMap.set(
+          `${agentKey}_${dateKey}`,
           record
         );
-
-
-        if (
-          record.status ===
-          "PRESENT"
-        ) {
-
-          agentMap[id].present++;
-
-        }
-
-
-        if (
-          record.status ===
-          "ABSENT"
-        ) {
-
-          agentMap[id].absent++;
-
-        }
-
-
-        if (
-          record.status ===
-          "HALF_DAY"
-        ) {
-
-          agentMap[id].halfDay++;
-
-        }
-
-
-        agentMap[id].totalWorkingMinutes +=
-          record.workingMinutes || 0;
 
       }
     );
 
 
-    // ==========================================
-    // FINAL MONTHLY REPORT
-    // ==========================================
+    // ================================================
+    // BUILD REPORT
+    // ================================================
 
     const report =
-      Object.values(
-        agentMap
-      ).map(item => {
+      agents.map(
+        agent => {
 
-        const totalRecords =
-          item.attendance.length;
-
-
-        const attendanceRate =
-          totalRecords > 0
-
-            ? (
-                (
-                  item.present +
-                  item.halfDay * 0.5
-                ) /
-                totalRecords
-              ) * 100
-
-            : 0;
+          const agentKey =
+            agent._id.toString();
 
 
-        return {
+          const records = [];
 
-          agent:
-            item.agent,
-
-          present:
-            item.present,
-
-          absent:
-            item.absent,
-
-          halfDay:
-            item.halfDay,
-
-          totalRecords,
-
-          attendanceRate:
-            Number(
-              attendanceRate.toFixed(2)
-            ),
-
-          totalWorkingMinutes:
-            item.totalWorkingMinutes,
-
-          attendance:
-            item.attendance
-
-        };
-
-      });
+          let present = 0;
+          let halfDay = 0;
+          let absent = 0;
+          let totalWorkingMinutes = 0;
 
 
-    // ==========================================
-    // RESPONSE
-    // ==========================================
+          // ============================================
+          // DAYS IN SELECTED MONTH
+          // ============================================
 
-    res.json({
+          const totalDays =
+            new Date(
+              selectedYear,
+              selectedMonth,
+              0
+            ).getDate();
 
-      success: true,
 
-      month: selectedMonth,
+          for (
+            let day = 1;
+            day <= totalDays;
+            day++
+          ) {
 
-      year: selectedYear,
+            const currentDate =
+              new Date(
+                selectedYear,
+                selectedMonth - 1,
+                day
+              );
+
+
+            currentDate.setHours(
+              0,
+              0,
+              0,
+              0
+            );
+
+
+            // Future date
+            if (
+              currentDate >
+              todayStart
+            ) {
+
+              records.push({
+
+                attendanceDate:
+                  currentDate,
+
+                status:
+                  "UPCOMING",
+
+                checkInTime:
+                  null,
+
+                checkOutTime:
+                  null,
+
+                workingMinutes:
+                  0,
+
+                checkInLocation:
+                  null,
+
+                virtual:
+                  true
+
+              });
+
+              continue;
+
+            }
+
+
+            // ==========================================
+            // TODAY BEFORE 1 PM
+            // NOT ABSENT YET
+            // ==========================================
+
+            const isToday =
+              currentDate.getTime() ===
+              todayStart.getTime();
+
+
+            const currentMinutes =
+              getMinutesFromDate(
+                now
+              );
+
+
+            const key =
+              `${agentKey}_${getDateKey(
+                currentDate
+              )}`;
+
+
+            const realRecord =
+              attendanceMap.get(
+                key
+              );
+
+
+            if (
+              realRecord
+            ) {
+
+              records.push(
+                realRecord
+              );
+
+
+              if (
+                realRecord.status ===
+                "PRESENT"
+              ) {
+
+                present++;
+
+              }
+
+
+              if (
+                realRecord.status ===
+                "HALF_DAY"
+              ) {
+
+                halfDay++;
+
+              }
+
+
+              if (
+                realRecord.status ===
+                "ABSENT"
+              ) {
+
+                absent++;
+
+              }
+
+
+              totalWorkingMinutes +=
+                Number(
+                  realRecord.workingMinutes ||
+                  0
+                );
+
+              continue;
+
+            }
+
+
+            // ==========================================
+            // TODAY BEFORE 1 PM = UPCOMING
+            // ==========================================
+
+            if (
+              isToday &&
+              currentMinutes <
+                ABSENT_CUTOFF
+            ) {
+
+              records.push({
+
+                attendanceDate:
+                  currentDate,
+
+                status:
+                  "UPCOMING",
+
+                checkInTime:
+                  null,
+
+                checkOutTime:
+                  null,
+
+                workingMinutes:
+                  0,
+
+                checkInLocation:
+                  null,
+
+                virtual:
+                  true
+
+              });
+
+              continue;
+
+            }
+
+
+            // ==========================================
+            // NO RECORD = ABSENT
+            // ==========================================
+
+            records.push({
+
+              attendanceDate:
+                currentDate,
+
+              status:
+                "ABSENT",
+
+              checkInTime:
+                null,
+
+              checkOutTime:
+                null,
+
+              workingMinutes:
+                0,
+
+              checkInLocation:
+                null,
+
+              virtual:
+                true
+
+            });
+
+
+            absent++;
+
+          }
+
+
+          // ============================================
+          // ATTENDANCE RATE
+          // Don't count FUTURE / UPCOMING days
+          // ============================================
+
+          const countedDays =
+            records.filter(
+              record =>
+                record.status ===
+                  "PRESENT" ||
+                record.status ===
+                  "HALF_DAY" ||
+                record.status ===
+                  "ABSENT"
+            ).length;
+
+
+          const attendanceRate =
+            countedDays > 0
+
+              ? (
+                  (
+                    present +
+                    halfDay * 0.5
+                  ) /
+                  countedDays
+                ) * 100
+
+              : 0;
+
+
+          return {
+
+            agent,
+
+            present,
+
+            absent,
+
+            halfDay,
+
+            totalRecords:
+              countedDays,
+
+            attendanceRate:
+              Number(
+                attendanceRate.toFixed(2)
+              ),
+
+            totalWorkingMinutes,
+
+            attendance:
+              records
+
+          };
+
+        }
+      );
+
+
+    return res.json({
+
+      success:
+        true,
+
+      month:
+        selectedMonth,
+
+      year:
+        selectedYear,
 
       totalAgents:
         report.length,
@@ -903,14 +1492,40 @@ exports.getMonthlyAttendance = async (req, res) => {
     );
 
 
-    res.status(500).json({
+    return res.status(500).json({
 
-      success: false,
+      success:
+        false,
 
-      message: error.message
+      message:
+        error.message
 
     });
 
   }
 
 };
+
+
+// =====================================================
+// HELPER
+// =====================================================
+
+function getDateKey(dateValue) {
+
+  const d =
+    new Date(
+      dateValue
+    );
+
+  return [
+    d.getFullYear(),
+    String(
+      d.getMonth() + 1
+    ).padStart(2, "0"),
+    String(
+      d.getDate()
+    ).padStart(2, "0")
+  ].join("-");
+
+}
