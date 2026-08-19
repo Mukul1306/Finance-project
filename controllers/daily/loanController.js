@@ -3339,6 +3339,248 @@ else if (loan.loanType === "FIXED") {
             currentMonthCollection[0]?.total || 0;
 
 
+// ==========================================
+// TODAY'S LOAN TARGET
+// ONLY EMI DUE TODAY
+// ==========================================
+
+const todayStart = new Date();
+todayStart.setHours(0, 0, 0, 0);
+
+const tomorrow = new Date(todayStart);
+tomorrow.setDate(
+    tomorrow.getDate() + 1
+);
+
+
+let todayTarget = 0;
+
+let todayCollected = 0;
+
+
+// ==========================================
+// GET TODAY'S COLLECTION
+// ONLY SELECTED LOAN TYPE
+// ==========================================
+
+const todayCollectionSummary =
+    await LoanCollection.aggregate([
+        {
+            $match: {
+                loan: {
+                    $in: loanIds
+                },
+
+                paymentDate: {
+                    $gte: todayStart,
+                    $lt: tomorrow
+                }
+            }
+        },
+
+        {
+            $group: {
+                _id: null,
+
+                total: {
+                    $sum: "$totalAmount"
+                }
+            }
+        }
+    ]);
+
+
+todayCollected =
+    todayCollectionSummary[0]?.total || 0;
+
+
+// ==========================================
+// CALCULATE TODAY'S TARGET
+// ==========================================
+
+for (const loan of loans) {
+
+    const loanDate =
+        new Date(
+            loan.loanDate
+        );
+
+    loanDate.setHours(
+        0,
+        0,
+        0,
+        0
+    );
+
+
+    const emi =
+        Number(
+            loan.emiAmount || 0
+        );
+
+
+    let dueToday = false;
+
+
+    // ==========================================
+    // DAILY
+    // ==========================================
+
+    if (
+        loan.loanType === "DAILY"
+    ) {
+
+        const daysPassed =
+            Math.floor(
+                (
+                    todayStart -
+                    loanDate
+                ) /
+                (1000 * 60 * 60 * 24)
+            );
+
+
+        const installmentNo =
+            daysPassed + 1;
+
+
+        if (
+            installmentNo >= 1 &&
+            installmentNo <=
+                Number(
+                    loan.durationDays || 0
+                )
+        ) {
+
+            dueToday = true;
+
+        }
+
+    }
+
+
+    // ==========================================
+    // WEEKLY
+    // ==========================================
+
+    else if (
+        loan.loanType === "WEEKLY"
+    ) {
+
+        const daysPassed =
+            Math.floor(
+                (
+                    todayStart -
+                    loanDate
+                ) /
+                (1000 * 60 * 60 * 24)
+            );
+
+
+        if (
+            daysPassed >= 0 &&
+            daysPassed % 7 === 0
+        ) {
+
+            const installmentNo =
+                Math.floor(
+                    daysPassed / 7
+                ) + 1;
+
+
+            if (
+                installmentNo <=
+                Number(
+                    loan.durationWeeks || 0
+                )
+            ) {
+
+                dueToday = true;
+
+            }
+
+        }
+
+    }
+
+
+    // ==========================================
+    // MONTHLY
+    // ==========================================
+
+    else if (
+        loan.loanType === "MONTHLY" ||
+        loan.loanType === "FIXED"
+    ) {
+
+        if (
+            todayStart >= loanDate &&
+            todayStart.getDate() ===
+                loanDate.getDate()
+        ) {
+
+            const monthDiff =
+                (
+                    (
+                        todayStart.getFullYear() -
+                        loanDate.getFullYear()
+                    ) * 12
+                ) +
+                (
+                    todayStart.getMonth() -
+                    loanDate.getMonth()
+                );
+
+
+            const totalMonths =
+                loan.loanType ===
+                "MONTHLY"
+                    ? Number(
+                        loan.durationMonths || 0
+                      )
+                    : Number(
+                        loan.loanTenureMonths || 0
+                      );
+
+
+            if (
+                monthDiff >= 1 &&
+                monthDiff <= totalMonths
+            ) {
+
+                dueToday = true;
+
+            }
+
+        }
+
+    }
+
+
+    if (dueToday) {
+
+        todayTarget += emi;
+
+    }
+
+}
+
+
+// ==========================================
+// TODAY'S TARGET PENDING
+// IMPORTANT:
+// ONLY TODAY'S TARGET
+// NO OLD OVERDUE AMOUNT
+// ==========================================
+
+const todayPending =
+    Math.max(
+        0,
+        todayTarget -
+        todayCollected
+    );
+
+
         // ==========================================
         // RESPONSE
         // ==========================================
@@ -3346,39 +3588,41 @@ else if (loan.loanType === "FIXED") {
         res.json({
 
             success: true,
+dashboard: {
 
-            dashboard: {
+    loanType,
 
-                loanType,
+    totalLoans,
+    activeLoans,
+    closedLoans,
+    overdueLoans,
 
-                totalLoans,
+    loanAmount:
+        loanSummary[0]?.loanAmount || 0,
 
-                activeLoans,
+    outstanding:
+        loanSummary[0]?.outstanding || 0,
 
-                closedLoans,
+    totalPaid:
+        loanSummary[0]?.totalPaid || 0,
 
-                overdueLoans,
+    interest:
+        loanSummary[0]?.interest || 0,
 
-                loanAmount:
-                    loanSummary[0]?.loanAmount || 0,
+    penalty:
+        penaltySummary[0]?.penalty || 0,
 
-                outstanding:
-                    loanSummary[0]?.outstanding || 0,
+    overdueEmiAmount,
 
-                totalPaid:
-                    loanSummary[0]?.totalPaid || 0,
+    monthlyCollection:
+        collection,
 
-                interest:
-                    loanSummary[0]?.interest || 0,
+    todayTarget,
 
-               penalty:
-    penaltySummary[0]?.penalty || 0,
+    todayCollected,
 
-overdueEmiAmount,
-
-monthlyCollection: collection
-
-            }
+    todayPending
+}
 
         });
 
