@@ -30,6 +30,8 @@ router.get(
   "/:id/history",
   getMemberPaymentHistory
 );
+
+
 router.put("/update/:id", updateMember);
 
 router.delete("/delete/:id", deleteMember);
