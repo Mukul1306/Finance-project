@@ -82,7 +82,8 @@ const attendanceRoutes =
 require("./routes/daily/attendanceRoutes");
 const userRoutes =
 require("./routes/daily/userRoutes");
-
+const memberPortalRoutes =
+  require("./routes/memberPortalRoutes");
 // ==========================================
 // 4. API ROUTE DECLARATION CORNER
 // ==========================================
@@ -135,8 +136,10 @@ app.use(
 "/api/daily-reports",
 dailyReportRoutes
 );
-
-
+app.use(
+  "/api/member-portal",
+  memberPortalRoutes
+);
 app.use(
   "/api/dashboard",
   dashboardRoutes
