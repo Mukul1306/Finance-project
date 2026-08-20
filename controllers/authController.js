@@ -173,136 +173,142 @@ exports.login = async (req, res) => {
 
     }
 
+// =====================================================
+// SOCIETY MEMBER LOGIN
+// =====================================================
 
-    // =====================================================
-    // SOCIETY MEMBER LOGIN
-    // =====================================================
+const societyMember =
+  await Member.findOne({
+    mobile: mobile.trim()
+  }).populate(
+    "societyId",
+    "societyName durationMonths startDate maxMembers currentMembers status"
+  );
 
-    const societyMember =
-      await Member.findOne({
-        mobile
-      }).populate(
-        "societyId",
-        "societyName durationMonths startDate maxMembers currentMembers status"
-      );
-
-
-    if (societyMember) {
-
-      // -----------------------------------------------
-      // PASSWORD NOT SET
-      // -----------------------------------------------
-
-      if (
-        !societyMember.password
-      ) {
-
-        return res.status(403).json({
-
-          success: false,
-
-          message:
-            "Password has not been assigned to this member"
-
-        });
-
+console.log(
+  "SOCIETY MEMBER FOUND =",
+  societyMember
+    ? {
+        id: societyMember._id,
+        memberId: societyMember.memberId,
+        name: societyMember.name,
+        mobile: societyMember.mobile,
+        password: societyMember.password,
+        status: societyMember.status
       }
+    : null
+);
 
 
-      // -----------------------------------------------
-      // PASSWORD CHECK
-      // -----------------------------------------------
+if (societyMember) {
 
-      if (
-        password !==
-        societyMember.password
-      ) {
+  // =============================================
+  // PASSWORD NOT SET
+  // =============================================
 
-        return res.status(401).json({
+  if (
+    !societyMember.password ||
+    String(societyMember.password).trim() === ""
+  ) {
 
-          success: false,
+    return res.status(403).json({
 
-          message:
-            "Invalid Password"
+      success: false,
 
-        });
+      message:
+        "Password has not been assigned to this member"
 
+    });
+
+  }
+
+
+  // =============================================
+  // PASSWORD CHECK
+  // =============================================
+
+  if (
+    String(password).trim() !==
+    String(societyMember.password).trim()
+  ) {
+
+    return res.status(401).json({
+
+      success: false,
+
+      message:
+        "Invalid Password"
+
+    });
+
+  }
+
+
+  // =============================================
+  // STATUS CHECK
+  // =============================================
+
+  if (
+    societyMember.status &&
+    societyMember.status !== "ACTIVE"
+  ) {
+
+    return res.status(403).json({
+
+      success: false,
+
+      message:
+        "Society member account is not active"
+
+    });
+
+  }
+
+
+  // =============================================
+  // JWT
+  // =============================================
+
+  const token =
+    jwt.sign(
+      {
+        id: societyMember._id,
+        role: "SOCIETY_MEMBER"
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d"
       }
+    );
 
 
-      // -----------------------------------------------
-      // STATUS CHECK
-      // -----------------------------------------------
+  // =============================================
+  // REMOVE PASSWORD
+  // =============================================
 
-      if (
-        societyMember.status &&
-        societyMember.status !== "ACTIVE"
-      ) {
+  const memberData =
+    societyMember.toObject();
 
-        return res.status(403).json({
-
-          success: false,
-
-          message:
-            "Society member account is not active"
-
-        });
-
-      }
+  delete memberData.password;
 
 
-      // -----------------------------------------------
-      // JWT
-      // -----------------------------------------------
+  // =============================================
+  // RESPONSE
+  // =============================================
 
-      const token =
-        jwt.sign(
-          {
-            id:
-              societyMember._id,
+  return res.status(200).json({
 
-            role:
-              "SOCIETY_MEMBER"
-          },
+    success: true,
 
-          process.env.JWT_SECRET,
+    role: "SOCIETY_MEMBER",
 
-          {
-            expiresIn: "7d"
-          }
-        );
+    token,
 
+    member: memberData
 
-      // -----------------------------------------------
-      // REMOVE PASSWORD
-      // -----------------------------------------------
+  });
 
-      const memberData =
-        societyMember.toObject();
-
-      delete memberData.password;
-
-
-      // -----------------------------------------------
-      // RESPONSE
-      // -----------------------------------------------
-
-      return res.status(200).json({
-
-        success: true,
-
-        role:
-          "SOCIETY_MEMBER",
-
-        token,
-
-        member:
-          memberData
-
-      });
-
-    }
-
+}
 
     // =====================================================
     // USER NOT FOUND
