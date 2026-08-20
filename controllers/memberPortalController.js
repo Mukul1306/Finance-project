@@ -9,7 +9,7 @@ exports.getDashboard = async (req, res) => {
 
     // IMPORTANT:
     // This should come from JWT middleware.
-    const memberId = req.member._id;
+    const memberId = req.memberId;
 
     const member = await Member.findById(memberId)
       .populate(
