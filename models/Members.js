@@ -84,6 +84,11 @@ const memberSchema = new mongoose.Schema({
     type:String,
     default:""
   },
+  password: {
+  type: String,
+  default: null,
+},
+
 
   // Documents
   aadhaarNumber:{
