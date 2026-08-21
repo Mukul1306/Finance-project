@@ -867,43 +867,40 @@ async (
     }
 
 
-    // ================================================
-    // DATE FILTER
-    // ================================================
+   if (date) {
 
-    if (date) {
+  // -----------------------------------------------
+  // ADMIN DATE IS INDIA DATE
+  // -----------------------------------------------
 
-      const start =
-        new Date(date);
+  const [year, month, day] =
+    date.split("-").map(Number);
 
-      start.setHours(
+  // IST midnight = previous day 18:30 UTC
+  const start =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day,
         0,
         0,
         0,
         0
-      );
+      ) - (5 * 60 + 30) * 60 * 1000
+    );
 
+  const end =
+    new Date(
+      start.getTime() +
+      24 * 60 * 60 * 1000
+    );
 
-      const end =
-        new Date(start);
-
-      end.setDate(
-        end.getDate() + 1
-      );
-
-
-      filter.attendanceDate = {
-
-        $gte:
-          start,
-
-        $lt:
-          end
-
-      };
-
-    }
-
+  filter.attendanceDate = {
+    $gte: start,
+    $lt: end
+  };
+}
     // ================================================
     // MONTH FILTER
     // ================================================
@@ -1177,10 +1174,10 @@ async (
           record.agent._id.toString();
 
 
-        const dateKey =
-          record.attendanceDate
-            .toISOString()
-            .slice(0, 10);
+     const dateKey =
+  getISTDateKey(
+    record.attendanceDate
+  );
 
 
         attendanceMap.set(
