@@ -26,20 +26,25 @@ const CHECK_OUT_END = 18 * 60 + 30;       // 18:30
 // =====================================================
 
 const getTodayRange = () => {
+  const now = new Date();
 
-  const start = new Date();
+  const ist = getISTParts(now);
 
-  start.setHours(
-    0,
-    0,
-    0,
-    0
+  const start = new Date(
+    Date.UTC(
+      ist.year,
+      ist.month - 1,
+      ist.day,
+      0,
+      0,
+      0,
+      0
+    ) - (5 * 60 + 30) * 60 * 1000
   );
 
-  const end = new Date(start);
-
-  end.setDate(
-    end.getDate() + 1
+  const end = new Date(
+    start.getTime() +
+    24 * 60 * 60 * 1000
   );
 
   return {
@@ -53,16 +58,40 @@ const getTodayRange = () => {
 // TIME -> MINUTES
 // =====================================================
 
+const getISTParts = (date = new Date()) => {
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+
+  const values = {};
+
+  for (const part of parts) {
+    if (part.type !== "literal") {
+      values[part.type] = Number(part.value);
+    }
+  }
+
+  return values;
+};
+
+
 const getMinutesFromDate = (
   date = new Date()
 ) => {
+  const ist = getISTParts(date);
 
   return (
-    date.getHours() * 60 +
-    date.getMinutes()
+    ist.hour * 60 +
+    ist.minute
   );
 };
-
 
 // =====================================================
 // CHECK-IN STATUS
