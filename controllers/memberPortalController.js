@@ -946,3 +946,663 @@ exports.getPassbook = async (req, res) => {
 
   }
 };
+
+
+
+// =====================================================
+// SOCIETY MEMBER - LOAN PAGE
+// =====================================================
+
+exports.getLoan = async (req, res) => {
+  try {
+
+    const memberId = req.memberId;
+
+    if (!memberId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Society member ID missing from authentication"
+      });
+    }
+
+    // =================================================
+    // GET MEMBER
+    // =================================================
+
+    const member =
+      await Member.findById(memberId)
+        .populate(
+          "societyId",
+          "societyName durationMonths startDate status"
+        )
+        .lean();
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Society member not found"
+      });
+    }
+
+    // =================================================
+    // GET ALL LOANS OF THIS MEMBER
+    // =================================================
+
+    const loans =
+      await Loan.find({
+        memberId: member._id
+      })
+        .sort({
+          createdAt: -1
+        })
+        .lean();
+
+    // =================================================
+    // BUILD LOAN DATA
+    // =================================================
+
+    const loanData =
+      await Promise.all(
+
+        loans.map(async (loan) => {
+
+          // -------------------------------------------
+          // LOAN PAYMENTS
+          // -------------------------------------------
+
+          const payments =
+            await LoanPayment.find({
+              loanId: loan._id
+            })
+              .sort({
+                emiNo: 1
+              })
+              .lean();
+
+
+          // -------------------------------------------
+          // BASIC VALUES
+          // -------------------------------------------
+
+          const totalEmis =
+            Number(
+              loan.totalEmis || 0
+            );
+
+          const paidEmis =
+            Number(
+              loan.paidEmis || 0
+            );
+
+          const pendingEmis =
+            Math.max(
+              0,
+              totalEmis - paidEmis
+            );
+
+
+          // -------------------------------------------
+          // PAYMENT TOTALS
+          // -------------------------------------------
+
+          const totalAmountPaid =
+            payments.reduce(
+              (sum, payment) =>
+                sum +
+                Number(
+                  payment.totalReceived || 0
+                ),
+              0
+            );
+
+
+          const totalInterestPaid =
+            payments.reduce(
+              (sum, payment) =>
+                sum +
+                Number(
+                  payment.interestAmount || 0
+                ),
+              0
+            );
+
+
+          const totalPenaltyPaid =
+            payments.reduce(
+              (sum, payment) =>
+                sum +
+                Number(
+                  payment.penaltyAmount || 0
+                ),
+              0
+            );
+
+
+          const totalPrincipalPaid =
+            payments.reduce(
+              (sum, payment) =>
+                sum +
+                Number(
+                  payment.principalAmount || 0
+                ),
+              0
+            );
+
+
+          // -------------------------------------------
+          // OUTSTANDING PRINCIPAL
+          // -------------------------------------------
+
+          let outstandingPrincipal =
+            Number(
+              loan.outstandingPrincipal || 0
+            );
+
+
+          // fallback if outstandingPrincipal
+          // isn't stored in the Loan document
+
+          if (
+            outstandingPrincipal === 0 &&
+            Number(
+              loan.principalAmount || 0
+            ) > 0
+          ) {
+
+            outstandingPrincipal =
+              Math.max(
+                0,
+                Number(
+                  loan.principalAmount || 0
+                ) -
+                totalPrincipalPaid
+              );
+
+          }
+
+
+          // -------------------------------------------
+          // NEXT EMI
+          // -------------------------------------------
+
+          let nextPayment = null;
+
+
+          if (
+            pendingEmis > 0
+          ) {
+
+            const lastPayment =
+              payments.length > 0
+                ? payments[
+                    payments.length - 1
+                  ]
+                : null;
+
+
+            const nextEmiNo =
+              paidEmis + 1;
+
+
+            nextPayment = {
+
+              emiNo:
+                nextEmiNo,
+
+              amount:
+                Number(
+                  loan.emiAmount || 0
+                ),
+
+              interest:
+                Number(
+                  loan.monthlyInterest || 0
+                ),
+
+              penalty:
+                0,
+
+              total:
+                Number(
+                  loan.emiAmount || 0
+                ) +
+                Number(
+                  loan.monthlyInterest || 0
+                ),
+
+              dueDate:
+                loan.nextDueDate ||
+                null
+
+            };
+
+          }
+
+
+          // -------------------------------------------
+          // RESPONSE OBJECT
+          // -------------------------------------------
+
+          return {
+
+            _id:
+              loan._id,
+
+            loanType:
+              loan.loanType || "LOAN",
+
+            status:
+              loan.status || "ACTIVE",
+
+            principalAmount:
+              Number(
+                loan.principalAmount || 0
+              ),
+
+            outstandingPrincipal,
+
+            emiAmount:
+              Number(
+                loan.emiAmount || 0
+              ),
+
+            interestPerHundred:
+              Number(
+                loan.interestPerHundred || 0
+              ),
+
+            monthlyInterest:
+              Number(
+                loan.monthlyInterest || 0
+              ),
+
+            totalInterest:
+              Number(
+                loan.totalInterest || 0
+              ),
+
+            totalEmis,
+
+            paidEmis,
+
+            pendingEmis,
+
+            totalAmountPaid,
+
+            totalPrincipalPaid,
+
+            totalInterestPaid,
+
+            totalPenaltyPaid,
+
+            loanGivenDate:
+              loan.loanGivenDate || null,
+
+            loanEndDate:
+              loan.loanEndDate || null,
+
+            nextPayment,
+
+            paymentCount:
+              payments.length,
+
+            paymentHistory:
+              payments
+
+          };
+
+        })
+
+      );
+
+
+    // =================================================
+    // CURRENT / ACTIVE LOAN
+    // =================================================
+
+    const activeLoans =
+      loanData.filter(
+        (loan) =>
+          String(
+            loan.status
+          ).toUpperCase() ===
+          "ACTIVE"
+      );
+
+
+    const closedLoans =
+      loanData.filter(
+        (loan) =>
+          String(
+            loan.status
+          ).toUpperCase() ===
+          "CLOSED"
+      );
+
+
+    // =================================================
+    // TOTAL SUMMARY
+    // =================================================
+
+    const totalPrincipal =
+      loanData.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.principalAmount || 0
+          ),
+        0
+      );
+
+
+    const totalOutstanding =
+      activeLoans.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.outstandingPrincipal || 0
+          ),
+        0
+      );
+
+
+    const totalPaid =
+      loanData.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.totalAmountPaid || 0
+          ),
+        0
+      );
+
+
+    const totalInterestPaid =
+      loanData.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.totalInterestPaid || 0
+          ),
+        0
+      );
+
+
+    const totalPenaltyPaid =
+      loanData.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.totalPenaltyPaid || 0
+          ),
+        0
+      );
+
+
+    // =================================================
+    // RESPONSE
+    // =================================================
+
+    return res.status(200).json({
+
+      success: true,
+
+      member: {
+
+        _id:
+          member._id,
+
+        memberId:
+          member.memberId,
+
+        name:
+          member.name,
+
+        mobile:
+          member.mobile,
+
+        status:
+          member.status
+
+      },
+
+      society:
+        member.societyId,
+
+      summary: {
+
+        totalLoans:
+          loanData.length,
+
+        activeLoans:
+          activeLoans.length,
+
+        closedLoans:
+          closedLoans.length,
+
+        totalPrincipal,
+
+        totalOutstanding,
+
+        totalPaid,
+
+        totalInterestPaid,
+
+        totalPenaltyPaid
+
+      },
+
+      activeLoan:
+        activeLoans[0] || null,
+
+      loans:
+        loanData
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "SOCIETY MEMBER LOAN ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        error.message
+
+    });
+
+  }
+};
+
+
+// =====================================================
+// SOCIETY MEMBER - PROFILE
+// =====================================================
+
+exports.getProfile = async (req, res) => {
+  try {
+
+    const memberId = req.memberId;
+
+    if (!memberId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Society member ID missing from authentication"
+      });
+    }
+
+    // ================================================
+    // GET MEMBER
+    // ================================================
+
+    const member =
+      await Member.findById(memberId)
+        .populate(
+          "societyId",
+          "societyName durationMonths startDate maxMembers currentMembers status"
+        )
+        .lean();
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Society member not found"
+      });
+    }
+
+
+    // ================================================
+    // PROFILE RESPONSE
+    // ================================================
+
+    return res.status(200).json({
+
+      success: true,
+
+      member: {
+
+        _id:
+          member._id,
+
+        memberId:
+          member.memberId,
+
+        name:
+          member.name,
+
+        fatherOrHusbandName:
+          member.fatherOrHusbandName,
+
+        gender:
+          member.gender,
+
+        dob:
+          member.dob,
+
+        email:
+          member.email || "",
+
+        mobile:
+          member.mobile,
+
+        alternateMobile:
+          member.alternateMobile || "",
+
+        address:
+          member.address,
+
+        pinCode:
+          member.pinCode || "",
+
+        city:
+          member.city || "",
+
+        district:
+          member.district || "",
+
+        state:
+          member.state || "",
+
+        aadhaarNumber:
+          member.aadhaarNumber,
+
+        nomineeName:
+          member.nomineeName,
+
+        nomineeMobile:
+          member.nomineeMobile,
+
+        joiningDate:
+          member.joiningDate,
+
+        memberEndDate:
+          member.memberEndDate || null,
+
+        monthlyInstallment:
+          Number(
+            member.monthlyInstallment || 0
+          ),
+
+        monthlyPenalty:
+          Number(
+            member.monthlyPenalty || 0
+          ),
+
+        dueDay:
+          Number(
+            member.dueDay || 0
+          ),
+
+        totalInstallments:
+          Number(
+            member.totalInstallments || 0
+          ),
+
+        paidInstallments:
+          Number(
+            member.paidInstallments || 0
+          ),
+
+        pendingInstallments:
+          Number(
+            member.pendingInstallments || 0
+          ),
+
+        totalPaid:
+          Number(
+            member.totalPaid || 0
+          ),
+
+        pendingAmount:
+          Number(
+            member.pendingAmount || 0
+          ),
+
+        currentPenalty:
+          Number(
+            member.currentPenalty || 0
+          ),
+
+        totalPenaltyPaid:
+          Number(
+            member.totalPenaltyPaid || 0
+          ),
+
+        lastPaymentDate:
+          member.lastPaymentDate || null,
+
+        status:
+          member.status
+
+      },
+
+      society:
+        member.societyId
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "SOCIETY MEMBER PROFILE ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        error.message
+
+    });
+
+  }
+};

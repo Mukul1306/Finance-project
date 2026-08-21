@@ -4,7 +4,9 @@ const router = express.Router();
 const {
   getDashboard,
   getSaving,
-  getPassbook
+  getPassbook,
+  getLoan,
+  getProfile
 } = require(
   "../controllers/memberPortalController"
 );
@@ -28,6 +30,16 @@ router.get(
   societyMemberAuth,
   getPassbook
 );
+router.get(
+  "/loan",
+  societyMemberAuth,
+  getLoan
+);
 
+router.get(
+  "/profile",
+  societyMemberAuth,
+  getProfile
+);
 
 module.exports = router;
