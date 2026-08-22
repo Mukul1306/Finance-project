@@ -1,7 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
-
+const cron = require("node-cron");
 // ==========================================
 // 1. SYSTEM CONFIGURATION & DATABASE CORNER
 // ==========================================
@@ -80,6 +80,11 @@ require("./routes/profitLossRoutes");
 // const dashboardRoutes = require("./routes/dashboardRoutes");
 const attendanceRoutes =
 require("./routes/daily/attendanceRoutes");
+const {
+  autoCheckoutAt630
+} = require(
+  "./controllers/daily/attendanceController"
+);
 const userRoutes =
 require("./routes/daily/userRoutes");
 const memberPortalRoutes =
@@ -194,7 +199,7 @@ app.post("/test", (req, res) => {
 // ==========================================
 // 6. APPLICATION BOOTSTRAP OVER OVERLAY
 // ==========================================
-const PORT = process.env.PORT || 5000;
+
 
 app.get("/", (req, res) => {
   res.send("SRM Finance Backend Running Successfully 🚀");
@@ -205,8 +210,78 @@ app.listen(PORT, () => {
     console.log(`🚀 CORE ENGINE RUNNING ON PORT: ${PORT}`);
     console.log(`=================================`);
 });
+// ==========================================
+// AUTOMATIC ATTENDANCE CHECKOUT
+// EVERY MINUTE
+// AFTER 6:30 PM IST
+// ==========================================
 
+cron.schedule(
+  "* * * * *",
+  async () => {
+
+    await autoCheckoutAt630();
+
+  },
+  {
+    timezone: "Asia/Kolkata"
+  }
+);
+
+console.log(
+  "🕡 Automatic attendance checkout enabled for 6:30 PM IST"
+);
 
 app.get("/", (req, res) => {
   res.send("SRM Finance Backend Running Successfully 🚀");
+});
+// ==========================================
+// 6. APPLICATION BOOTSTRAP
+// ==========================================
+
+const PORT =
+  process.env.PORT || 5000;
+
+app.get("/", (req, res) => {
+  res.send(
+    "SRM Finance Backend Running Successfully 🚀"
+  );
+});
+
+
+// ==========================================
+// AUTOMATIC ATTENDANCE CHECKOUT
+// ==========================================
+
+cron.schedule(
+  "* * * * *",
+  async () => {
+
+    await autoCheckoutAt630();
+
+  },
+  {
+    timezone: "Asia/Kolkata"
+  }
+);
+
+console.log(
+  "🕡 Automatic attendance checkout enabled for 6:30 PM IST"
+);
+
+
+app.listen(PORT, () => {
+
+  console.log(
+    "================================="
+  );
+
+  console.log(
+    `🚀 CORE ENGINE RUNNING ON PORT: ${PORT}`
+  );
+
+  console.log(
+    "================================="
+  );
+
 });

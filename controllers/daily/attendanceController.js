@@ -831,6 +831,152 @@ async (
 
 };
 
+// =====================================================
+// AUTOMATIC CHECKOUT AFTER 6:30 PM
+// =====================================================
+
+exports.autoCheckoutAt630 = async () => {
+  try {
+
+    const now = new Date();
+
+    const currentMinutes =
+      getMinutesFromDate(now);
+
+    // Do nothing before 6:30 PM
+    if (currentMinutes < CHECK_OUT_END) {
+      return;
+    }
+
+    const {
+      start,
+      end
+    } = getTodayRange();
+
+
+    // Find agents who checked in
+    // but never checked out today
+    const openAttendances =
+      await DailyAttendance.find({
+        attendanceDate: {
+          $gte: start,
+          $lt: end
+        },
+
+        checkInTime: {
+          $exists: true,
+          $ne: null
+        },
+
+        $or: [
+          {
+            checkOutTime: {
+              $exists: false
+            }
+          },
+          {
+            checkOutTime: null
+          }
+        ]
+      });
+
+
+    if (
+      openAttendances.length === 0
+    ) {
+      return;
+    }
+
+
+    let updatedCount = 0;
+
+
+    for (
+      const attendance of openAttendances
+    ) {
+
+      // -----------------------------------------------
+      // AUTO CHECKOUT TIME
+      // -----------------------------------------------
+
+      const checkOutTime =
+        new Date(now);
+
+
+      attendance.checkOutTime =
+        checkOutTime;
+
+
+      // -----------------------------------------------
+      // WORKING MINUTES
+      // -----------------------------------------------
+
+      const difference =
+        checkOutTime -
+        new Date(
+          attendance.checkInTime
+        );
+
+
+      attendance.workingMinutes =
+        Math.max(
+          0,
+          Math.floor(
+            difference / 60000
+          )
+        );
+
+
+      // -----------------------------------------------
+      // FINAL ATTENDANCE STATUS
+      // -----------------------------------------------
+
+      const checkInMinutes =
+        getMinutesFromDate(
+          attendance.checkInTime
+        );
+
+
+      if (
+        checkInMinutes >=
+          CHECK_IN_START &&
+        checkInMinutes <
+          FULL_DAY_CHECK_IN_LIMIT
+      ) {
+
+        attendance.status =
+          "PRESENT";
+
+      } else {
+
+        attendance.status =
+          "HALF_DAY";
+
+      }
+
+
+      await attendance.save();
+
+      updatedCount++;
+
+    }
+
+
+    console.log(
+      `✅ AUTO CHECKOUT: ${updatedCount} attendance record(s) finalized`
+    );
+
+
+  } catch (error) {
+
+    console.error(
+      "AUTO CHECKOUT ERROR:",
+      error
+    );
+
+  }
+};
+
 
 // =====================================================
 // ADMIN — GET ATTENDANCE
