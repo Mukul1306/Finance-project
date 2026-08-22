@@ -188,59 +188,28 @@ app.use("/api/daily", agentDepositRoutes);
 // ==========================================
 // 5. DIAGNOSTIC & TELEMETRY TEST ENDPOINT
 // ==========================================
+
 app.post("/test", (req, res) => {
-    console.log("Telemetry Payload:", req.body);
-    res.json({
-        success: true,
-        received: req.body
-    });
+  console.log("Telemetry Payload:", req.body);
+
+  res.json({
+    success: true,
+    received: req.body
+  });
 });
 
+
 // ==========================================
-// 6. APPLICATION BOOTSTRAP OVER OVERLAY
-// ==========================================
-
-
-app.get("/", (req, res) => {
-  res.send("SRM Finance Backend Running Successfully 🚀");
-});
-
-app.listen(PORT, () => {
-    console.log(`=================================`);
-    console.log(`🚀 CORE ENGINE RUNNING ON PORT: ${PORT}`);
-    console.log(`=================================`);
-});
-// ==========================================
-// AUTOMATIC ATTENDANCE CHECKOUT
-// EVERY MINUTE
-// AFTER 6:30 PM IST
-// ==========================================
-
-cron.schedule(
-  "* * * * *",
-  async () => {
-
-    await autoCheckoutAt630();
-
-  },
-  {
-    timezone: "Asia/Kolkata"
-  }
-);
-
-console.log(
-  "🕡 Automatic attendance checkout enabled for 6:30 PM IST"
-);
-
-app.get("/", (req, res) => {
-  res.send("SRM Finance Backend Running Successfully 🚀");
-});
-// ==========================================
-// 6. APPLICATION BOOTSTRAP
+// 6. APPLICATION PORT
 // ==========================================
 
 const PORT =
   process.env.PORT || 5000;
+
+
+// ==========================================
+// 7. ROOT HEALTH CHECK
+// ==========================================
 
 app.get("/", (req, res) => {
   res.send(
@@ -250,14 +219,27 @@ app.get("/", (req, res) => {
 
 
 // ==========================================
-// AUTOMATIC ATTENDANCE CHECKOUT
+// 8. AUTOMATIC ATTENDANCE CHECKOUT
+// EVERY MINUTE
+// AFTER 6:30 PM IST
 // ==========================================
 
 cron.schedule(
   "* * * * *",
   async () => {
 
-    await autoCheckoutAt630();
+    try {
+
+      await autoCheckoutAt630();
+
+    } catch (error) {
+
+      console.error(
+        "AUTO CHECKOUT CRON ERROR:",
+        error
+      );
+
+    }
 
   },
   {
@@ -269,6 +251,10 @@ console.log(
   "🕡 Automatic attendance checkout enabled for 6:30 PM IST"
 );
 
+
+// ==========================================
+// 9. START SERVER
+// ==========================================
 
 app.listen(PORT, () => {
 

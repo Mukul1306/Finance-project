@@ -1682,6 +1682,41 @@ async (
 // =====================================================
 // HELPER
 // =====================================================
+function getISTDateKey(dateValue) {
+
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-IN",
+      {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      }
+    ).formatToParts(
+      new Date(dateValue)
+    );
+
+  const values = {};
+
+  for (const part of parts) {
+
+    if (
+      part.type !== "literal"
+    ) {
+
+      values[part.type] =
+        part.value;
+
+    }
+
+  }
+
+  return (
+    `${values.year}-${values.month}-${values.day}`
+  );
+}
+
 
 function getDateKey(dateValue) {
 
