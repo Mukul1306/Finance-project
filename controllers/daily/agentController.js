@@ -311,11 +311,17 @@ exports.getAgents = async (req, res) => {
     // TODAY
     // =====================================================
 
-   const todayKey =
+// =====================================================
+// TODAY
+// =====================================================
+
+const todayKey =
   getISTDateKey(new Date());
 
-    today.setHours(0, 0, 0, 0);
-
+const today =
+  new Date(
+    `${todayKey}T00:00:00+05:30`
+  );
 
     // =====================================================
     // PROCESS EACH AGENT
@@ -1616,10 +1622,8 @@ Object.values(monthlyHistory).sort(
     // TODAY
     // =========================
 
-    const todayKey =
+  const todayKey =
   getISTDateKey(new Date());
-
-    today.setHours(0,0,0,0);
 
 // ======================================
 // TODAY COLLECTIONS
