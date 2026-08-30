@@ -3,7 +3,86 @@ const DailyMember = require("../../models/daily/DailyMember");
 const DailyTransaction = require("../../models/daily/DailyTransaction");
 const DailyAgent = require("../../models/daily/Agent");
 const AreaGroup = require("../../models/daily/AreaGroup");
+// =====================================================
+// IST DATE HELPERS
+// =====================================================
 
+function getISTDateKey(dateValue) {
+
+  const parts =
+    new Intl.DateTimeFormat("en-IN", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(
+      new Date(dateValue)
+    );
+
+  const values = {};
+
+  for (const part of parts) {
+
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+
+  }
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+
+// =====================================================
+// ADD DAYS TO YYYY-MM-DD
+// =====================================================
+
+function addDaysToDateKey(
+  dateKey,
+  days
+) {
+
+  const [
+    year,
+    month,
+    day
+  ] =
+    dateKey
+      .split("-")
+      .map(Number);
+
+  const date =
+    new Date(
+      Date.UTC(
+        year,
+        month - 1,
+        day
+      )
+    );
+
+  date.setUTCDate(
+    date.getUTCDate() + days
+  );
+
+  return date
+    .toISOString()
+    .slice(0, 10);
+}
+
+
+// =====================================================
+// CONVERT IST DATE KEY TO DATE
+// =====================================================
+
+function istDateKeyToDate(
+  dateKey
+) {
+
+  return new Date(
+    `${dateKey}T00:00:00+05:30`
+  );
+
+}
 exports.getPendingDays = async (
   req,
   res
