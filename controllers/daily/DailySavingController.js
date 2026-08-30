@@ -3,6 +3,45 @@ const DailyMember = require("../../models/daily/DailyMember");
 const AreaGroup = require("../../models/daily/AreaGroup");
 const DailyAgent = require("../../models/daily/Agent");
 
+// =====================================================
+// INDIA / IST DATE HELPERS
+// =====================================================
+
+function getISTDateKey(dateValue) {
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(new Date(dateValue));
+
+  const values = {};
+
+  for (const part of parts) {
+    if (part.type !== "literal") {
+      values[part.type] = part.value;
+    }
+  }
+
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+
+function addDaysToDateKey(dateKey, days) {
+  const [year, month, day] =
+    dateKey.split("-").map(Number);
+
+  const date = new Date(
+    Date.UTC(year, month - 1, day)
+  );
+
+  date.setUTCDate(
+    date.getUTCDate() + days
+  );
+
+  return date.toISOString().slice(0, 10);
+}
+
 /*
 =========================================
 CREATE DAILY SAVING ACCOUNT

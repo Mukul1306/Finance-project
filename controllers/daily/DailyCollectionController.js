@@ -6,178 +6,311 @@ const AreaGroup = require("../../models/daily/AreaGroup");
 
 exports.getPendingDays = async (req, res) => {
 
-try{
+  try {
 
-const saving =
-await DailySaving.findById(req.params.id)
+    const saving =
+      await DailySaving.findById(
+        req.params.id
+      )
+        .populate(
+          "member",
+          "memberId memberName mobile"
+        )
+        .populate(
+          "areaGroup",
+          "areaName"
+        )
+        .populate(
+          "assignedAgent",
+          "name"
+        );
 
-.populate(
-"member",
-"memberId memberName mobile"
-)
 
-.populate(
-"areaGroup",
-"areaName"
-)
+    if (!saving) {
 
-.populate(
-"assignedAgent",
-"name"
-);
+      return res.status(404).json({
+        success: false,
+        message:
+          "Saving Account Not Found"
+      });
 
-if(!saving){
+    }
 
-return res.status(404).json({
 
-success:false,
+    // =====================================================
+    // TODAY IN INDIA
+    // =====================================================
 
-message:"Saving Account Not Found"
+    const todayKey =
+      getISTDateKey(new Date());
 
-});
 
-}
+    // =====================================================
+    // START / END DATE IN INDIA
+    // =====================================================
 
-const transactions =
-await DailyTransaction.find({
+    const startKey =
+      getISTDateKey(
+        saving.startDate
+      );
 
-savingAccount:saving._id
+    const endKey =
+      getISTDateKey(
+        saving.endDate
+      );
 
-});
 
-const paidDates =
-transactions.map(item => {
+    // =====================================================
+    // ALL PAYMENTS FOR THIS SAVING
+    // IMPORTANT:
+    // PAYMENT FOR DATE decides which DAY is paid.
+    // collectionDate is only actual collection time.
+    // =====================================================
 
-    // Payment belongs to this saving date
-    const d = new Date(
-        item.paymentForDate || item.collectionDate
-    );
+    const transactions =
+      await DailyTransaction.find({
+        savingAccount:
+          saving._id
+      }).select(
+        "paymentForDate collectionDate"
+      );
 
-    d.setHours(0, 0, 0, 0);
 
-    return d.getTime();
+    const paidDates =
+      new Set();
 
-});
 
-const today =
-new Date();
+    for (
+      const transaction
+      of transactions
+    ) {
 
-today.setHours(0,0,0,0);
+      const paymentDate =
+        transaction.paymentForDate
+          || transaction.collectionDate;
 
-const end =
-new Date(saving.endDate);
+      if (!paymentDate) {
+        continue;
+      }
 
-end.setHours(0,0,0,0);
 
-const pendingDays=[];
+      paidDates.add(
+        getISTDateKey(
+          paymentDate
+        )
+      );
 
-let current =
-new Date(saving.startDate);
+    }
 
-current.setHours(0,0,0,0);
 
-while(current<=today && current<=end){
+    // =====================================================
+    // BUILD PENDING DAYS
+    // ONLY UP TO TODAY
+    // =====================================================
 
-const check =
-current.getTime();
+    const pendingDays = [];
 
-if(!paidDates.includes(check)){
 
-const diffDays =
-Math.floor(
+    let currentKey =
+      startKey;
 
-(today-current)
 
-/(1000*60*60*24)
+    while (
+      currentKey <= endKey &&
+      currentKey <= todayKey
+    ) {
 
-);
 
-let penalty=0;
+      // -------------------------------------------------
+      // IF THIS CALENDAR DAY IS ALREADY PAID
+      // DO NOT SHOW COLLECT
+      // -------------------------------------------------
 
-if (diffDays > saving.graceDays) {
+      if (
+        paidDates.has(
+          currentKey
+        )
+      ) {
 
-    if (saving.penaltyType === "FIXED") {
+        currentKey =
+          addDaysToDateKey(
+            currentKey,
+            1
+          );
 
-        penalty = saving.penaltyValue;
+        continue;
 
-    } else {
+      }
 
-        penalty = Math.round(
-            saving.fixedAmount *
-            saving.penaltyValue / 100
+
+      // =================================================
+      // PENALTY
+      // =================================================
+
+      const currentDate =
+        new Date(
+          `${currentKey}T00:00:00+05:30`
+        );
+
+
+      const todayDate =
+        new Date(
+          `${todayKey}T00:00:00+05:30`
+        );
+
+
+      const diffDays =
+        Math.floor(
+          (
+            todayDate -
+            currentDate
+          ) /
+          (
+            1000 *
+            60 *
+            60 *
+            24
+          )
+        );
+
+
+      let penalty = 0;
+
+
+      if (
+        diffDays >
+        Number(
+          saving.graceDays || 0
+        )
+      ) {
+
+        if (
+          saving.penaltyType ===
+          "FIXED"
+        ) {
+
+          penalty =
+            Number(
+              saving.penaltyValue || 0
+            );
+
+        } else {
+
+          penalty =
+            Math.round(
+              Number(
+                saving.fixedAmount || 0
+              ) *
+              Number(
+                saving.penaltyValue || 0
+              ) /
+              100
+            );
+
+        }
+
+      }
+
+
+      const dailyAmount =
+        saving.collectionType ===
+        "FIXED"
+          ? Number(
+              saving.fixedAmount || 0
+            )
+          : 0;
+
+
+      const total =
+        dailyAmount +
+        penalty;
+
+
+      // =================================================
+      // INSTALLMENT NUMBER
+      // =================================================
+
+      const startDate =
+        new Date(
+          `${startKey}T00:00:00+05:30`
+        );
+
+
+      const installmentNo =
+        Math.floor(
+          (
+            currentDate -
+            startDate
+          ) /
+          (
+            1000 *
+            60 *
+            60 *
+            24
+          )
+        ) + 1;
+
+
+      pendingDays.push({
+
+        installmentNo,
+
+        // IMPORTANT:
+        // Use IST midnight
+        date:
+          `${currentKey}T00:00:00+05:30`,
+
+        dailyAmount,
+
+        penalty,
+
+        total
+
+      });
+
+
+      currentKey =
+        addDaysToDateKey(
+          currentKey,
+          1
         );
 
     }
 
-}
 
-const installmentNo =
-  Math.floor(
-    (current - new Date(saving.startDate)) /
-    (1000 * 60 * 60 * 24)
-  ) + 1;
+    // =====================================================
+    // RESPONSE
+    // =====================================================
 
-pendingDays.push({
+    return res.json({
 
-  installmentNo,
+      success: true,
 
-  date: new Date(current),
+      saving,
 
-  dailyAmount:
-    saving.collectionType === "FIXED"
-      ? Number(saving.fixedAmount || 0)
-      : 0,
+      pendingDays
 
-  penalty,
-
-  total:
-    (
-      saving.collectionType === "FIXED"
-        ? Number(saving.fixedAmount || 0)
-        : 0
-    ) + Number(penalty || 0)
-
-});
-
-}
-
-current.setDate(
-
-current.getDate()+1
-
-);
-
-}
-pendingDays.sort(
-
-(a,b)=>
-
-new Date(a.date)-new Date(b.date)
-
-);
+    });
 
 
-res.json({
+  } catch (error) {
 
-success:true,
+    console.error(
+      "GET PENDING DAYS ERROR:",
+      error
+    );
 
-saving,
 
-pendingDays
+    return res.status(500).json({
 
-});
+      success: false,
 
-}catch(error){
+      message:
+        error.message
 
-res.status(500).json({
+    });
 
-success:false,
-
-message:error.message
-
-});
-
-}
+  }
 
 };
 
