@@ -524,31 +524,105 @@ async (req, res) => {
     // ==========================================
 
     saving.totalSaved =
-      Number(
-        saving.totalSaved || 0
-      ) +
-      dailyAmount;
+  Number(saving.totalSaved || 0) +
+  dailyAmount;
 
-    saving.totalPenalty =
-      Number(
-        saving.totalPenalty || 0
-      ) +
-      penalty;
+saving.totalPenalty =
+  Number(saving.totalPenalty || 0) +
+  penalty;
 
-    saving.totalDaysPaid =
-      Number(
-        saving.totalDaysPaid || 0
-      ) +
-      1;
+saving.totalDaysPaid =
+  Number(saving.totalDaysPaid || 0) + 1;
 
-    saving.completedDays =
-      saving.totalDaysPaid;
+saving.completedDays =
+  saving.totalDaysPaid;
 
-    saving.lastCollectionDate =
-      new Date();
+saving.lastCollectionDate =
+  new Date();
 
 
-    await saving.save();
+// ==========================================
+// RECALCULATE PENDING DAYS
+// ==========================================
+
+const todayDate = new Date();
+todayDate.setHours(0, 0, 0, 0);
+
+const savingStartDate =
+  new Date(saving.startDate);
+
+savingStartDate.setHours(0, 0, 0, 0);
+
+const savingEndDate =
+  new Date(saving.endDate);
+
+savingEndDate.setHours(0, 0, 0, 0);
+
+
+// Get ALL payments for this saving
+const allPayments =
+  await DailyTransaction.find({
+    savingAccount: saving._id
+  });
+
+
+// Create set of paid dates
+const paidDateSet = new Set(
+  allPayments.map(transaction => {
+
+    const d = new Date(
+      transaction.paymentForDate ||
+      transaction.collectionDate
+    );
+
+    d.setHours(0, 0, 0, 0);
+
+    return d.getTime();
+
+  })
+);
+
+
+// Count pending days
+let pendingDays = 0;
+
+let checkDate =
+  new Date(savingStartDate);
+
+while (
+  checkDate <= todayDate &&
+  checkDate <= savingEndDate
+) {
+
+  if (
+    !paidDateSet.has(
+      checkDate.getTime()
+    )
+  ) {
+
+    pendingDays++;
+
+  }
+
+  checkDate.setDate(
+    checkDate.getDate() + 1
+  );
+
+}
+
+
+// Save pending values
+saving.pendingDays =
+  pendingDays;
+
+saving.pendingAmount =
+  saving.collectionType === "FIXED"
+    ? pendingDays *
+      Number(saving.fixedAmount || 0)
+    : 0;
+
+
+await saving.save();
 
 
     // ==========================================
