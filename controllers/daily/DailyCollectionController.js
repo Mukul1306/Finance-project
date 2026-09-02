@@ -83,21 +83,11 @@ function istDateKeyToDate(
   );
 
 }
-exports.getPendingDays = async (
-  req,
-  res
-) => {
-
+exports.getPendingDays = async (req, res) => {
   try {
 
-    // =====================================================
-    // SAVING
-    // =====================================================
-
     const saving =
-      await DailySaving.findById(
-        req.params.id
-      )
+      await DailySaving.findById(req.params.id)
         .populate(
           "member",
           "memberId memberName mobile"
@@ -111,39 +101,59 @@ exports.getPendingDays = async (
           "name"
         );
 
-
     if (!saving) {
-
       return res.status(404).json({
-
         success: false,
-
-        message:
-          "Saving Account Not Found"
-
+        message: "Saving Account Not Found"
       });
-
     }
 
 
     // =====================================================
-    // TODAY IN INDIA
+    // ALL PAYMENTS FOR THIS SAVING ACCOUNT
+    // =====================================================
+
+    const transactions =
+      await DailyTransaction.find({
+        savingAccount: saving._id
+      });
+
+
+    // =====================================================
+    // PAID DATES
+    //
+    // IMPORTANT:
+    // paymentForDate = WHICH SAVING DAY WAS PAID
+    // =====================================================
+
+    const paidDates = new Set();
+
+    transactions.forEach((item) => {
+
+      const paidDate =
+        item.paymentForDate ||
+        item.collectionDate;
+
+      if (!paidDate) return;
+
+      const dateKey =
+        getISTDateKey(paidDate);
+
+      paidDates.add(dateKey);
+    });
+
+
+    // =====================================================
+    // TODAY
     // =====================================================
 
     const todayKey =
-      getISTDateKey(
-        new Date()
-      );
+      getISTDateKey(new Date());
 
 
     // =====================================================
-    // SAVING START / END
+    // END DATE
     // =====================================================
-
-    const startKey =
-      getISTDateKey(
-        saving.startDate
-      );
 
     const endKey =
       getISTDateKey(
@@ -152,55 +162,17 @@ exports.getPendingDays = async (
 
 
     // =====================================================
-    // ALL TRANSACTIONS
-    // paymentForDate = which saving day is paid
-    // collectionDate = actual time money was collected
+    // START DATE
     // =====================================================
 
-    const transactions =
-      await DailyTransaction.find({
-        savingAccount:
-          saving._id
-      })
-        .select(
-          "paymentForDate collectionDate"
-        );
-
-
-    // =====================================================
-    // PAID CALENDAR DAYS
-    // =====================================================
-
-    const paidDates =
-      new Set();
-
-
-    for (
-      const transaction
-      of transactions
-    ) {
-
-      const paidDate =
-        transaction.paymentForDate
-          || transaction.collectionDate;
-
-
-      if (!paidDate) {
-        continue;
-      }
-
-
-      paidDates.add(
-        getISTDateKey(
-          paidDate
-        )
+    const startKey =
+      getISTDateKey(
+        saving.startDate
       );
 
-    }
-
 
     // =====================================================
-    // BUILD PENDING DAYS
+    // FIND ACTUAL PENDING DAYS
     // =====================================================
 
     const pendingDays = [];
@@ -210,16 +182,16 @@ exports.getPendingDays = async (
 
 
     while (
-      currentKey <= endKey &&
-      currentKey <= todayKey
+      currentKey <= todayKey &&
+      currentKey <= endKey
     ) {
 
+      // -----------------------------------------------
+      // ALREADY PAID
+      // -----------------------------------------------
 
-      // Already paid for this calendar day
       if (
-        paidDates.has(
-          currentKey
-        )
+        paidDates.has(currentKey)
       ) {
 
         currentKey =
@@ -229,9 +201,12 @@ exports.getPendingDays = async (
           );
 
         continue;
-
       }
 
+
+      // -----------------------------------------------
+      // CALCULATE PENALTY
+      // -----------------------------------------------
 
       const currentDate =
         istDateKeyToDate(
@@ -243,10 +218,6 @@ exports.getPendingDays = async (
           todayKey
         );
 
-
-      // ===================================================
-      // DELAY
-      // ===================================================
 
       const diffDays =
         Math.floor(
@@ -262,10 +233,6 @@ exports.getPendingDays = async (
           )
         );
 
-
-      // ===================================================
-      // PENALTY
-      // ===================================================
 
       let penalty = 0;
 
@@ -289,71 +256,41 @@ exports.getPendingDays = async (
 
         } else {
 
+          const dailyAmount =
+            Number(
+              saving.fixedAmount || 0
+            );
+
           penalty =
             Math.round(
-              Number(
-                saving.fixedAmount || 0
-              ) *
+              dailyAmount *
               Number(
                 saving.penaltyValue || 0
               ) /
               100
             );
-
         }
-
       }
 
 
-      // ===================================================
+      // -----------------------------------------------
       // DAILY AMOUNT
-      // ===================================================
+      // -----------------------------------------------
 
       const dailyAmount =
-        saving.collectionType ===
-        "FIXED"
+        saving.collectionType === "FIXED"
           ? Number(
               saving.fixedAmount || 0
             )
           : 0;
 
 
-      const total =
-        dailyAmount +
-        penalty;
-
-
-      // ===================================================
-      // INSTALLMENT NUMBER
-      // ===================================================
-
-      const startDate =
-        istDateKeyToDate(
-          startKey
-        );
-
-
-      const installmentNo =
-        Math.floor(
-          (
-            currentDate -
-            startDate
-          ) /
-          (
-            1000 *
-            60 *
-            60 *
-            24
-          )
-        ) + 1;
-
+      // -----------------------------------------------
+      // ADD PENDING DAY
+      // -----------------------------------------------
 
       pendingDays.push({
 
-        installmentNo,
-
-        // Keep the date explicitly in IST.
-        // Frontend can send this back unchanged.
         date:
           `${currentKey}T00:00:00+05:30`,
 
@@ -361,8 +298,9 @@ exports.getPendingDays = async (
 
         penalty,
 
-        total
-
+        total:
+          dailyAmount +
+          penalty
       });
 
 
@@ -371,7 +309,6 @@ exports.getPendingDays = async (
           currentKey,
           1
         );
-
     }
 
 
@@ -379,7 +316,7 @@ exports.getPendingDays = async (
     // RESPONSE
     // =====================================================
 
-    return res.status(200).json({
+    return res.json({
 
       success: true,
 
@@ -397,18 +334,14 @@ exports.getPendingDays = async (
       error
     );
 
-
     return res.status(500).json({
 
       success: false,
 
-      message:
-        error.message
+      message: error.message
 
     });
-
   }
-
 };
 
 
@@ -705,41 +638,41 @@ async (req, res) => {
     // CREATE TRANSACTION
     // =====================================================
 
-    await DailyTransaction.create({
+await DailyTransaction.create({
 
-      savingAccount:
-        saving._id,
+  savingAccount:
+    saving._id,
 
-      member:
-        saving.member._id,
+  member:
+    saving.member._id,
 
-      area:
-        saving.areaGroup._id,
+  area:
+    saving.areaGroup._id,
 
-      collectorType,
+  collectorType,
 
-      collectorId:
-        collectorType === "ADMIN"
-          ? null
-          : collectorId,
+  collectorId:
+    collectorType === "ADMIN"
+      ? null
+      : collectorId,
 
-      // Actual time money was received
-      collectionDate:
-        new Date(),
+  // ACTUAL DATE MONEY WAS COLLECTED
+  collectionDate:
+    new Date(),
 
-      // Calendar day this money is paying for
-      paymentForDate:
-        paymentDate,
+  // THE SAVING DAY BEING PAID
+  paymentForDate:
+    paymentDate,
 
-      dailyAmount,
+  dailyAmount,
 
-      penalty,
+  penalty,
 
-      totalAmount,
+  totalAmount,
 
-      paymentMethod
+  paymentMethod
 
-    });
+});
 
 
     // =====================================================
