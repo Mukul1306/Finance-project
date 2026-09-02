@@ -937,164 +937,187 @@ message:error.message
 
 };
 
+// =====================================================
+// GET ALL ACTIVE COLLECTION MEMBERS
+// =====================================================
+
 exports.getCollectionMembers = async (req, res) => {
   try {
 
-    const members =
-      await DailySaving.find({
-        status: "ACTIVE"
-      })
-        .populate(
-          "member",
-          "memberId memberName mobile"
-        )
-        .populate(
-          "areaGroup",
-          "areaName"
-        )
-        .populate(
-          "assignedAgent",
-          "name"
-        )
-        .sort({
-          createdAt: -1
-        });
+    const members = await DailySaving.find({
+      status: "ACTIVE"
+    })
+      .populate(
+        "member",
+        "memberId memberName mobile"
+      )
+      .populate(
+        "areaGroup",
+        "areaName"
+      )
+      .populate(
+        "assignedAgent",
+        "name"
+      )
+      .sort({
+        createdAt: -1
+      });
 
 
-    const today =
-      new Date();
+    // =====================================================
+    // TODAY IN INDIA
+    // =====================================================
 
-    today.setHours(
-      0,
-      0,
-      0,
-      0
-    );
+    const todayKey =
+      getISTDateKey(new Date());
 
+
+    // =====================================================
+    // CALCULATE EACH SAVING ACCOUNT
+    // =====================================================
 
     for (const saving of members) {
 
-      // ==========================================
-      // ALL TRANSACTIONS
-      // ==========================================
+      // =====================================================
+      // START / END DATE
+      // =====================================================
+
+      const startKey =
+        getISTDateKey(
+          saving.startDate
+        );
+
+      const endKey =
+        getISTDateKey(
+          saving.endDate
+        );
+
+
+      // =====================================================
+      // GET ALL TRANSACTIONS
+      //
+      // paymentForDate = WHICH SAVING DAY WAS PAID
+      //
+      // collectionDate = ACTUAL DATE/TIME MONEY WAS
+      //                  COLLECTED
+      // =====================================================
 
       const transactions =
         await DailyTransaction.find({
           savingAccount: saving._id
-        });
+        }).select(
+          "paymentForDate collectionDate"
+        );
 
 
-      // ==========================================
-      // UNIQUE PAID DATES
-      // ==========================================
+      // =====================================================
+      // BUILD PAID DATE SET
+      // =====================================================
 
       const paidDates =
-        new Set(
-          transactions.map(
-            transaction => {
-
-              const paidDate =
-                new Date(
-                  transaction.paymentForDate ||
-                  transaction.collectionDate
-                );
-
-              paidDate.setHours(
-                0,
-                0,
-                0,
-                0
-              );
-
-              return paidDate.getTime();
-
-            }
-          )
-        );
+        new Set();
 
 
-      // ==========================================
-      // START / END DATE
-      // ==========================================
-
-      const startDate =
-        new Date(
-          saving.startDate
-        );
-
-      startDate.setHours(
-        0,
-        0,
-        0,
-        0
-      );
-
-
-      const endDate =
-        new Date(
-          saving.endDate
-        );
-
-      endDate.setHours(
-        0,
-        0,
-        0,
-        0
-      );
-
-
-      // ==========================================
-      // ACTUAL PENDING DAYS
-      // ==========================================
-
-      let actualPendingDays = 0;
-
-      let current =
-        new Date(
-          startDate
-        );
-
-
-      while (
-        current <= today &&
-        current <= endDate
+      for (
+        const transaction of transactions
       ) {
 
-        if (
-          !paidDates.has(
-            current.getTime()
-          )
-        ) {
+        const paidDate =
+          transaction.paymentForDate ||
+          transaction.collectionDate;
 
-          actualPendingDays++;
 
+        if (!paidDate) {
+          continue;
         }
 
 
-        current.setDate(
-          current.getDate() + 1
-        );
+        // IMPORTANT:
+        // Always convert to IST calendar date
 
+        const paidDateKey =
+          getISTDateKey(
+            paidDate
+          );
+
+
+        paidDates.add(
+          paidDateKey
+        );
       }
 
 
-      // ==========================================
-      // UPDATE COUNTERS
-      // ==========================================
+      // =====================================================
+      // CALCULATE ACTUAL PENDING DAYS
+      //
+      // SAME LOGIC AS getPendingDays
+      // =====================================================
+
+      let pendingDays = 0;
+
+      let currentKey =
+        startKey;
+
+
+      while (
+        currentKey <= endKey &&
+        currentKey <= todayKey
+      ) {
+
+        // -----------------------------------------------
+        // IF THIS DAY IS ALREADY PAID
+        // -----------------------------------------------
+
+        if (
+          paidDates.has(
+            currentKey
+          )
+        ) {
+
+          currentKey =
+            addDaysToDateKey(
+              currentKey,
+              1
+            );
+
+          continue;
+        }
+
+
+        // -----------------------------------------------
+        // THIS DAY IS PENDING
+        // -----------------------------------------------
+
+        pendingDays++;
+
+
+        currentKey =
+          addDaysToDateKey(
+            currentKey,
+            1
+          );
+      }
+
+
+      // =====================================================
+      // UPDATE DISPLAY VALUES
+      // =====================================================
 
       saving.completedDays =
         paidDates.size;
 
+
       saving.totalDaysPaid =
         paidDates.size;
 
+
       saving.pendingDays =
-        actualPendingDays;
+        pendingDays;
 
 
-      // ==========================================
+      // =====================================================
       // PENDING AMOUNT
-      // ==========================================
+      // =====================================================
 
       if (
         saving.collectionType ===
@@ -1102,28 +1125,33 @@ exports.getCollectionMembers = async (req, res) => {
       ) {
 
         saving.pendingAmount =
-          actualPendingDays *
+          pendingDays *
           Number(
             saving.fixedAmount || 0
           );
 
       } else {
 
-        saving.pendingAmount = 0;
+        // FLEXIBLE amount varies by collection,
+        // so don't calculate a fixed pending amount here.
 
+        saving.pendingAmount = 0;
       }
 
 
-      // ==========================================
-      // SAVE ONCE
-      // ==========================================
+      // =====================================================
+      // SAVE CORRECTED COUNTERS
+      // =====================================================
 
       await saving.save();
-
     }
 
 
-    res.json({
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    return res.status(200).json({
       success: true,
       members
     });
@@ -1137,11 +1165,10 @@ exports.getCollectionMembers = async (req, res) => {
     );
 
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: error.message
     });
-
   }
 };
 exports.getAgentCollectionMembers = async (req, res) => {
