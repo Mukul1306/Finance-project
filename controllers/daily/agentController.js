@@ -1621,9 +1621,11 @@ Object.values(monthlyHistory).sort(
     // =========================
     // TODAY
     // =========================
+const todayKey = getISTDateKey(new Date());
 
-  const todayKey =
-  getISTDateKey(new Date());
+const today = new Date(
+  `${todayKey}T00:00:00+05:30`
+);
 
 // ======================================
 // TODAY COLLECTIONS
