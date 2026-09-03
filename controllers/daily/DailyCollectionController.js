@@ -289,19 +289,42 @@ exports.getPendingDays = async (req, res) => {
       // ADD PENDING DAY
       // -----------------------------------------------
 
-      pendingDays.push({
+     // ===============================================
+// EMI / INSTALLMENT NUMBER
+// ===============================================
 
-        date:
-          `${currentKey}T00:00:00+05:30`,
+// Calculate EMI number from saving start date
+const installmentNo =
+  Math.floor(
+    (
+      istDateKeyToDate(currentKey) -
+      istDateKeyToDate(startKey)
+    ) /
+    (1000 * 60 * 60 * 24)
+  ) + 1;
 
-        dailyAmount,
 
-        penalty,
+// ===============================================
+// ADD PENDING DAY
+// ===============================================
 
-        total:
-          dailyAmount +
-          penalty
-      });
+pendingDays.push({
+
+  // EMI number
+  installmentNo,
+
+  // Saving date
+  date:
+    `${currentKey}T00:00:00+05:30`,
+
+  dailyAmount,
+
+  penalty,
+
+  total:
+    dailyAmount +
+    penalty
+});
 
 
       currentKey =
