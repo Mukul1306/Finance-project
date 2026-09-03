@@ -3,6 +3,8 @@ const DailyMember = require("../../models/daily/DailyMember");
 const DailyTransaction = require("../../models/daily/DailyTransaction");
 const DailyAgent = require("../../models/daily/Agent");
 const AreaGroup = require("../../models/daily/AreaGroup");
+const DailyLoan = require("../../models/daily/DailyLoan");
+const LoanCollection = require("../../models/daily/LoanCollection");
 // =====================================================
 // IST DATE HELPERS
 // =====================================================
@@ -1581,4 +1583,726 @@ exports.getAgentMonthlyCollection = async (req, res) => {
 
   }
 
+};
+
+// ============================================================
+// UNIFIED AGENT COLLECTION
+// Returns members with BOTH savings and loans
+// ============================================================
+
+exports.getUnifiedAgentCollection = async (req, res) => {
+  try {
+    const { agentId } = req.params;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required."
+      });
+    }
+
+    // ==========================================================
+    // 1. GET AGENT SAVINGS
+    // ==========================================================
+
+    const savings = await DailySaving.find({
+      assignedAgent: agentId,
+      status: "ACTIVE"
+    })
+      .populate(
+        "member",
+        "memberId memberName mobile fatherName"
+      )
+      .populate(
+        "areaGroup",
+        "areaName"
+      )
+      .lean();
+
+    // ==========================================================
+    // 2. GET AGENT LOANS
+    // ==========================================================
+
+    const loans = await DailyLoan.find({
+      assignedAgent: agentId,
+      status: "ACTIVE"
+    })
+      .populate(
+        "member",
+        "memberId memberName mobile fatherName"
+      )
+      .lean();
+
+    // ==========================================================
+    // 3. GET SAVING TRANSACTIONS IN ONE QUERY
+    // ==========================================================
+
+    const savingIds = savings.map(
+      saving => saving._id
+    );
+
+    let savingTransactions = [];
+
+    if (savingIds.length > 0) {
+      savingTransactions =
+        await DailyTransaction.find({
+          savingAccount: {
+            $in: savingIds
+          }
+        })
+          .select(
+            "savingAccount paymentForDate collectionDate totalAmount"
+          )
+          .lean();
+    }
+
+    // ==========================================================
+    // 4. GROUP SAVING TRANSACTIONS
+    // ==========================================================
+
+    const transactionsBySaving = new Map();
+
+    for (const transaction of savingTransactions) {
+
+      const savingId =
+        transaction.savingAccount.toString();
+
+      if (
+        !transactionsBySaving.has(savingId)
+      ) {
+        transactionsBySaving.set(
+          savingId,
+          []
+        );
+      }
+
+      transactionsBySaving
+        .get(savingId)
+        .push(transaction);
+    }
+
+    // ==========================================================
+    // 5. GET LOAN COLLECTIONS IN ONE QUERY
+    // ==========================================================
+
+    const loanIds = loans.map(
+      loan => loan._id
+    );
+
+    let loanCollections = [];
+
+    if (loanIds.length > 0) {
+
+      loanCollections =
+        await LoanCollection.find({
+          loan: {
+            $in: loanIds
+          }
+        })
+          .select(
+            "loan installmentNo collectionDate totalAmount penalty amount"
+          )
+          .lean();
+    }
+
+    // ==========================================================
+    // 6. GROUP LOAN COLLECTIONS
+    // ==========================================================
+
+    const collectionsByLoan = new Map();
+
+    for (const collection of loanCollections) {
+
+      const loanId =
+        collection.loan.toString();
+
+      if (
+        !collectionsByLoan.has(loanId)
+      ) {
+        collectionsByLoan.set(
+          loanId,
+          []
+        );
+      }
+
+      collectionsByLoan
+        .get(loanId)
+        .push(collection);
+    }
+
+    // ==========================================================
+    // 7. TODAY
+    // ==========================================================
+
+    const todayKey =
+      getISTDateKey(new Date());
+
+    // ==========================================================
+    // 8. PROCESS SAVINGS
+    // ==========================================================
+
+    const processedSavings =
+      savings.map((saving) => {
+
+        const savingTransactions =
+          transactionsBySaving.get(
+            saving._id.toString()
+          ) || [];
+
+        const paidDates =
+          new Set();
+
+        for (
+          const transaction of savingTransactions
+        ) {
+
+          const paymentDate =
+            transaction.paymentForDate ||
+            transaction.collectionDate;
+
+          if (!paymentDate) {
+            continue;
+          }
+
+          paidDates.add(
+            getISTDateKey(paymentDate)
+          );
+        }
+
+        const startKey =
+          getISTDateKey(
+            saving.startDate
+          );
+
+        const endKey =
+          getISTDateKey(
+            saving.endDate
+          );
+
+        let pendingDays = 0;
+
+        let currentKey =
+          startKey;
+
+        while (
+          currentKey <= endKey &&
+          currentKey <= todayKey
+        ) {
+
+          if (
+            !paidDates.has(currentKey)
+          ) {
+
+            pendingDays++;
+          }
+
+          currentKey =
+            addDaysToDateKey(
+              currentKey,
+              1
+            );
+        }
+
+        let pendingAmount = 0;
+
+        if (
+          saving.collectionType ===
+          "FIXED"
+        ) {
+
+          pendingAmount =
+            pendingDays *
+            Number(
+              saving.fixedAmount || 0
+            );
+
+        } else {
+
+          pendingAmount =
+            Number(
+              saving.pendingAmount || 0
+            );
+        }
+
+        const todayCollected =
+          savingTransactions
+            .filter(transaction => {
+
+              const date =
+                transaction.paymentForDate ||
+                transaction.collectionDate;
+
+              return (
+                date &&
+                getISTDateKey(date) ===
+                  todayKey
+              );
+
+            })
+            .reduce(
+              (sum, transaction) =>
+                sum +
+                Number(
+                  transaction.totalAmount || 0
+                ),
+              0
+            );
+
+        return {
+
+          savingId:
+            saving._id,
+
+          collectionType:
+            saving.collectionType,
+
+          fixedAmount:
+            Number(
+              saving.fixedAmount || 0
+            ),
+
+          pendingDays,
+
+          pendingAmount,
+
+          todayCollected,
+
+          startDate:
+            saving.startDate,
+
+          endDate:
+            saving.endDate,
+
+          completedDays:
+            paidDates.size,
+
+          member:
+            saving.member,
+
+          areaGroup:
+            saving.areaGroup
+        };
+      });
+
+    // ==========================================================
+    // 9. PROCESS LOANS
+    // ==========================================================
+
+    const processedLoans =
+      loans.map((loan) => {
+
+        const collections =
+          collectionsByLoan.get(
+            loan._id.toString()
+          ) || [];
+
+        const paidInstallments =
+          new Set();
+
+        for (
+          const collection of collections
+        ) {
+
+          if (
+            collection.installmentNo
+          ) {
+
+            paidInstallments.add(
+              Number(
+                collection.installmentNo
+              )
+            );
+          }
+        }
+
+        let totalInstallments = 0;
+
+        if (
+          loan.loanType === "DAILY"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.durationDays || 0
+            );
+
+        } else if (
+          loan.loanType === "WEEKLY"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.durationWeeks || 0
+            );
+
+        } else if (
+          loan.loanType === "MONTHLY"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.durationMonths || 0
+            );
+        }
+
+        const pendingInstallments =
+          Math.max(
+            0,
+            totalInstallments -
+              paidInstallments.size
+          );
+
+        // ------------------------------------------
+        // FIND NEXT PENDING INSTALLMENT
+        // ------------------------------------------
+
+        let nextInstallment = null;
+
+        for (
+          let i = 1;
+          i <= totalInstallments;
+          i++
+        ) {
+
+          if (
+            paidInstallments.has(i)
+          ) {
+            continue;
+          }
+
+          let dueDate =
+            new Date(
+              loan.loanDate
+            );
+
+          if (
+            loan.loanType ===
+            "DAILY"
+          ) {
+
+            dueDate.setDate(
+              dueDate.getDate() +
+                (i - 1)
+            );
+
+          } else if (
+            loan.loanType ===
+            "WEEKLY"
+          ) {
+
+            dueDate.setDate(
+              dueDate.getDate() +
+                ((i - 1) * 7)
+            );
+
+          } else if (
+            loan.loanType ===
+            "MONTHLY"
+          ) {
+
+            dueDate.setMonth(
+              dueDate.getMonth() +
+                (i - 1)
+            );
+          }
+
+          dueDate.setHours(
+            0,
+            0,
+            0,
+            0
+          );
+
+          const today =
+            new Date();
+
+          today.setHours(
+            0,
+            0,
+            0,
+            0
+          );
+
+          let delay = 0;
+
+          if (
+            today > dueDate
+          ) {
+
+            if (
+              loan.loanType ===
+              "DAILY"
+            ) {
+
+              delay =
+                Math.floor(
+                  (today - dueDate) /
+                  (
+                    1000 *
+                    60 *
+                    60 *
+                    24
+                  )
+                );
+
+            } else if (
+              loan.loanType ===
+              "WEEKLY"
+            ) {
+
+              delay =
+                Math.floor(
+                  (today - dueDate) /
+                  (
+                    1000 *
+                    60 *
+                    60 *
+                    24 *
+                    7
+                  )
+                );
+
+            } else {
+
+              delay =
+                (
+                  today.getFullYear() -
+                  dueDate.getFullYear()
+                ) * 12 +
+                (
+                  today.getMonth() -
+                  dueDate.getMonth()
+                );
+            }
+          }
+
+          // ----------------------------------------
+          // PENALTY
+          // ----------------------------------------
+
+          let penalty = 0;
+
+          if (
+            delay >
+            Number(
+              loan.gracePeriod || 0
+            )
+          ) {
+
+            const chargeable =
+              delay -
+              Number(
+                loan.gracePeriod || 0
+              );
+
+            if (
+              loan.penaltyType ===
+              "PERCENTAGE"
+            ) {
+
+              penalty =
+                Math.round(
+                  (
+                    Number(
+                      loan.emiAmount || 0
+                    ) *
+                    Number(
+                      loan.penaltyValue || 0
+                    )
+                  ) / 100
+                ) *
+                chargeable;
+
+            } else {
+
+              penalty =
+                Number(
+                  loan.penaltyValue || 0
+                ) *
+                chargeable;
+            }
+          }
+
+          nextInstallment = {
+
+            installmentNo: i,
+
+            dueDate,
+
+            emiAmount:
+              Number(
+                loan.emiAmount || 0
+              ),
+
+            delay,
+
+            penalty,
+
+            totalAmount:
+              Number(
+                loan.emiAmount || 0
+              ) +
+              penalty
+          };
+
+          break;
+        }
+
+        return {
+
+          loanId:
+            loan._id,
+
+          loanNumber:
+            loan.loanNumber,
+
+          loanType:
+            loan.loanType,
+
+          loanAmount:
+            Number(
+              loan.loanAmount || 0
+            ),
+
+          emiAmount:
+            Number(
+              loan.emiAmount || 0
+            ),
+
+          totalPayable:
+            Number(
+              loan.totalPayable || 0
+            ),
+
+          pendingInstallments,
+
+          completedInstallments:
+            paidInstallments.size,
+
+          nextInstallment,
+
+          member:
+            loan.member
+        };
+      });
+
+    // ==========================================================
+    // 10. GROUP EVERYTHING BY MEMBER
+    // ==========================================================
+
+    const memberMap =
+      new Map();
+
+    // ------------------------------------------
+    // ADD SAVINGS
+    // ------------------------------------------
+
+    for (
+      const saving of processedSavings
+    ) {
+
+      if (!saving.member) {
+        continue;
+      }
+
+      const memberId =
+        saving.member._id.toString();
+
+      if (
+        !memberMap.has(memberId)
+      ) {
+
+        memberMap.set(
+          memberId,
+          {
+            member:
+              saving.member,
+
+            savings: [],
+
+            loans: []
+          }
+        );
+      }
+
+      memberMap
+        .get(memberId)
+        .savings
+        .push(saving);
+    }
+
+    // ------------------------------------------
+    // ADD LOANS
+    // ------------------------------------------
+
+    for (
+      const loan of processedLoans
+    ) {
+
+      if (!loan.member) {
+        continue;
+      }
+
+      const memberId =
+        loan.member._id.toString();
+
+      if (
+        !memberMap.has(memberId)
+      ) {
+
+        memberMap.set(
+          memberId,
+          {
+            member:
+              loan.member,
+
+            savings: [],
+
+            loans: []
+          }
+        );
+      }
+
+      memberMap
+        .get(memberId)
+        .loans
+        .push(loan);
+    }
+
+    // ==========================================================
+    // 11. FINAL RESPONSE
+    // ==========================================================
+
+    const members =
+      Array.from(
+        memberMap.values()
+      );
+
+    return res.status(200).json({
+
+      success: true,
+
+      count:
+        members.length,
+
+      members
+
+    });
+
+  } catch (error) {
+
+    console.error(
+      "UNIFIED AGENT COLLECTION ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        error.message
+
+    });
+  }
 };

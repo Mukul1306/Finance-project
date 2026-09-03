@@ -20,16 +20,17 @@ adminSummary,
 );
 
 const {
-
-getPendingDays,
-collectPendingPayment,
-getMemberSaving,
-getCollectionMembers,
-getAgentCollectionMembers,
-getCollectionSummary,
-getAgentMonthlyCollection
-
-} = require("../../controllers/daily/DailyCollectionController");
+  getPendingDays,
+  collectPendingPayment,
+  getMemberSaving,
+  getCollectionMembers,
+  getAgentCollectionMembers,
+  getCollectionSummary,
+  getAgentMonthlyCollection,
+  getUnifiedAgentCollection
+} = require(
+  "../../controllers/daily/DailyCollectionController"
+);
 
 
 router.post(
@@ -101,6 +102,16 @@ getAgentCollectionMembers
 router.get(
   "/collection-summary",
   getCollectionSummary
+);
+
+// ==================================================
+// UNIFIED AGENT COLLECTION
+// SAVINGS + LOANS GROUPED BY MEMBER
+// ==================================================
+
+router.get(
+  "/unified-agent-collection/:agentId",
+  getUnifiedAgentCollection
 );
 
 module.exports =
