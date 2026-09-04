@@ -1585,28 +1585,7 @@ exports.getAgentMonthlyCollection = async (req, res) => {
 
 };
 
-// ============================================================
-// UNIFIED AGENT COLLECTION
-// Returns members with BOTH savings and loans
-// ============================================================
 
-// ============================================================
-// UNIFIED AGENT COLLECTION - PRODUCTION VERSION
-// Returns:
-// 1. All active savings
-// 2. ALL pending saving days
-// 3. All active loans
-// 4. ALL pending loan EMIs
-// 5. Loan amount / outstanding / EMI
-// 6. Groups everything by member
-//
-// IMPORTANT:
-// - One query for savings
-// - One query for saving transactions
-// - One query for loans
-// - One query for loan collections
-// - NO DB query inside loops
-// ============================================================
 
 exports.getUnifiedAgentCollection = async (req, res) => {
   try {
@@ -2117,106 +2096,125 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             );
         }
 
-        // ------------------------------------------
-        // DUE INSTALLMENTS TILL TODAY
-        // ------------------------------------------
+       // ------------------------------------------
+// DUE INSTALLMENTS TILL TODAY
+// IMPORTANT: TODAY IS INCLUDED
+// ------------------------------------------
 
-        const loanDate =
-          new Date(
-            loan.loanDate
-          );
+const todayKey = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+}).format(new Date());
 
-        loanDate.setHours(
-          0,
-          0,
-          0,
-          0
-        );
+const loanDateKey = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit"
+}).format(new Date(loan.loanDate));
 
-        let dueTillToday =
-          totalInstallments;
+const todayDate = new Date(
+  `${todayKey}T00:00:00.000Z`
+);
 
-        if (
-          loan.loanType === "DAILY"
-        ) {
+const loanDate = new Date(
+  `${loanDateKey}T00:00:00.000Z`
+);
 
-          dueTillToday =
-            Math.floor(
-              (
-                todayDate -
-                loanDate
-              ) /
-              (
-                1000 *
-                60 *
-                60 *
-                24
-              )
-            ) + 1;
+const MS_PER_DAY =
+  1000 * 60 * 60 * 24;
 
-        } else if (
-          loan.loanType === "WEEKLY"
-        ) {
+let dueTillToday = 0;
 
-          dueTillToday =
-            Math.floor(
-              (
-                todayDate -
-                loanDate
-              ) /
-              (
-                1000 *
-                60 *
-                60 *
-                24 *
-                7
-              )
-            ) + 1;
+if (todayDate < loanDate) {
 
-        } else if (
-          loan.loanType === "MONTHLY" ||
-          loan.loanType === "FIXED"
-        ) {
+  dueTillToday = 0;
 
-          const monthDiff =
-            (
-              todayDate.getFullYear() -
-              loanDate.getFullYear()
-            ) * 12 +
-            (
-              todayDate.getMonth() -
-              loanDate.getMonth()
-            );
+} else if (loan.loanType === "DAILY") {
 
-          if (
-            monthDiff <= 0
-          ) {
+  // Example:
+  // Loan date = 03 Sep
+  // Today     = 04 Sep
+  //
+  // Difference = 1 day
+  // + 1        = 2 EMIs
+  //
+  // #1 = 03 Sep
+  // #2 = 04 Sep TODAY
 
-            dueTillToday = 0;
+  const daysSinceStart =
+    Math.floor(
+      (
+        todayDate.getTime() -
+        loanDate.getTime()
+      ) / MS_PER_DAY
+    );
 
-          } else if (
-            todayDate.getDate() >=
-            loanDate.getDate()
-          ) {
+  dueTillToday =
+    daysSinceStart + 1;
 
-            dueTillToday =
-              monthDiff;
+} else if (loan.loanType === "WEEKLY") {
 
-          } else {
+  const daysSinceStart =
+    Math.floor(
+      (
+        todayDate.getTime() -
+        loanDate.getTime()
+      ) / MS_PER_DAY
+    );
 
-            dueTillToday =
-              monthDiff - 1;
-          }
-        }
+  dueTillToday =
+    Math.floor(
+      daysSinceStart / 7
+    ) + 1;
 
-        dueTillToday =
-          Math.max(
-            0,
-            Math.min(
-              dueTillToday,
-              totalInstallments
-            )
-          );
+} else if (
+  loan.loanType === "MONTHLY" ||
+  loan.loanType === "FIXED"
+) {
+
+  const monthDiff =
+    (
+      todayDate.getUTCFullYear() -
+      loanDate.getUTCFullYear()
+    ) * 12 +
+    (
+      todayDate.getUTCMonth() -
+      loanDate.getUTCMonth()
+    );
+
+  if (
+    todayDate.getUTCDate() >=
+    loanDate.getUTCDate()
+  ) {
+
+    // IMPORTANT:
+    // Include the current month's EMI.
+    dueTillToday =
+      monthDiff + 1;
+
+  } else {
+
+    dueTillToday =
+      monthDiff;
+  }
+}
+
+
+// ------------------------------------------
+// NEVER EXCEED TOTAL LOAN TENURE
+// ------------------------------------------
+
+dueTillToday =
+  Math.max(
+    0,
+    Math.min(
+      dueTillToday,
+      totalInstallments
+    )
+  );
 
         // ------------------------------------------
         // ALL PENDING INSTALLMENTS
@@ -2241,52 +2239,49 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           // DUE DATE
           // ----------------------------------------
 
-          const dueDate =
-            new Date(
-              loan.loanDate
-            );
+  // ----------------------------------------
+// DUE DATE
+// ----------------------------------------
 
-          if (
-            loan.loanType ===
-            "DAILY"
-          ) {
+const dueDate =
+  new Date(loanDate);
 
-            dueDate.setDate(
-              dueDate.getDate() +
-              (i - 1)
-            );
 
-          } else if (
-            loan.loanType ===
-            "WEEKLY"
-          ) {
+if (
+  loan.loanType === "DAILY"
+) {
 
-            dueDate.setDate(
-              dueDate.getDate() +
-              (
-                (i - 1) * 7
-              )
-            );
+  dueDate.setUTCDate(
+    dueDate.getUTCDate() +
+    (i - 1)
+  );
 
-          } else if (
-            loan.loanType ===
-            "MONTHLY" ||
-            loan.loanType ===
-            "FIXED"
-          ) {
+} else if (
+  loan.loanType === "WEEKLY"
+) {
 
-            dueDate.setMonth(
-              dueDate.getMonth() +
-              (i - 1)
-            );
-          }
+  dueDate.setUTCDate(
+    dueDate.getUTCDate() +
+    ((i - 1) * 7)
+  );
 
-          dueDate.setHours(
-            0,
-            0,
-            0,
-            0
-          );
+} else if (
+  loan.loanType === "MONTHLY" ||
+  loan.loanType === "FIXED"
+) {
+
+  dueDate.setUTCMonth(
+    dueDate.getUTCMonth() +
+    (i - 1)
+  );
+}
+
+dueDate.setUTCHours(
+  0,
+  0,
+  0,
+  0
+);
 
           // ----------------------------------------
           // DELAY
