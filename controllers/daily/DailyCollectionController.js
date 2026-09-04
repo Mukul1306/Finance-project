@@ -1589,8 +1589,11 @@ exports.getAgentMonthlyCollection = async (req, res) => {
 
 exports.getUnifiedAgentCollection = async (req, res) => {
   try {
-
     const { agentId } = req.params;
+
+    // ==========================================================
+    // VALIDATE AGENT
+    // ==========================================================
 
     if (!agentId) {
       return res.status(400).json({
@@ -1598,6 +1601,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
         message: "Agent ID is required."
       });
     }
+
 
     // ==========================================================
     // 1. GET ACTIVE SAVINGS
@@ -1617,6 +1621,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       )
       .lean();
 
+
     // ==========================================================
     // 2. GET ACTIVE LOANS
     // ==========================================================
@@ -1631,18 +1636,18 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       )
       .lean();
 
+
     // ==========================================================
-    // 3. GET ALL SAVING TRANSACTIONS - ONE QUERY
+    // 3. GET SAVING TRANSACTIONS - ONE QUERY
     // ==========================================================
 
     const savingIds = savings.map(
-      saving => saving._id
+      (saving) => saving._id
     );
 
     let savingTransactions = [];
 
     if (savingIds.length > 0) {
-
       savingTransactions =
         await DailyTransaction.find({
           savingAccount: {
@@ -1655,19 +1660,26 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           .lean();
     }
 
+
     // ==========================================================
     // 4. GROUP SAVING TRANSACTIONS
     // ==========================================================
 
-    const transactionsBySaving = new Map();
+    const transactionsBySaving =
+      new Map();
 
-    for (const transaction of savingTransactions) {
-
+    for (
+      const transaction
+      of savingTransactions
+    ) {
       const savingId =
         transaction.savingAccount.toString();
 
-      if (!transactionsBySaving.has(savingId)) {
-
+      if (
+        !transactionsBySaving.has(
+          savingId
+        )
+      ) {
         transactionsBySaving.set(
           savingId,
           []
@@ -1679,18 +1691,18 @@ exports.getUnifiedAgentCollection = async (req, res) => {
         .push(transaction);
     }
 
+
     // ==========================================================
-    // 5. GET ALL LOAN COLLECTIONS - ONE QUERY
+    // 5. GET LOAN COLLECTIONS - ONE QUERY
     // ==========================================================
 
     const loanIds = loans.map(
-      loan => loan._id
+      (loan) => loan._id
     );
 
     let loanCollections = [];
 
     if (loanIds.length > 0) {
-
       loanCollections =
         await LoanCollection.find({
           loan: {
@@ -1703,19 +1715,26 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           .lean();
     }
 
+
     // ==========================================================
     // 6. GROUP LOAN COLLECTIONS
     // ==========================================================
 
-    const collectionsByLoan = new Map();
+    const collectionsByLoan =
+      new Map();
 
-    for (const collection of loanCollections) {
-
+    for (
+      const collection
+      of loanCollections
+    ) {
       const loanId =
         collection.loan.toString();
 
-      if (!collectionsByLoan.has(loanId)) {
-
+      if (
+        !collectionsByLoan.has(
+          loanId
+        )
+      ) {
         collectionsByLoan.set(
           loanId,
           []
@@ -1727,615 +1746,688 @@ exports.getUnifiedAgentCollection = async (req, res) => {
         .push(collection);
     }
 
+
     // ==========================================================
-    // 7. TODAY IN IST
+    // 7. TODAY IN INDIA TIME
     // ==========================================================
 
     const todayKey =
-      getISTDateKey(new Date());
+      getISTDateKey(
+        new Date()
+      );
 
     const todayDate =
-      istDateKeyToDate(todayKey);
+      istDateKeyToDate(
+        todayKey
+      );
+
 
     // ==========================================================
     // 8. PROCESS SAVINGS
     // ==========================================================
 
     const processedSavings =
-      savings.map((saving) => {
+      savings.map(
+        (saving) => {
 
-        const savingTransactions =
-          transactionsBySaving.get(
-            saving._id.toString()
-          ) || [];
+          const savingTransactions =
+            transactionsBySaving.get(
+              saving._id.toString()
+            ) || [];
 
-        // ------------------------------------------
-        // PAID DATE SET
-        // ------------------------------------------
 
-        const paidDates = new Set();
+          // ====================================================
+          // PAID DATES
+          // ====================================================
 
-        for (
-          const transaction of savingTransactions
-        ) {
+          const paidDates =
+            new Set();
 
-          const paymentDate =
-            transaction.paymentForDate ||
-            transaction.collectionDate;
+          for (
+            const transaction
+            of savingTransactions
+          ) {
+            const paymentDate =
+              transaction.paymentForDate ||
+              transaction.collectionDate;
 
-          if (!paymentDate) {
-            continue;
+            if (!paymentDate) {
+              continue;
+            }
+
+            paidDates.add(
+              getISTDateKey(
+                paymentDate
+              )
+            );
           }
 
-          paidDates.add(
-            getISTDateKey(paymentDate)
-          );
-        }
 
-        // ------------------------------------------
-        // START / END
-        // ------------------------------------------
+          // ====================================================
+          // START / END DATE
+          // ====================================================
 
-        const startKey =
-          getISTDateKey(
-            saving.startDate
-          );
+          const startKey =
+            getISTDateKey(
+              saving.startDate
+            );
 
-        const endKey =
-          getISTDateKey(
-            saving.endDate
-          );
+          const endKey =
+            getISTDateKey(
+              saving.endDate
+            );
 
-        // ------------------------------------------
-        // ALL PENDING DAYS
-        // ------------------------------------------
 
-        const pendingPayments = [];
+          // ====================================================
+          // PENDING PAYMENTS
+          // TODAY IS INCLUDED
+          // ====================================================
 
-        let currentKey = startKey;
+          const pendingPayments =
+            [];
 
-        while (
-          currentKey <= endKey &&
-          currentKey <= todayKey
-        ) {
+          let currentKey =
+            startKey;
 
-          // Already paid
-          if (
-            paidDates.has(currentKey)
+          while (
+            currentKey <= endKey &&
+            currentKey <= todayKey
           ) {
+
+            // Already collected
+            if (
+              paidDates.has(
+                currentKey
+              )
+            ) {
+              currentKey =
+                addDaysToDateKey(
+                  currentKey,
+                  1
+                );
+
+              continue;
+            }
+
+
+            // ==================================================
+            // PENALTY
+            // ==================================================
+
+            const currentDate =
+              istDateKeyToDate(
+                currentKey
+              );
+
+            const diffDays =
+              Math.floor(
+                (
+                  todayDate -
+                  currentDate
+                ) /
+                (
+                  1000 *
+                  60 *
+                  60 *
+                  24
+                )
+              );
+
+            let penalty = 0;
+
+            if (
+              diffDays >
+              Number(
+                saving.graceDays || 0
+              )
+            ) {
+
+              if (
+                saving.penaltyType ===
+                "FIXED"
+              ) {
+
+                penalty =
+                  Number(
+                    saving.penaltyValue || 0
+                  );
+
+              } else {
+
+                const dailyAmount =
+                  Number(
+                    saving.fixedAmount || 0
+                  );
+
+                penalty =
+                  Math.round(
+                    dailyAmount *
+                    Number(
+                      saving.penaltyValue || 0
+                    ) /
+                    100
+                  );
+              }
+            }
+
+
+            // ==================================================
+            // DAILY AMOUNT
+            // ==================================================
+
+            const dailyAmount =
+              saving.collectionType ===
+              "FIXED"
+                ? Number(
+                    saving.fixedAmount || 0
+                  )
+                : 0;
+
+
+            // ==================================================
+            // INSTALLMENT / DAY NUMBER
+            // ==================================================
+
+            const installmentNo =
+              Math.floor(
+                (
+                  istDateKeyToDate(
+                    currentKey
+                  ) -
+                  istDateKeyToDate(
+                    startKey
+                  )
+                ) /
+                (
+                  1000 *
+                  60 *
+                  60 *
+                  24
+                )
+              ) + 1;
+
+
+            // ==================================================
+            // ADD PENDING DAY
+            // ==================================================
+
+            pendingPayments.push({
+
+              installmentNo,
+
+              date:
+                `${currentKey}T00:00:00+05:30`,
+
+              dailyAmount,
+
+              penalty,
+
+              total:
+                dailyAmount +
+                penalty,
+
+              isToday:
+                currentKey ===
+                todayKey
+            });
+
 
             currentKey =
               addDaysToDateKey(
                 currentKey,
                 1
               );
-
-            continue;
           }
 
-          // ----------------------------------------
-          // PENALTY
-          // ----------------------------------------
 
-          const currentDate =
-            istDateKeyToDate(
-              currentKey
-            );
+          // ====================================================
+          // TODAY'S COLLECTION
+          // ====================================================
 
-          const diffDays =
-            Math.floor(
-              (
-                todayDate -
-                currentDate
-              ) /
-              (
-                1000 *
-                60 *
-                60 *
-                24
+          const todayCollected =
+            savingTransactions
+              .filter(
+                (transaction) => {
+
+                  const date =
+                    transaction.paymentForDate ||
+                    transaction.collectionDate;
+
+                  return (
+                    date &&
+                    getISTDateKey(
+                      date
+                    ) === todayKey
+                  );
+                }
               )
-            );
-
-          let penalty = 0;
-
-          if (
-            diffDays >
-            Number(
-              saving.graceDays || 0
-            )
-          ) {
-
-            if (
-              saving.penaltyType ===
-              "FIXED"
-            ) {
-
-              penalty =
-                Number(
-                  saving.penaltyValue || 0
-                );
-
-            } else {
-
-              const dailyAmount =
-                Number(
-                  saving.fixedAmount || 0
-                );
-
-              penalty =
-                Math.round(
-                  dailyAmount *
+              .reduce(
+                (
+                  sum,
+                  transaction
+                ) =>
+                  sum +
                   Number(
-                    saving.penaltyValue || 0
-                  ) /
-                  100
-                );
-            }
-          }
-
-          // ----------------------------------------
-          // DAILY AMOUNT
-          // ----------------------------------------
-
-          const dailyAmount =
-            saving.collectionType === "FIXED"
-              ? Number(
-                  saving.fixedAmount || 0
-                )
-              : 0;
-
-          // ----------------------------------------
-          // EMI NUMBER
-          // ----------------------------------------
-
-          const installmentNo =
-            Math.floor(
-              (
-                istDateKeyToDate(currentKey) -
-                istDateKeyToDate(startKey)
-              ) /
-              (
-                1000 *
-                60 *
-                60 *
-                24
-              )
-            ) + 1;
-
-          // ----------------------------------------
-          // ADD PENDING PAYMENT
-          // ----------------------------------------
-
-          pendingPayments.push({
-
-            installmentNo,
-
-            date:
-              `${currentKey}T00:00:00+05:30`,
-
-            dailyAmount,
-
-            penalty,
-
-            total:
-              dailyAmount +
-              penalty
-          });
-
-          currentKey =
-            addDaysToDateKey(
-              currentKey,
-              1
-            );
-        }
-
-        // ------------------------------------------
-        // TODAY COLLECTION
-        // ------------------------------------------
-
-        const todayCollected =
-          savingTransactions
-            .filter(transaction => {
-
-              const date =
-                transaction.paymentForDate ||
-                transaction.collectionDate;
-
-              return (
-                date &&
-                getISTDateKey(date) ===
-                  todayKey
+                    transaction.totalAmount || 0
+                  ),
+                0
               );
-            })
-            .reduce(
-              (
-                sum,
-                transaction
-              ) =>
-                sum +
-                Number(
-                  transaction.totalAmount || 0
-                ),
-              0
-            );
 
-        // ------------------------------------------
-        // RESPONSE
-        // ------------------------------------------
 
-        return {
+          // ====================================================
+          // RETURN SAVING
+          // ====================================================
 
-          savingId:
-            saving._id,
+          return {
 
-          collectionType:
-            saving.collectionType,
+            savingId:
+              saving._id,
 
-          fixedAmount:
-            Number(
-              saving.fixedAmount || 0
-            ),
+            collectionType:
+              saving.collectionType,
 
-          startDate:
-            saving.startDate,
+            fixedAmount:
+              Number(
+                saving.fixedAmount || 0
+              ),
 
-          endDate:
-            saving.endDate,
+            startDate:
+              saving.startDate,
 
-          completedDays:
-            paidDates.size,
+            endDate:
+              saving.endDate,
 
-          pendingDays:
-            pendingPayments.length,
+            completedDays:
+              paidDates.size,
 
-          pendingAmount:
-            pendingPayments.reduce(
-              (
-                sum,
-                item
-              ) =>
-                sum +
-                Number(
-                  item.total || 0
-                ),
-              0
-            ),
+            pendingDays:
+              pendingPayments.length,
 
-          todayCollected,
+            pendingAmount:
+              pendingPayments.reduce(
+                (
+                  sum,
+                  item
+                ) =>
+                  sum +
+                  Number(
+                    item.total || 0
+                  ),
+                0
+              ),
 
-          // VERY IMPORTANT
-          // Frontend can select ANY day
-          pendingPayments,
+            todayCollected,
 
-          member:
-            saving.member,
+            pendingPayments,
 
-          areaGroup:
-            saving.areaGroup
-        };
-      });
+            member:
+              saving.member,
+
+            areaGroup:
+              saving.areaGroup
+          };
+        }
+      );
+
 
     // ==========================================================
     // 9. PROCESS LOANS
     // ==========================================================
 
     const processedLoans =
-      loans.map((loan) => {
+      loans.map(
+        (loan) => {
 
-        const collections =
-          collectionsByLoan.get(
-            loan._id.toString()
-          ) || [];
+          const collections =
+            collectionsByLoan.get(
+              loan._id.toString()
+            ) || [];
 
-        // ------------------------------------------
-        // PAID INSTALLMENTS
-        // ------------------------------------------
 
-        const paidInstallments =
-          new Set();
+          // ====================================================
+          // PAID INSTALLMENTS
+          // ====================================================
 
-        for (
-          const collection of collections
-        ) {
+          const paidInstallments =
+            new Set();
 
-          if (
-            collection.installmentNo !==
-            undefined &&
-            collection.installmentNo !==
-            null
+          for (
+            const collection
+            of collections
           ) {
 
-            paidInstallments.add(
+            if (
+              collection.installmentNo !==
+                undefined &&
+              collection.installmentNo !==
+                null
+            ) {
+              paidInstallments.add(
+                Number(
+                  collection.installmentNo
+                )
+              );
+            }
+          }
+
+
+          // ====================================================
+          // TOTAL INSTALLMENTS
+          // ====================================================
+
+          let totalInstallments = 0;
+
+          if (
+            loan.loanType ===
+            "DAILY"
+          ) {
+
+            totalInstallments =
               Number(
-                collection.installmentNo
+                loan.durationDays || 0
+              );
+
+          } else if (
+            loan.loanType ===
+            "WEEKLY"
+          ) {
+
+            totalInstallments =
+              Number(
+                loan.durationWeeks || 0
+              );
+
+          } else if (
+            loan.loanType ===
+            "MONTHLY"
+          ) {
+
+            totalInstallments =
+              Number(
+                loan.durationMonths || 0
+              );
+
+          } else if (
+            loan.loanType ===
+            "FIXED"
+          ) {
+
+            totalInstallments =
+              Number(
+                loan.loanTenureMonths || 0
+              );
+          }
+
+
+          // ====================================================
+          // LOAN DATE IN IST
+          // ====================================================
+
+          const loanDateKey =
+            getISTDateKey(
+              loan.loanDate
+            );
+
+          const loanDate =
+            istDateKeyToDate(
+              loanDateKey
+            );
+
+
+          // ====================================================
+          // CALCULATE DUE INSTALLMENTS
+          //
+          // IMPORTANT:
+          // TODAY IS ALWAYS INCLUDED.
+          // ====================================================
+
+          let dueTillToday = 0;
+
+
+          // Loan hasn't started
+          if (
+            todayDate <
+            loanDate
+          ) {
+
+            dueTillToday = 0;
+
+          }
+
+
+          // ====================================================
+          // DAILY
+          // ====================================================
+
+          else if (
+            loan.loanType ===
+            "DAILY"
+          ) {
+
+            const daysSinceStart =
+              Math.floor(
+                (
+                  todayDate -
+                  loanDate
+                ) /
+                (
+                  1000 *
+                  60 *
+                  60 *
+                  24
+                )
+              );
+
+            // +1 means TODAY is included
+            dueTillToday =
+              daysSinceStart + 1;
+
+          }
+
+
+          // ====================================================
+          // WEEKLY
+          // ====================================================
+
+          else if (
+            loan.loanType ===
+            "WEEKLY"
+          ) {
+
+            const daysSinceStart =
+              Math.floor(
+                (
+                  todayDate -
+                  loanDate
+                ) /
+                (
+                  1000 *
+                  60 *
+                  60 *
+                  24
+                )
+              );
+
+            dueTillToday =
+              Math.floor(
+                daysSinceStart / 7
+              ) + 1;
+
+          }
+
+
+          // ====================================================
+          // MONTHLY
+          // ====================================================
+
+          else if (
+            loan.loanType ===
+            "MONTHLY"
+          ) {
+
+            const monthDiff =
+              (
+                todayDate.getUTCFullYear() -
+                loanDate.getUTCFullYear()
+              ) *
+                12 +
+              (
+                todayDate.getUTCMonth() -
+                loanDate.getUTCMonth()
+              );
+
+            if (
+              todayDate.getUTCDate() >=
+              loanDate.getUTCDate()
+            ) {
+
+              dueTillToday =
+                monthDiff + 1;
+
+            } else {
+
+              dueTillToday =
+                monthDiff;
+            }
+          }
+
+
+          // ====================================================
+          // FIXED
+          // ====================================================
+
+          else if (
+            loan.loanType ===
+            "FIXED"
+          ) {
+
+            const monthDiff =
+              (
+                todayDate.getUTCFullYear() -
+                loanDate.getUTCFullYear()
+              ) *
+                12 +
+              (
+                todayDate.getUTCMonth() -
+                loanDate.getUTCMonth()
+              );
+
+            if (
+              todayDate.getUTCDate() >=
+              loanDate.getUTCDate()
+            ) {
+
+              dueTillToday =
+                monthDiff + 1;
+
+            } else {
+
+              dueTillToday =
+                monthDiff;
+            }
+          }
+
+
+          // ====================================================
+          // NEVER EXCEED TENURE
+          // ====================================================
+
+          dueTillToday =
+            Math.max(
+              0,
+              Math.min(
+                dueTillToday,
+                totalInstallments
               )
             );
-          }
-        }
-
-        // ------------------------------------------
-        // TOTAL INSTALLMENTS
-        // ------------------------------------------
-
-        let totalInstallments = 0;
-
-        if (
-          loan.loanType === "DAILY"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.durationDays || 0
-            );
-
-        } else if (
-          loan.loanType === "WEEKLY"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.durationWeeks || 0
-            );
-
-        } else if (
-          loan.loanType === "MONTHLY"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.durationMonths || 0
-            );
-
-        } else if (
-          loan.loanType === "FIXED"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.loanTenureMonths || 0
-            );
-        }
-
-       // ------------------------------------------
-// DUE INSTALLMENTS TILL TODAY
-// IMPORTANT: TODAY IS INCLUDED
-// ------------------------------------------
-
-const todayKey = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Kolkata",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit"
-}).format(new Date());
-
-const loanDateKey = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Asia/Kolkata",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit"
-}).format(new Date(loan.loanDate));
-
-const todayDate = new Date(
-  `${todayKey}T00:00:00.000Z`
-);
-
-const loanDate = new Date(
-  `${loanDateKey}T00:00:00.000Z`
-);
-
-const MS_PER_DAY =
-  1000 * 60 * 60 * 24;
-
-let dueTillToday = 0;
-
-if (todayDate < loanDate) {
-
-  dueTillToday = 0;
-
-} else if (loan.loanType === "DAILY") {
-
-  // Example:
-  // Loan date = 03 Sep
-  // Today     = 04 Sep
-  //
-  // Difference = 1 day
-  // + 1        = 2 EMIs
-  //
-  // #1 = 03 Sep
-  // #2 = 04 Sep TODAY
-
-  const daysSinceStart =
-    Math.floor(
-      (
-        todayDate.getTime() -
-        loanDate.getTime()
-      ) / MS_PER_DAY
-    );
-
-  dueTillToday =
-    daysSinceStart + 1;
-
-} else if (loan.loanType === "WEEKLY") {
-
-  const daysSinceStart =
-    Math.floor(
-      (
-        todayDate.getTime() -
-        loanDate.getTime()
-      ) / MS_PER_DAY
-    );
-
-  dueTillToday =
-    Math.floor(
-      daysSinceStart / 7
-    ) + 1;
-
-} else if (
-  loan.loanType === "MONTHLY" ||
-  loan.loanType === "FIXED"
-) {
-
-  const monthDiff =
-    (
-      todayDate.getUTCFullYear() -
-      loanDate.getUTCFullYear()
-    ) * 12 +
-    (
-      todayDate.getUTCMonth() -
-      loanDate.getUTCMonth()
-    );
-
-  if (
-    todayDate.getUTCDate() >=
-    loanDate.getUTCDate()
-  ) {
-
-    // IMPORTANT:
-    // Include the current month's EMI.
-    dueTillToday =
-      monthDiff + 1;
-
-  } else {
-
-    dueTillToday =
-      monthDiff;
-  }
-}
 
 
-// ------------------------------------------
-// NEVER EXCEED TOTAL LOAN TENURE
-// ------------------------------------------
+          // ====================================================
+          // PENDING INSTALLMENTS
+          // ====================================================
 
-dueTillToday =
-  Math.max(
-    0,
-    Math.min(
-      dueTillToday,
-      totalInstallments
-    )
-  );
+          const pendingInstallments =
+            [];
 
-        // ------------------------------------------
-        // ALL PENDING INSTALLMENTS
-        // ------------------------------------------
 
-        const pendingInstallments = [];
-
-        for (
-          let i = 1;
-          i <= dueTillToday;
-          i++
-        ) {
-
-          // Already paid
-          if (
-            paidInstallments.has(i)
+          for (
+            let i = 1;
+            i <= dueTillToday;
+            i++
           ) {
-            continue;
-          }
 
-          // ----------------------------------------
-          // DUE DATE
-          // ----------------------------------------
+            // ----------------------------------------------
+            // ALREADY PAID
+            // ----------------------------------------------
 
-  // ----------------------------------------
-// DUE DATE
-// ----------------------------------------
-
-const dueDate =
-  new Date(loanDate);
+            if (
+              paidInstallments.has(i)
+            ) {
+              continue;
+            }
 
 
-if (
-  loan.loanType === "DAILY"
-) {
+            // ----------------------------------------------
+            // DUE DATE
+            // ----------------------------------------------
 
-  dueDate.setUTCDate(
-    dueDate.getUTCDate() +
-    (i - 1)
-  );
+            const dueDate =
+              new Date(
+                loanDate
+              );
 
-} else if (
-  loan.loanType === "WEEKLY"
-) {
-
-  dueDate.setUTCDate(
-    dueDate.getUTCDate() +
-    ((i - 1) * 7)
-  );
-
-} else if (
-  loan.loanType === "MONTHLY" ||
-  loan.loanType === "FIXED"
-) {
-
-  dueDate.setUTCMonth(
-    dueDate.getUTCMonth() +
-    (i - 1)
-  );
-}
-
-dueDate.setUTCHours(
-  0,
-  0,
-  0,
-  0
-);
-
-          // ----------------------------------------
-          // DELAY
-          // ----------------------------------------
-
-          let delay = 0;
-
-          if (
-            todayDate >
-            dueDate
-          ) {
 
             if (
               loan.loanType ===
               "DAILY"
             ) {
 
-              delay =
-                Math.floor(
-                  (
-                    todayDate -
-                    dueDate
-                  ) /
-                  (
-                    1000 *
-                    60 *
-                    60 *
-                    24
-                  )
-                );
+              dueDate.setUTCDate(
+                dueDate.getUTCDate() +
+                (i - 1)
+              );
 
             } else if (
               loan.loanType ===
               "WEEKLY"
             ) {
 
-              delay =
-                Math.floor(
-                  (
-                    todayDate -
-                    dueDate
-                  ) /
-                  (
-                    1000 *
-                    60 *
-                    60 *
-                    24 *
-                    7
-                  )
-                );
+              dueDate.setUTCDate(
+                dueDate.getUTCDate() +
+                (
+                  (i - 1) * 7
+                )
+              );
 
             } else {
 
-              delay =
+              dueDate.setUTCMonth(
+                dueDate.getUTCMonth() +
+                (i - 1)
+              );
+            }
+
+
+            dueDate.setUTCHours(
+              0,
+              0,
+              0,
+              0
+            );
+
+
+            // ----------------------------------------------
+            // DELAY
+            // ----------------------------------------------
+
+            let delay = 0;
+
+            if (
+              todayDate >
+              dueDate
+            ) {
+
+              const difference =
                 Math.floor(
                   (
                     todayDate -
@@ -2348,27 +2440,36 @@ dueDate.setUTCHours(
                     24
                   )
                 );
+
+              if (
+                loan.loanType ===
+                "WEEKLY"
+              ) {
+
+                delay =
+                  Math.floor(
+                    difference / 7
+                  );
+
+              } else {
+
+                delay =
+                  difference;
+              }
             }
-          }
 
-          // ----------------------------------------
-          // PENALTY
-          // ----------------------------------------
 
-          let penalty = 0;
+            // ----------------------------------------------
+            // PENALTY
+            // ----------------------------------------------
 
-          if (
-            delay >
-            Number(
-              loan.gracePeriod || 0
-            )
-          ) {
+            let penalty = 0;
 
             if (
-              loan.loanType ===
-              "DAILY" ||
-              loan.loanType ===
-              "WEEKLY"
+              delay >
+              Number(
+                loan.gracePeriod || 0
+              )
             ) {
 
               if (
@@ -2395,172 +2496,127 @@ dueDate.setUTCHours(
                     loan.penaltyValue || 0
                   );
               }
-
-            } else {
-
-              let penaltyBase =
-                Number(
-                  loan.emiAmount || 0
-                );
-
-              // FIXED loan uses monthly interest
-              if (
-                loan.loanType ===
-                "FIXED"
-              ) {
-
-                penaltyBase =
-                  Number(
-                    loan.loanTenureMonths || 0
-                  ) > 0
-
-                    ? Math.round(
-                        Number(
-                          loan.totalInterest || 0
-                        ) /
-                        Number(
-                          loan.loanTenureMonths
-                        )
-                      )
-
-                    : 0;
-              }
-
-              penalty =
-                calculateMonthlyFixedPenalty({
-                  dueDate,
-                  today: todayDate,
-                  gracePeriod:
-                    loan.gracePeriod,
-                  penaltyType:
-                    loan.penaltyType,
-                  penaltyValue:
-                    loan.penaltyValue,
-                  penaltyBase
-                });
             }
-          }
 
-          // ----------------------------------------
-          // EMI
-          // ----------------------------------------
 
-          let displayEmi =
-            Number(
-              loan.emiAmount || 0
-            );
+            // ----------------------------------------------
+            // EMI AMOUNT
+            // ----------------------------------------------
 
-          // FIXED = monthly interest
-          if (
-            loan.loanType ===
-            "FIXED"
-          ) {
-
-            displayEmi =
+            const emiAmount =
               Number(
-                loan.loanTenureMonths || 0
-              ) > 0
+                loan.emiAmount || 0
+              );
 
-                ? Math.round(
-                    Number(
-                      loan.totalInterest || 0
-                    ) /
-                    Number(
-                      loan.loanTenureMonths
-                    )
-                  )
 
-                : 0;
+            // ----------------------------------------------
+            // TODAY FLAG
+            // ----------------------------------------------
+
+            const dueDateKey =
+              getISTDateKey(
+                dueDate
+              );
+
+            const isToday =
+              dueDateKey ===
+              todayKey;
+
+
+            // ----------------------------------------------
+            // ADD PENDING EMI
+            // ----------------------------------------------
+
+            pendingInstallments.push({
+
+              installmentNo: i,
+
+              dueDate,
+
+              dueDateString:
+                dueDate.toLocaleDateString(
+                  "en-IN",
+                  {
+                    timeZone:
+                      "Asia/Kolkata",
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric"
+                  }
+                ),
+
+              emiAmount,
+
+              delay,
+
+              penalty,
+
+              totalAmount:
+                emiAmount +
+                penalty,
+
+              isToday
+            });
           }
 
-          // ----------------------------------------
-          // ADD PENDING EMI
-          // ----------------------------------------
 
-          pendingInstallments.push({
+          // ====================================================
+          // RETURN LOAN
+          // ====================================================
 
-            installmentNo: i,
+          return {
 
-            dueDate,
+            loanId:
+              loan._id,
 
-            dueDateString:
-              dueDate.toLocaleDateString(
-                "en-IN"
+            loanNumber:
+              loan.loanNumber,
+
+            loanType:
+              loan.loanType,
+
+            loanAmount:
+              Number(
+                loan.loanAmount || 0
+              ),
+
+            totalInterest:
+              Number(
+                loan.totalInterest || 0
+              ),
+
+            totalPayable:
+              Number(
+                loan.totalPayable || 0
+              ),
+
+            outstandingAmount:
+              Number(
+                loan.outstandingAmount || 0
               ),
 
             emiAmount:
-              displayEmi,
+              Number(
+                loan.emiAmount || 0
+              ),
 
-            delay,
+            totalInstallments,
 
-            penalty,
+            completedInstallments:
+              paidInstallments.size,
 
-            totalAmount:
-              displayEmi +
-              penalty
-          });
+            pendingInstallments:
+              pendingInstallments.length,
+
+            pendingPayments:
+              pendingInstallments,
+
+            member:
+              loan.member
+          };
         }
+      );
 
-        // ------------------------------------------
-        // RESPONSE
-        // ------------------------------------------
-
-        return {
-
-          loanId:
-            loan._id,
-
-          loanNumber:
-            loan.loanNumber,
-
-          loanType:
-            loan.loanType,
-
-          // IMPORTANT
-          // Loan amount was missing from
-          // the usable collection response.
-          loanAmount:
-            Number(
-              loan.loanAmount || 0
-            ),
-
-          totalInterest:
-            Number(
-              loan.totalInterest || 0
-            ),
-
-          totalPayable:
-            Number(
-              loan.totalPayable || 0
-            ),
-
-          outstandingAmount:
-            Number(
-              loan.outstandingAmount || 0
-            ),
-
-          emiAmount:
-            Number(
-              loan.emiAmount || 0
-            ),
-
-          totalInstallments,
-
-          completedInstallments:
-            paidInstallments.size,
-
-          pendingInstallments:
-            pendingInstallments.length,
-
-          // VERY IMPORTANT
-          // Agent can select ANY EMI
-          pendingPayments:
-            pendingInstallments,
-
-          member:
-            loan.member
-        };
-      });
 
     // ==========================================================
     // 10. GROUP SAVINGS + LOANS BY MEMBER
@@ -2569,12 +2625,14 @@ dueDate.setUTCHours(
     const memberMap =
       new Map();
 
-    // ------------------------------------------
-    // SAVINGS
-    // ------------------------------------------
+
+    // ==========================================================
+    // ADD SAVINGS
+    // ==========================================================
 
     for (
-      const saving of processedSavings
+      const saving
+      of processedSavings
     ) {
 
       if (!saving.member) {
@@ -2585,7 +2643,9 @@ dueDate.setUTCHours(
         saving.member._id.toString();
 
       if (
-        !memberMap.has(memberId)
+        !memberMap.has(
+          memberId
+        )
       ) {
 
         memberMap.set(
@@ -2607,12 +2667,14 @@ dueDate.setUTCHours(
         .push(saving);
     }
 
-    // ------------------------------------------
-    // LOANS
-    // ------------------------------------------
+
+    // ==========================================================
+    // ADD LOANS
+    // ==========================================================
 
     for (
-      const loan of processedLoans
+      const loan
+      of processedLoans
     ) {
 
       if (!loan.member) {
@@ -2623,7 +2685,9 @@ dueDate.setUTCHours(
         loan.member._id.toString();
 
       if (
-        !memberMap.has(memberId)
+        !memberMap.has(
+          memberId
+        )
       ) {
 
         memberMap.set(
@@ -2645,6 +2709,7 @@ dueDate.setUTCHours(
         .push(loan);
     }
 
+
     // ==========================================================
     // 11. FINAL RESPONSE
     // ==========================================================
@@ -2653,6 +2718,7 @@ dueDate.setUTCHours(
       Array.from(
         memberMap.values()
       );
+
 
     return res.status(200).json({
 
@@ -2663,6 +2729,7 @@ dueDate.setUTCHours(
 
       members
     });
+
 
   } catch (error) {
 
