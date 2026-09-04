@@ -1590,8 +1590,27 @@ exports.getAgentMonthlyCollection = async (req, res) => {
 // Returns members with BOTH savings and loans
 // ============================================================
 
+// ============================================================
+// UNIFIED AGENT COLLECTION - PRODUCTION VERSION
+// Returns:
+// 1. All active savings
+// 2. ALL pending saving days
+// 3. All active loans
+// 4. ALL pending loan EMIs
+// 5. Loan amount / outstanding / EMI
+// 6. Groups everything by member
+//
+// IMPORTANT:
+// - One query for savings
+// - One query for saving transactions
+// - One query for loans
+// - One query for loan collections
+// - NO DB query inside loops
+// ============================================================
+
 exports.getUnifiedAgentCollection = async (req, res) => {
   try {
+
     const { agentId } = req.params;
 
     if (!agentId) {
@@ -1602,7 +1621,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     }
 
     // ==========================================================
-    // 1. GET AGENT SAVINGS
+    // 1. GET ACTIVE SAVINGS
     // ==========================================================
 
     const savings = await DailySaving.find({
@@ -1620,7 +1639,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       .lean();
 
     // ==========================================================
-    // 2. GET AGENT LOANS
+    // 2. GET ACTIVE LOANS
     // ==========================================================
 
     const loans = await DailyLoan.find({
@@ -1634,7 +1653,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       .lean();
 
     // ==========================================================
-    // 3. GET SAVING TRANSACTIONS IN ONE QUERY
+    // 3. GET ALL SAVING TRANSACTIONS - ONE QUERY
     // ==========================================================
 
     const savingIds = savings.map(
@@ -1644,6 +1663,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     let savingTransactions = [];
 
     if (savingIds.length > 0) {
+
       savingTransactions =
         await DailyTransaction.find({
           savingAccount: {
@@ -1667,9 +1687,8 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       const savingId =
         transaction.savingAccount.toString();
 
-      if (
-        !transactionsBySaving.has(savingId)
-      ) {
+      if (!transactionsBySaving.has(savingId)) {
+
         transactionsBySaving.set(
           savingId,
           []
@@ -1682,7 +1701,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     }
 
     // ==========================================================
-    // 5. GET LOAN COLLECTIONS IN ONE QUERY
+    // 5. GET ALL LOAN COLLECTIONS - ONE QUERY
     // ==========================================================
 
     const loanIds = loans.map(
@@ -1700,7 +1719,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           }
         })
           .select(
-            "loan installmentNo collectionDate totalAmount penalty amount"
+            "loan installmentNo paymentDate dueDate totalAmount penalty"
           )
           .lean();
     }
@@ -1716,9 +1735,8 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       const loanId =
         collection.loan.toString();
 
-      if (
-        !collectionsByLoan.has(loanId)
-      ) {
+      if (!collectionsByLoan.has(loanId)) {
+
         collectionsByLoan.set(
           loanId,
           []
@@ -1731,11 +1749,14 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     }
 
     // ==========================================================
-    // 7. TODAY
+    // 7. TODAY IN IST
     // ==========================================================
 
     const todayKey =
       getISTDateKey(new Date());
+
+    const todayDate =
+      istDateKeyToDate(todayKey);
 
     // ==========================================================
     // 8. PROCESS SAVINGS
@@ -1749,8 +1770,11 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             saving._id.toString()
           ) || [];
 
-        const paidDates =
-          new Set();
+        // ------------------------------------------
+        // PAID DATE SET
+        // ------------------------------------------
+
+        const paidDates = new Set();
 
         for (
           const transaction of savingTransactions
@@ -1769,6 +1793,10 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           );
         }
 
+        // ------------------------------------------
+        // START / END
+        // ------------------------------------------
+
         const startKey =
           getISTDateKey(
             saving.startDate
@@ -1779,22 +1807,141 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             saving.endDate
           );
 
-        let pendingDays = 0;
+        // ------------------------------------------
+        // ALL PENDING DAYS
+        // ------------------------------------------
 
-        let currentKey =
-          startKey;
+        const pendingPayments = [];
+
+        let currentKey = startKey;
 
         while (
           currentKey <= endKey &&
           currentKey <= todayKey
         ) {
 
+          // Already paid
           if (
-            !paidDates.has(currentKey)
+            paidDates.has(currentKey)
           ) {
 
-            pendingDays++;
+            currentKey =
+              addDaysToDateKey(
+                currentKey,
+                1
+              );
+
+            continue;
           }
+
+          // ----------------------------------------
+          // PENALTY
+          // ----------------------------------------
+
+          const currentDate =
+            istDateKeyToDate(
+              currentKey
+            );
+
+          const diffDays =
+            Math.floor(
+              (
+                todayDate -
+                currentDate
+              ) /
+              (
+                1000 *
+                60 *
+                60 *
+                24
+              )
+            );
+
+          let penalty = 0;
+
+          if (
+            diffDays >
+            Number(
+              saving.graceDays || 0
+            )
+          ) {
+
+            if (
+              saving.penaltyType ===
+              "FIXED"
+            ) {
+
+              penalty =
+                Number(
+                  saving.penaltyValue || 0
+                );
+
+            } else {
+
+              const dailyAmount =
+                Number(
+                  saving.fixedAmount || 0
+                );
+
+              penalty =
+                Math.round(
+                  dailyAmount *
+                  Number(
+                    saving.penaltyValue || 0
+                  ) /
+                  100
+                );
+            }
+          }
+
+          // ----------------------------------------
+          // DAILY AMOUNT
+          // ----------------------------------------
+
+          const dailyAmount =
+            saving.collectionType === "FIXED"
+              ? Number(
+                  saving.fixedAmount || 0
+                )
+              : 0;
+
+          // ----------------------------------------
+          // EMI NUMBER
+          // ----------------------------------------
+
+          const installmentNo =
+            Math.floor(
+              (
+                istDateKeyToDate(currentKey) -
+                istDateKeyToDate(startKey)
+              ) /
+              (
+                1000 *
+                60 *
+                60 *
+                24
+              )
+            ) + 1;
+
+          // ----------------------------------------
+          // ADD PENDING PAYMENT
+          // ----------------------------------------
+
+          pendingPayments.push({
+
+            installmentNo,
+
+            date:
+              `${currentKey}T00:00:00+05:30`,
+
+            dailyAmount,
+
+            penalty,
+
+            total:
+              dailyAmount +
+              penalty
+          });
 
           currentKey =
             addDaysToDateKey(
@@ -1803,26 +1950,9 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             );
         }
 
-        let pendingAmount = 0;
-
-        if (
-          saving.collectionType ===
-          "FIXED"
-        ) {
-
-          pendingAmount =
-            pendingDays *
-            Number(
-              saving.fixedAmount || 0
-            );
-
-        } else {
-
-          pendingAmount =
-            Number(
-              saving.pendingAmount || 0
-            );
-        }
+        // ------------------------------------------
+        // TODAY COLLECTION
+        // ------------------------------------------
 
         const todayCollected =
           savingTransactions
@@ -1837,16 +1967,22 @@ exports.getUnifiedAgentCollection = async (req, res) => {
                 getISTDateKey(date) ===
                   todayKey
               );
-
             })
             .reduce(
-              (sum, transaction) =>
+              (
+                sum,
+                transaction
+              ) =>
                 sum +
                 Number(
                   transaction.totalAmount || 0
                 ),
               0
             );
+
+        // ------------------------------------------
+        // RESPONSE
+        // ------------------------------------------
 
         return {
 
@@ -1861,12 +1997,6 @@ exports.getUnifiedAgentCollection = async (req, res) => {
               saving.fixedAmount || 0
             ),
 
-          pendingDays,
-
-          pendingAmount,
-
-          todayCollected,
-
           startDate:
             saving.startDate,
 
@@ -1875,6 +2005,28 @@ exports.getUnifiedAgentCollection = async (req, res) => {
 
           completedDays:
             paidDates.size,
+
+          pendingDays:
+            pendingPayments.length,
+
+          pendingAmount:
+            pendingPayments.reduce(
+              (
+                sum,
+                item
+              ) =>
+                sum +
+                Number(
+                  item.total || 0
+                ),
+              0
+            ),
+
+          todayCollected,
+
+          // VERY IMPORTANT
+          // Frontend can select ANY day
+          pendingPayments,
 
           member:
             saving.member,
@@ -1896,6 +2048,10 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             loan._id.toString()
           ) || [];
 
+        // ------------------------------------------
+        // PAID INSTALLMENTS
+        // ------------------------------------------
+
         const paidInstallments =
           new Set();
 
@@ -1904,7 +2060,10 @@ exports.getUnifiedAgentCollection = async (req, res) => {
         ) {
 
           if (
-            collection.installmentNo
+            collection.installmentNo !==
+            undefined &&
+            collection.installmentNo !==
+            null
           ) {
 
             paidInstallments.add(
@@ -1914,6 +2073,10 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             );
           }
         }
+
+        // ------------------------------------------
+        // TOTAL INSTALLMENTS
+        // ------------------------------------------
 
         let totalInstallments = 0;
 
@@ -1943,34 +2106,142 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             Number(
               loan.durationMonths || 0
             );
+
+        } else if (
+          loan.loanType === "FIXED"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.loanTenureMonths || 0
+            );
         }
 
-        const pendingInstallments =
+        // ------------------------------------------
+        // DUE INSTALLMENTS TILL TODAY
+        // ------------------------------------------
+
+        const loanDate =
+          new Date(
+            loan.loanDate
+          );
+
+        loanDate.setHours(
+          0,
+          0,
+          0,
+          0
+        );
+
+        let dueTillToday =
+          totalInstallments;
+
+        if (
+          loan.loanType === "DAILY"
+        ) {
+
+          dueTillToday =
+            Math.floor(
+              (
+                todayDate -
+                loanDate
+              ) /
+              (
+                1000 *
+                60 *
+                60 *
+                24
+              )
+            ) + 1;
+
+        } else if (
+          loan.loanType === "WEEKLY"
+        ) {
+
+          dueTillToday =
+            Math.floor(
+              (
+                todayDate -
+                loanDate
+              ) /
+              (
+                1000 *
+                60 *
+                60 *
+                24 *
+                7
+              )
+            ) + 1;
+
+        } else if (
+          loan.loanType === "MONTHLY" ||
+          loan.loanType === "FIXED"
+        ) {
+
+          const monthDiff =
+            (
+              todayDate.getFullYear() -
+              loanDate.getFullYear()
+            ) * 12 +
+            (
+              todayDate.getMonth() -
+              loanDate.getMonth()
+            );
+
+          if (
+            monthDiff <= 0
+          ) {
+
+            dueTillToday = 0;
+
+          } else if (
+            todayDate.getDate() >=
+            loanDate.getDate()
+          ) {
+
+            dueTillToday =
+              monthDiff;
+
+          } else {
+
+            dueTillToday =
+              monthDiff - 1;
+          }
+        }
+
+        dueTillToday =
           Math.max(
             0,
-            totalInstallments -
-              paidInstallments.size
+            Math.min(
+              dueTillToday,
+              totalInstallments
+            )
           );
 
         // ------------------------------------------
-        // FIND NEXT PENDING INSTALLMENT
+        // ALL PENDING INSTALLMENTS
         // ------------------------------------------
 
-        let nextInstallment = null;
+        const pendingInstallments = [];
 
         for (
           let i = 1;
-          i <= totalInstallments;
+          i <= dueTillToday;
           i++
         ) {
 
+          // Already paid
           if (
             paidInstallments.has(i)
           ) {
             continue;
           }
 
-          let dueDate =
+          // ----------------------------------------
+          // DUE DATE
+          // ----------------------------------------
+
+          const dueDate =
             new Date(
               loan.loanDate
             );
@@ -1982,7 +2253,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
 
             dueDate.setDate(
               dueDate.getDate() +
-                (i - 1)
+              (i - 1)
             );
 
           } else if (
@@ -1992,17 +2263,21 @@ exports.getUnifiedAgentCollection = async (req, res) => {
 
             dueDate.setDate(
               dueDate.getDate() +
-                ((i - 1) * 7)
+              (
+                (i - 1) * 7
+              )
             );
 
           } else if (
             loan.loanType ===
-            "MONTHLY"
+            "MONTHLY" ||
+            loan.loanType ===
+            "FIXED"
           ) {
 
             dueDate.setMonth(
               dueDate.getMonth() +
-                (i - 1)
+              (i - 1)
             );
           }
 
@@ -2013,20 +2288,15 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             0
           );
 
-          const today =
-            new Date();
-
-          today.setHours(
-            0,
-            0,
-            0,
-            0
-          );
+          // ----------------------------------------
+          // DELAY
+          // ----------------------------------------
 
           let delay = 0;
 
           if (
-            today > dueDate
+            todayDate >
+            dueDate
           ) {
 
             if (
@@ -2036,7 +2306,10 @@ exports.getUnifiedAgentCollection = async (req, res) => {
 
               delay =
                 Math.floor(
-                  (today - dueDate) /
+                  (
+                    todayDate -
+                    dueDate
+                  ) /
                   (
                     1000 *
                     60 *
@@ -2052,7 +2325,10 @@ exports.getUnifiedAgentCollection = async (req, res) => {
 
               delay =
                 Math.floor(
-                  (today - dueDate) /
+                  (
+                    todayDate -
+                    dueDate
+                  ) /
                   (
                     1000 *
                     60 *
@@ -2065,13 +2341,17 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             } else {
 
               delay =
-                (
-                  today.getFullYear() -
-                  dueDate.getFullYear()
-                ) * 12 +
-                (
-                  today.getMonth() -
-                  dueDate.getMonth()
+                Math.floor(
+                  (
+                    todayDate -
+                    dueDate
+                  ) /
+                  (
+                    1000 *
+                    60 *
+                    60 *
+                    24
+                  )
                 );
             }
           }
@@ -2089,64 +2369,146 @@ exports.getUnifiedAgentCollection = async (req, res) => {
             )
           ) {
 
-            const chargeable =
-              delay -
-              Number(
-                loan.gracePeriod || 0
-              );
-
             if (
-              loan.penaltyType ===
-              "PERCENTAGE"
+              loan.loanType ===
+              "DAILY" ||
+              loan.loanType ===
+              "WEEKLY"
             ) {
 
-              penalty =
-                Math.round(
-                  (
-                    Number(
-                      loan.emiAmount || 0
-                    ) *
-                    Number(
-                      loan.penaltyValue || 0
-                    )
-                  ) / 100
-                ) *
-                chargeable;
+              if (
+                loan.penaltyType ===
+                "PERCENTAGE"
+              ) {
+
+                penalty =
+                  Math.round(
+                    (
+                      Number(
+                        loan.emiAmount || 0
+                      ) *
+                      Number(
+                        loan.penaltyValue || 0
+                      )
+                    ) / 100
+                  );
+
+              } else {
+
+                penalty =
+                  Number(
+                    loan.penaltyValue || 0
+                  );
+              }
 
             } else {
 
-              penalty =
+              let penaltyBase =
                 Number(
-                  loan.penaltyValue || 0
-                ) *
-                chargeable;
+                  loan.emiAmount || 0
+                );
+
+              // FIXED loan uses monthly interest
+              if (
+                loan.loanType ===
+                "FIXED"
+              ) {
+
+                penaltyBase =
+                  Number(
+                    loan.loanTenureMonths || 0
+                  ) > 0
+
+                    ? Math.round(
+                        Number(
+                          loan.totalInterest || 0
+                        ) /
+                        Number(
+                          loan.loanTenureMonths
+                        )
+                      )
+
+                    : 0;
+              }
+
+              penalty =
+                calculateMonthlyFixedPenalty({
+                  dueDate,
+                  today: todayDate,
+                  gracePeriod:
+                    loan.gracePeriod,
+                  penaltyType:
+                    loan.penaltyType,
+                  penaltyValue:
+                    loan.penaltyValue,
+                  penaltyBase
+                });
             }
           }
 
-          nextInstallment = {
+          // ----------------------------------------
+          // EMI
+          // ----------------------------------------
+
+          let displayEmi =
+            Number(
+              loan.emiAmount || 0
+            );
+
+          // FIXED = monthly interest
+          if (
+            loan.loanType ===
+            "FIXED"
+          ) {
+
+            displayEmi =
+              Number(
+                loan.loanTenureMonths || 0
+              ) > 0
+
+                ? Math.round(
+                    Number(
+                      loan.totalInterest || 0
+                    ) /
+                    Number(
+                      loan.loanTenureMonths
+                    )
+                  )
+
+                : 0;
+          }
+
+          // ----------------------------------------
+          // ADD PENDING EMI
+          // ----------------------------------------
+
+          pendingInstallments.push({
 
             installmentNo: i,
 
             dueDate,
 
-            emiAmount:
-              Number(
-                loan.emiAmount || 0
+            dueDateString:
+              dueDate.toLocaleDateString(
+                "en-IN"
               ),
+
+            emiAmount:
+              displayEmi,
 
             delay,
 
             penalty,
 
             totalAmount:
-              Number(
-                loan.emiAmount || 0
-              ) +
+              displayEmi +
               penalty
-          };
-
-          break;
+          });
         }
+
+        // ------------------------------------------
+        // RESPONSE
+        // ------------------------------------------
 
         return {
 
@@ -2159,14 +2521,17 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           loanType:
             loan.loanType,
 
+          // IMPORTANT
+          // Loan amount was missing from
+          // the usable collection response.
           loanAmount:
             Number(
               loan.loanAmount || 0
             ),
 
-          emiAmount:
+          totalInterest:
             Number(
-              loan.emiAmount || 0
+              loan.totalInterest || 0
             ),
 
           totalPayable:
@@ -2174,12 +2539,28 @@ exports.getUnifiedAgentCollection = async (req, res) => {
               loan.totalPayable || 0
             ),
 
-          pendingInstallments,
+          outstandingAmount:
+            Number(
+              loan.outstandingAmount || 0
+            ),
+
+          emiAmount:
+            Number(
+              loan.emiAmount || 0
+            ),
+
+          totalInstallments,
 
           completedInstallments:
             paidInstallments.size,
 
-          nextInstallment,
+          pendingInstallments:
+            pendingInstallments.length,
+
+          // VERY IMPORTANT
+          // Agent can select ANY EMI
+          pendingPayments:
+            pendingInstallments,
 
           member:
             loan.member
@@ -2187,14 +2568,14 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       });
 
     // ==========================================================
-    // 10. GROUP EVERYTHING BY MEMBER
+    // 10. GROUP SAVINGS + LOANS BY MEMBER
     // ==========================================================
 
     const memberMap =
       new Map();
 
     // ------------------------------------------
-    // ADD SAVINGS
+    // SAVINGS
     // ------------------------------------------
 
     for (
@@ -2232,7 +2613,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     }
 
     // ------------------------------------------
-    // ADD LOANS
+    // LOANS
     // ------------------------------------------
 
     for (
@@ -2286,7 +2667,6 @@ exports.getUnifiedAgentCollection = async (req, res) => {
         members.length,
 
       members
-
     });
 
   } catch (error) {
@@ -2302,7 +2682,6 @@ exports.getUnifiedAgentCollection = async (req, res) => {
 
       message:
         error.message
-
     });
   }
 };
