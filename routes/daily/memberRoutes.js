@@ -14,10 +14,11 @@ const {
   // =========================
   // MEMBER REQUEST
   // =========================
-  createMemberRequest,
-  getMemberRequests,
-  approveMemberRequest,
-  rejectMemberRequest
+createMemberRequest,
+getMemberRequests,
+getMemberRequestsByAgent,
+approveMemberRequest,
+rejectMemberRequest
 
 } = require("../../controllers/daily/DailyMemberController");
 
@@ -57,7 +58,10 @@ router.get(
   getMemberRequests
 );
 
-
+router.get(
+  "/member-requests/agent/:agentId",
+  getMemberRequestsByAgent
+);
 /*
 ====================================
 ADMIN APPROVE MEMBER REQUEST

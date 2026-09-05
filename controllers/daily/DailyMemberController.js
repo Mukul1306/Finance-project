@@ -561,6 +561,56 @@ exports.getMemberRequests = async (req, res) => {
   }
 };
 
+
+/*
+==================================
+AGENT GET OWN MEMBER REQUESTS
+==================================
+*/
+
+exports.getMemberRequestsByAgent = async (req, res) => {
+  try {
+    const { agentId } = req.params;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    const requests = await DailyMemberRequest.find({
+      requestedBy: agentId
+    })
+      .sort({ createdAt: -1 });
+
+    const safeRequests = requests.map((request) => {
+      const data = request.toObject();
+
+      delete data.password;
+
+      return data;
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: safeRequests.length,
+      requests: safeRequests
+    });
+
+  } catch (error) {
+    console.error(
+      "GET AGENT MEMBER REQUESTS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 /*
 ==================================
 ADMIN APPROVE MEMBER REQUEST
