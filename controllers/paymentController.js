@@ -199,8 +199,11 @@ if (alreadyPaid) {
 
 exports.getPaymentSummary = async (req, res) => {
   try {
-
     const { year = "all", month = "all" } = req.query;
+
+    // =====================================================
+    // TODAY
+    // =====================================================
 
     const today = new Date();
     today.setHours(23, 59, 59, 999);
@@ -209,13 +212,11 @@ exports.getPaymentSummary = async (req, res) => {
     // SELECTED PERIOD
     // =====================================================
 
-    let periodStart;
-    let periodEnd;
+    let periodStart = null;
+    let periodEnd = null;
 
     if (year !== "all") {
-
       if (month !== "all") {
-
         // Selected Year + Month
         periodStart = new Date(
           Number(year),
@@ -232,9 +233,7 @@ exports.getPaymentSummary = async (req, res) => {
           59,
           999
         );
-
       } else {
-
         // Selected Year / All Months
         periodStart = new Date(
           Number(year),
@@ -251,74 +250,8 @@ exports.getPaymentSummary = async (req, res) => {
           59,
           999
         );
-
       }
-
-    } else {
-
-      // All Years
-      periodStart = null;
-      periodEnd = today;
-
     }
-
-    // =====================================================
-    // COLLECTION FILTER
-    // =====================================================
-
-    let collectionMatch = {};
-
-    if (periodStart) {
-
-      collectionMatch.paymentDate = {
-        $gte: periodStart,
-        $lte: periodEnd
-      };
-
-    }
-
-    // =====================================================
-    // COLLECTION SUMMARY
-    // =====================================================
-
-    const collection = await Payment.aggregate([
-      {
-        $match: collectionMatch
-      },
-      {
-        $group: {
-          _id: null,
-
-          emiCollection: {
-            $sum: "$installmentAmount"
-          },
-
-          penaltyCollection: {
-            $sum: "$penaltyAmount"
-          },
-
-          totalCollection: {
-            $sum: "$totalReceived"
-          }
-        }
-      }
-    ]);
-
-    const thisMonthCollection =
-      collection.length > 0
-        ? collection[0].emiCollection
-        : 0;
-
-    const thisMonthPenalty =
-      collection.length > 0
-        ? collection[0].penaltyCollection
-        : 0;
-
-    const totalCollection =
-      collection.length > 0
-        ? collection[0].totalCollection
-        : 0;
-
 
     // =====================================================
     // ACTIVE MEMBERS
@@ -334,7 +267,6 @@ exports.getPaymentSummary = async (req, res) => {
       }
     }).lean();
 
-
     // =====================================================
     // MONTHLY TARGET
     // =====================================================
@@ -342,41 +274,36 @@ exports.getPaymentSummary = async (req, res) => {
     let monthlyTarget = 0;
 
     for (const member of activeMembers) {
+      const joiningDate = new Date(member.joiningDate);
 
-      const joiningDate =
-        new Date(member.joiningDate);
+      // Determine target date
+      const targetDate = periodStart || today;
 
-      const targetDate =
-        periodStart || today;
-
-      // Member hasn't joined yet
+      // Member has not joined yet
       if (joiningDate > targetDate) {
         continue;
       }
 
-      // If selected month/year
+      // If specific month/year selected,
+      // don't include members whose membership ended
+      // before that month.
       if (
         year !== "all" &&
         month !== "all"
       ) {
-
-        const selectedYear =
-          Number(year);
-
-        const selectedMonth =
-          Number(month);
+        const selectedYear = Number(year);
+        const selectedMonth = Number(month);
 
         const memberEndDate =
           member.memberEndDate
             ? new Date(member.memberEndDate)
             : null;
 
-        const selectedDate =
-          new Date(
-            selectedYear,
-            selectedMonth - 1,
-            1
-          );
+        const selectedDate = new Date(
+          selectedYear,
+          selectedMonth - 1,
+          1
+        );
 
         if (
           memberEndDate &&
@@ -384,60 +311,168 @@ exports.getPaymentSummary = async (req, res) => {
         ) {
           continue;
         }
-
       }
 
-      monthlyTarget +=
-        Number(member.monthlyInstallment || 0);
-
+      monthlyTarget += Number(
+        member.monthlyInstallment || 0
+      );
     }
-
 
     // =====================================================
     // GET ALL PAYMENTS
+    //
+    // IMPORTANT:
+    // We use installmentMonth/installmentYear
+    // to know WHICH MONTH the EMI belongs to.
+    //
+    // We do NOT use paymentDate for monthly EMI collection.
     // =====================================================
 
-    const memberIds =
-      activeMembers.map(
-        member => member._id
-      );
+    const memberIds = activeMembers.map(
+      member => member._id
+    );
 
-    const payments =
-      await Payment.find({
-        memberId: {
-          $in: memberIds
-        }
-      })
+    const payments = await Payment.find({
+      memberId: {
+        $in: memberIds
+      }
+    })
       .select(
-        "memberId installmentNo installmentMonth installmentYear"
+        "memberId installmentNo installmentMonth installmentYear installmentAmount penaltyAmount totalReceived paymentDate"
       )
       .lean();
-
 
     // =====================================================
     // PAID INSTALLMENT LOOKUP
     // =====================================================
 
-    const paidInstallments =
-      new Set();
+    const paidInstallments = new Set();
 
     for (const payment of payments) {
-
       paidInstallments.add(
         `${String(payment.memberId)}_${payment.installmentNo}`
       );
-
     }
 
+    // =====================================================
+    // DETERMINE SELECTED MONTH
+    // =====================================================
+
+    let selectedYear;
+    let selectedMonth;
+
+    if (
+      year !== "all" &&
+      month !== "all"
+    ) {
+      selectedYear = Number(year);
+      selectedMonth = Number(month);
+    } else {
+      // When no filter is selected,
+      // Pending (Month) means CURRENT month.
+      selectedYear = today.getFullYear();
+      selectedMonth = today.getMonth() + 1;
+    }
 
     // =====================================================
-    // PENDING VALUES
+    // THIS MONTH / SELECTED MONTH COLLECTION
+    //
+    // VERY IMPORTANT:
+    //
+    // A payment collected in September for August
+    // must NOT be counted as September EMI collection.
+    //
+    // We check:
+    // installmentMonth
+    // installmentYear
     // =====================================================
 
-    let pendingThisMonth = 0;
+    let thisMonthCollection = 0;
+    let thisMonthPenalty = 0;
+
+    for (const payment of payments) {
+      if (
+        Number(payment.installmentMonth) === selectedMonth &&
+        Number(payment.installmentYear) === selectedYear
+      ) {
+        thisMonthCollection += Number(
+          payment.installmentAmount || 0
+        );
+
+        thisMonthPenalty += Number(
+          payment.penaltyAmount || 0
+        );
+      }
+    }
+
+    // =====================================================
+    // TOTAL COLLECTION
+    //
+    // This remains actual money received.
+    // Therefore paymentDate is used here.
+    // =====================================================
+
+    let totalCollection = 0;
+
+    for (const payment of payments) {
+      const paymentDate = new Date(
+        payment.paymentDate
+      );
+
+      let includePayment = true;
+
+      if (periodStart) {
+        includePayment =
+          paymentDate >= periodStart &&
+          paymentDate <= periodEnd;
+      }
+
+      if (includePayment) {
+        totalCollection += Number(
+          payment.totalReceived || 0
+        );
+      }
+    }
+
+    // =====================================================
+    // PENDING MONTH
+    //
+    // REQUIRED BUSINESS LOGIC:
+    //
+    // Monthly Target
+    //        -
+    // Selected Month EMI Collection
+    //        =
+    // Pending Month
+    //
+    // Example:
+    //
+    // September Target       = ₹50,000
+    // September EMI paid     = ₹30,000
+    // August EMI paid in Sep = ₹5,000
+    //
+    // Pending September      = ₹20,000
+    //
+    // The ₹5,000 August payment does NOT reduce
+    // September pending.
+    // =====================================================
+
+    const pendingThisMonth = Math.max(
+      monthlyTarget - thisMonthCollection,
+      0
+    );
+
+    // =====================================================
+    // PENDING TILL TODAY
+    //
+    // This is different from Pending Month.
+    //
+    // Here we calculate installments whose due date
+    // has actually arrived.
+    // =====================================================
+
     let pendingTillToday = 0;
     let pendingPenaltyTillToday = 0;
-
 
     // =====================================================
     // DETERMINE PENDING CUTOFF
@@ -446,31 +481,24 @@ exports.getPaymentSummary = async (req, res) => {
     let pendingCutoffDate = today;
 
     if (periodEnd) {
-
-      // Don't calculate future pending
       pendingCutoffDate =
         periodEnd < today
           ? periodEnd
           : today;
-
     }
-
 
     // =====================================================
     // LOOP MEMBERS
     // =====================================================
 
     for (const member of activeMembers) {
-
-      const memberId =
-        String(member._id);
+      const memberId = String(member._id);
 
       const joiningDate =
         new Date(member.joiningDate);
 
-
       // ===================================================
-      // NUMBER OF MONTHS DUE UNTIL CUTOFF
+      // NUMBER OF MONTHS PASSED
       // ===================================================
 
       let monthsPassed =
@@ -484,11 +512,9 @@ exports.getPaymentSummary = async (req, res) => {
           joiningDate.getMonth()
         );
 
-
       if (monthsPassed < 0) {
         continue;
       }
-
 
       // ===================================================
       // PENDING INSTALLMENTS
@@ -500,13 +526,10 @@ exports.getPaymentSummary = async (req, res) => {
         i < member.totalInstallments;
         i++
       ) {
-
-        const installmentNo =
-          i + 1;
+        const installmentNo = i + 1;
 
         const paymentKey =
           `${memberId}_${installmentNo}`;
-
 
         // Already paid
         if (
@@ -514,7 +537,6 @@ exports.getPaymentSummary = async (req, res) => {
         ) {
           continue;
         }
-
 
         // =================================================
         // INSTALLMENT DATE
@@ -527,7 +549,6 @@ exports.getPaymentSummary = async (req, res) => {
           joiningDate.getMonth() + i
         );
 
-
         // =================================================
         // DUE DATE
         // =================================================
@@ -539,7 +560,6 @@ exports.getPaymentSummary = async (req, res) => {
           member.dueDay
         );
 
-
         // Future installment
         if (
           dueDate > pendingCutoffDate
@@ -547,59 +567,10 @@ exports.getPaymentSummary = async (req, res) => {
           continue;
         }
 
-
         const installmentAmount =
           Number(
             member.monthlyInstallment || 0
           );
-
-
-        // =================================================
-        // PENDING MONTH
-        // =================================================
-
-        if (
-          year !== "all" &&
-          month !== "all"
-        ) {
-
-          const selectedYear =
-            Number(year);
-
-          const selectedMonth =
-            Number(month);
-
-          if (
-            dueDate.getFullYear() ===
-              selectedYear &&
-            dueDate.getMonth() + 1 ===
-              selectedMonth
-          ) {
-
-            pendingThisMonth +=
-              installmentAmount;
-
-          }
-
-        } else if (
-          year === "all"
-        ) {
-
-          // Current month pending
-          if (
-            dueDate.getFullYear() ===
-              today.getFullYear() &&
-            dueDate.getMonth() ===
-              today.getMonth()
-          ) {
-
-            pendingThisMonth +=
-              installmentAmount;
-
-          }
-
-        }
-
 
         // =================================================
         // PENALTY
@@ -610,7 +581,6 @@ exports.getPaymentSummary = async (req, res) => {
         if (
           pendingCutoffDate > dueDate
         ) {
-
           delayMonths =
             (
               pendingCutoffDate.getFullYear() -
@@ -632,9 +602,7 @@ exports.getPaymentSummary = async (req, res) => {
           if (delayMonths < 1) {
             delayMonths = 1;
           }
-
         }
-
 
         const penaltyAmount =
           delayMonths *
@@ -642,26 +610,24 @@ exports.getPaymentSummary = async (req, res) => {
             member.monthlyPenalty || 0
           );
 
+        // =================================================
+        // PENDING TILL TODAY
+        // =================================================
 
         pendingTillToday +=
           installmentAmount +
           penaltyAmount;
 
-
         pendingPenaltyTillToday +=
           penaltyAmount;
-
       }
-
     }
-
 
     // =====================================================
     // RESPONSE
     // =====================================================
 
     return res.status(200).json({
-
       success: true,
 
       filter: {
@@ -669,43 +635,38 @@ exports.getPaymentSummary = async (req, res) => {
         month
       },
 
+      // Expected EMI for selected month
       monthlyTarget,
 
-      // Selected period collection
+      // Only EMI belonging to selected month
       thisMonthCollection,
 
-      // Selected period penalty
+      // Penalty belonging to selected month
       thisMonthPenalty,
 
+      // Actual money received in selected period
       totalCollection,
 
-      // Selected month pending
+      // Target - selected month's EMI collection
       pendingThisMonth,
 
-      // Outstanding till selected period
+      // All unpaid installments that are actually due
       pendingTillToday,
 
-      // Outstanding penalty till selected period
+      // Penalty on overdue installments
       pendingPenaltyTillToday
-
     });
 
-
   } catch (error) {
-
     console.error(
       "Payment Summary Error:",
       error
     );
 
     return res.status(500).json({
-
       success: false,
-
       message: error.message
-
     });
-
   }
 };
 
