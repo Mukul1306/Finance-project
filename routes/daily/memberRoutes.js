@@ -3,25 +3,28 @@ const express = require("express");
 const router = express.Router();
 
 const {
-
   createMember,
-
   getMembers,
-
   getMemberProfile,
-
   updateMember,
-
   deleteMember,
-  
   memberLogin,
-  getMemberLoan
+  getMemberLoan,
+
+  // =========================
+  // MEMBER REQUEST
+  // =========================
+  createMemberRequest,
+  getMemberRequests,
+  approveMemberRequest,
+  rejectMemberRequest
 
 } = require("../../controllers/daily/DailyMemberController");
 
+
 /*
 ====================================
-CREATE MEMBER
+DIRECT CREATE MEMBER
 ====================================
 */
 
@@ -29,6 +32,55 @@ router.post(
   "/create-member",
   createMember
 );
+
+
+/*
+====================================
+AGENT CREATE MEMBER REQUEST
+====================================
+*/
+
+router.post(
+  "/member-request",
+  createMemberRequest
+);
+
+
+/*
+====================================
+ADMIN GET PENDING MEMBER REQUESTS
+====================================
+*/
+
+router.get(
+  "/member-requests",
+  getMemberRequests
+);
+
+
+/*
+====================================
+ADMIN APPROVE MEMBER REQUEST
+====================================
+*/
+
+router.put(
+  "/member-request/:id/approve",
+  approveMemberRequest
+);
+
+
+/*
+====================================
+ADMIN REJECT MEMBER REQUEST
+====================================
+*/
+
+router.put(
+  "/member-request/:id/reject",
+  rejectMemberRequest
+);
+
 
 /*
 ====================================
@@ -41,6 +93,7 @@ router.get(
   getMembers
 );
 
+
 /*
 ====================================
 GET SINGLE MEMBER
@@ -51,10 +104,20 @@ router.get(
   "/member/:id",
   getMemberProfile
 );
+
+
+/*
+====================================
+GET MEMBER LOAN
+====================================
+*/
+
 router.get(
   "/member-loan/:memberId",
   getMemberLoan
 );
+
+
 /*
 ====================================
 UPDATE MEMBER
@@ -65,6 +128,7 @@ router.put(
   "/member/:id",
   updateMember
 );
+
 
 /*
 ====================================
@@ -77,6 +141,17 @@ router.delete(
   deleteMember
 );
 
-router.post("/login", memberLogin);
+
+/*
+====================================
+MEMBER LOGIN
+====================================
+*/
+
+router.post(
+  "/login",
+  memberLogin
+);
+
 
 module.exports = router;

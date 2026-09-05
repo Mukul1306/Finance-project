@@ -1,5 +1,6 @@
 const DailyMember = require("../../models/daily/DailyMember");
 const DailyLoan = require("../../models/daily/DailyLoan");
+const DailyMemberRequest = require("../../models/daily/DailyMemberRequest");
 /*
 ==================================
 CREATE MEMBER
@@ -359,4 +360,383 @@ exports.getMemberLoan = async (req, res) => {
 
   }
 
+};
+
+/*
+==================================
+AGENT CREATE MEMBER REQUEST
+==================================
+*/
+
+exports.createMemberRequest = async (req, res) => {
+  try {
+    const {
+      memberId,
+      memberName,
+      fatherName,
+      gender,
+      dob,
+      email,
+      mobile,
+      password,
+      confirmPassword,
+      alternateMobile,
+      residentialAddress,
+      city,
+      district,
+      state,
+      pincode
+    } = req.body;
+
+    // =========================
+    // REQUIRED FIELD CHECK
+    // =========================
+
+    if (
+      !memberId ||
+      !memberName ||
+      !fatherName ||
+      !gender ||
+      !dob ||
+      !mobile ||
+      !password ||
+      !confirmPassword ||
+      !residentialAddress ||
+      !city ||
+      !district ||
+      !state ||
+      !pincode
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fill all required fields"
+      });
+    }
+
+    // =========================
+    // PASSWORD CHECK
+    // =========================
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Password and Confirm Password do not match"
+      });
+    }
+
+    // =========================
+    // CHECK REAL MEMBER
+    // =========================
+
+    const existingMember = await DailyMember.findOne({
+      $or: [
+        { memberId },
+        { mobile }
+      ]
+    });
+
+    if (existingMember) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID or Mobile Number already exists"
+      });
+    }
+
+    // =========================
+    // CHECK PENDING REQUEST
+    // =========================
+
+    const existingRequest = await DailyMemberRequest.findOne({
+      $or: [
+        { memberId },
+        { mobile }
+      ],
+      status: "PENDING"
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({
+        success: false,
+        message: "A member request with this Member ID or Mobile Number is already pending"
+      });
+    }
+
+    // =========================
+    // AGENT ID
+    // =========================
+
+    const agentId =
+      req.user?._id ||
+      req.user?.id ||
+      req.body.agentId;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    // =========================
+    // CREATE REQUEST
+    // =========================
+
+    const request = await DailyMemberRequest.create({
+      memberId,
+      memberName,
+      fatherName,
+      gender,
+      dob,
+      email: email || "",
+      mobile,
+      password,
+      alternateMobile: alternateMobile || "",
+      residentialAddress,
+      city,
+      district,
+      state,
+      pincode,
+
+      requestedBy: agentId,
+
+      status: "PENDING"
+    });
+
+    const responseRequest = request.toObject();
+
+    // Never send password back
+    delete responseRequest.password;
+
+    return res.status(201).json({
+      success: true,
+      message: "Member request submitted successfully. Waiting for Admin approval.",
+      request: responseRequest
+    });
+
+  } catch (error) {
+    console.error("CREATE MEMBER REQUEST ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+/*
+==================================
+ADMIN GET MEMBER REQUESTS
+==================================
+*/
+
+exports.getMemberRequests = async (req, res) => {
+  try {
+    const requests = await DailyMemberRequest.find({
+      status: "PENDING"
+    })
+      .populate("requestedBy", "name mobile")
+      .sort({ createdAt: -1 });
+
+    const safeRequests = requests.map((request) => {
+      const data = request.toObject();
+
+      delete data.password;
+
+      return data;
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: safeRequests.length,
+      requests: safeRequests
+    });
+
+  } catch (error) {
+    console.error("GET MEMBER REQUESTS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+/*
+==================================
+ADMIN APPROVE MEMBER REQUEST
+==================================
+*/
+
+exports.approveMemberRequest = async (req, res) => {
+  try {
+    const request = await DailyMemberRequest.findById(
+      req.params.id
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Member request not found"
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Request is already ${request.status}`
+      });
+    }
+
+    // =========================
+    // CHECK DUPLICATE AGAIN
+    // =========================
+
+    const existingMember = await DailyMember.findOne({
+      $or: [
+        { memberId: request.memberId },
+        { mobile: request.mobile }
+      ]
+    });
+
+    if (existingMember) {
+      return res.status(400).json({
+        success: false,
+        message: "Member ID or Mobile Number already exists"
+      });
+    }
+
+    // =========================
+    // CREATE REAL MEMBER
+    // =========================
+
+    const member = await DailyMember.create({
+      memberId: request.memberId,
+
+      memberName: request.memberName,
+
+      fatherName: request.fatherName,
+
+      gender: request.gender,
+
+      dob: request.dob,
+
+      email: request.email,
+
+      mobile: request.mobile,
+
+      password: request.password,
+
+      alternateMobile: request.alternateMobile,
+
+      residentialAddress: request.residentialAddress,
+
+      city: request.city,
+
+      district: request.district,
+
+      state: request.state,
+
+      pincode: request.pincode,
+
+      status: "ACTIVE"
+    });
+
+    // =========================
+    // UPDATE REQUEST
+    // =========================
+
+    const adminId =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.status = "APPROVED";
+
+    request.approvedBy = adminId;
+
+    request.approvedAt = new Date();
+
+    await request.save();
+
+    // =========================
+    // RESPONSE
+    // =========================
+
+    const responseMember = member.toObject();
+
+    delete responseMember.password;
+
+    return res.status(200).json({
+      success: true,
+      message: "Member request approved successfully",
+      member: responseMember
+    });
+
+  } catch (error) {
+    console.error("APPROVE MEMBER REQUEST ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+/*
+==================================
+ADMIN REJECT MEMBER REQUEST
+==================================
+*/
+
+exports.rejectMemberRequest = async (req, res) => {
+  try {
+    const { rejectionReason = "" } = req.body;
+
+    const request = await DailyMemberRequest.findById(
+      req.params.id
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Member request not found"
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Request is already ${request.status}`
+      });
+    }
+
+    const adminId =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.status = "REJECTED";
+
+    request.rejectedBy = adminId;
+
+    request.rejectedAt = new Date();
+
+    request.rejectionReason = rejectionReason;
+
+    await request.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Member request rejected successfully"
+    });
+
+  } catch (error) {
+    console.error("REJECT MEMBER REQUEST ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };
