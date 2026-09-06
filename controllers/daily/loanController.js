@@ -4898,11 +4898,14 @@ exports.approveLoanRequest = async (req, res) => {
 
       areaName: request.areaName || "",
 
-      assignedAgent:
-        request.assignedAgent || null,
+     assignedAgent:
+  request.assignedAgent || null,
 
-      loanAmount:
-        request.loanAmount,
+loanNumber:
+  loanNumber,
+
+loanAmount:
+  request.loanAmount,
 
       interestRate:
         request.interestRate,
