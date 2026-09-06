@@ -12,7 +12,8 @@ const DailyAgent =
 
 const AreaGroup =
   require("../../models/daily/AreaGroup");
-
+const DailySavingRequest =
+  require("../../models/daily/DailySavingRequest");
 
 // =====================================================
 // IST DATE HELPERS
@@ -930,4 +931,583 @@ exports.getSavingAccounts = async (req, res) => {
 
   }
 
+};
+
+
+//request 
+
+/*
+=====================================================
+AGENT CREATE DAILY SAVING REQUEST
+=====================================================
+*/
+
+exports.createSavingRequest = async (req, res) => {
+  try {
+    const {
+      member,
+      areaGroup,
+      collectionType,
+      fixedAmount,
+      durationDays,
+      startDate,
+      graceDays,
+      penaltyType,
+      penaltyValue,
+      nomineeName,
+      nomineeMobile
+    } = req.body;
+
+    // ==========================================
+    // GET AGENT ID
+    // ==========================================
+
+    const agentId =
+      req.user?._id ||
+      req.user?.id ||
+      req.body.agentId;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    // ==========================================
+    // VALIDATION
+    // ==========================================
+
+    if (!member) {
+      return res.status(400).json({
+        success: false,
+        message: "Member is required"
+      });
+    }
+
+    if (!areaGroup) {
+      return res.status(400).json({
+        success: false,
+        message: "Area Group is required"
+      });
+    }
+
+    if (!collectionType) {
+      return res.status(400).json({
+        success: false,
+        message: "Collection Type is required"
+      });
+    }
+
+    if (!durationDays) {
+      return res.status(400).json({
+        success: false,
+        message: "Duration is required"
+      });
+    }
+
+    if (!startDate) {
+      return res.status(400).json({
+        success: false,
+        message: "Start Date is required"
+      });
+    }
+
+    if (
+      collectionType === "FIXED" &&
+      (!fixedAmount || Number(fixedAmount) <= 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Fixed Amount must be greater than 0"
+      });
+    }
+
+    // ==========================================
+    // CHECK MEMBER
+    // ==========================================
+
+    const memberData =
+      await DailyMember.findById(member);
+
+    if (!memberData) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+    }
+
+    // ==========================================
+    // CHECK AREA
+    // ==========================================
+
+    const area =
+      await AreaGroup.findById(areaGroup);
+
+    if (!area) {
+      return res.status(404).json({
+        success: false,
+        message: "Area Group Not Found"
+      });
+    }
+
+    // ==========================================
+    // CHECK EXISTING ACTIVE SAVING
+    // ==========================================
+
+    const activeSaving =
+      await DailySaving.findOne({
+        member,
+        status: "ACTIVE"
+      });
+
+    if (activeSaving) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This member already has an ACTIVE saving account"
+      });
+    }
+
+ 
+
+   
+
+    // ==========================================
+    // CALCULATE END DATE
+    // ==========================================
+
+    const endDate = new Date(startDate);
+
+    endDate.setDate(
+      endDate.getDate() +
+      Number(durationDays)
+    );
+
+    // ==========================================
+    // CREATE REQUEST
+    // ==========================================
+
+    const request =
+      await DailySavingRequest.create({
+
+        member,
+
+        nomineeName:
+          nomineeName || "",
+
+        nomineeMobile:
+          nomineeMobile || "",
+
+        areaGroup,
+
+        requestedBy: agentId,
+
+        collectionType,
+
+        fixedAmount:
+          collectionType === "FIXED"
+            ? Number(fixedAmount || 0)
+            : 0,
+
+        durationDays:
+          Number(durationDays),
+
+        startDate,
+
+        endDate,
+
+        graceDays:
+          Number(graceDays || 0),
+
+        penaltyType:
+          penaltyType || "PERCENTAGE",
+
+        penaltyValue:
+          Number(penaltyValue || 0),
+
+        status: "PENDING"
+      });
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    res.status(201).json({
+      success: true,
+      message:
+        "Daily Saving Request Submitted Successfully. Waiting for Admin Approval.",
+      request
+    });
+
+  } catch (error) {
+
+    console.error(
+      "CREATE SAVING REQUEST ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+/*
+=====================================================
+ADMIN GET ALL PENDING SAVING REQUESTS
+=====================================================
+*/
+
+exports.getSavingRequests = async (req, res) => {
+  try {
+
+    const requests =
+      await DailySavingRequest.find({
+        status: "PENDING"
+      })
+        .populate(
+          "member",
+          "memberId memberName mobile fatherName city state"
+        )
+        .populate(
+          "areaGroup",
+          "areaName"
+        )
+        .populate(
+          "requestedBy",
+          "name mobile"
+        )
+        .sort({
+          createdAt: -1
+        });
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      requests
+    });
+
+  } catch (error) {
+
+    console.error(
+      "GET SAVING REQUESTS ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+/*
+=====================================================
+AGENT GET OWN SAVING REQUESTS
+=====================================================
+*/
+
+exports.getSavingRequestsByAgent = async (
+  req,
+  res
+) => {
+  try {
+
+    const { agentId } = req.params;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    const requests =
+      await DailySavingRequest.find({
+        requestedBy: agentId
+      })
+        .populate(
+          "member",
+          "memberId memberName mobile"
+        )
+        .populate(
+          "areaGroup",
+          "areaName"
+        )
+        .sort({
+          createdAt: -1
+        });
+
+    res.status(200).json({
+      success: true,
+      count: requests.length,
+      requests
+    });
+
+  } catch (error) {
+
+    console.error(
+      "GET AGENT SAVING REQUESTS ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+/*
+=====================================================
+ADMIN APPROVE SAVING REQUEST
+=====================================================
+*/
+
+exports.approveSavingRequest = async (
+  req,
+  res
+) => {
+  try {
+
+    const request =
+      await DailySavingRequest.findById(
+        req.params.id
+      );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving Request Not Found"
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This saving request has already been processed"
+      });
+    }
+
+    // ==========================================
+    // RECHECK MEMBER
+    // ==========================================
+
+    const member =
+      await DailyMember.findById(
+        request.member
+      );
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+    }
+
+    // ==========================================
+    // RECHECK ACTIVE SAVING
+    // ==========================================
+
+    const existingSaving =
+      await DailySaving.findOne({
+        member: request.member,
+        status: "ACTIVE"
+      });
+
+    if (existingSaving) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Member already has an ACTIVE saving account"
+      });
+    }
+
+    // ==========================================
+    // CREATE REAL SAVING ACCOUNT
+    // ==========================================
+
+    const saving =
+      await DailySaving.create({
+
+        member: request.member,
+
+        nomineeName:
+          request.nomineeName || "",
+
+        nomineeMobile:
+          request.nomineeMobile || "",
+
+        areaGroup:
+          request.areaGroup,
+
+        // IMPORTANT:
+        // Agent who submitted the request
+        assignedAgent:
+          request.requestedBy,
+
+        collectionType:
+          request.collectionType,
+
+        fixedAmount:
+          request.collectionType === "FIXED"
+            ? Number(request.fixedAmount || 0)
+            : 0,
+
+        durationDays:
+          Number(request.durationDays),
+
+        startDate:
+          request.startDate,
+
+        endDate:
+          request.endDate,
+
+        graceDays:
+          Number(request.graceDays || 0),
+
+        penaltyType:
+          request.penaltyType || "PERCENTAGE",
+
+        penaltyValue:
+          Number(request.penaltyValue || 0),
+
+        status: "ACTIVE"
+      });
+
+    // ==========================================
+    // UPDATE AREA COUNT
+    // ==========================================
+
+    await AreaGroup.findByIdAndUpdate(
+      request.areaGroup,
+      {
+        $inc: {
+          totalMembers: 1
+        }
+      }
+    );
+
+    // ==========================================
+    // UPDATE AGENT COUNT
+    // ==========================================
+
+    await DailyAgent.findByIdAndUpdate(
+      request.requestedBy,
+      {
+        $inc: {
+          totalMembers: 1
+        }
+      }
+    );
+
+    // ==========================================
+    // UPDATE REQUEST
+    // ==========================================
+
+    request.status = "APPROVED";
+
+    request.approvedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.approvedAt = new Date();
+
+    await request.save();
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Daily Saving Request Approved Successfully",
+      saving
+    });
+
+  } catch (error) {
+
+    console.error(
+      "APPROVE SAVING REQUEST ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+/*
+=====================================================
+ADMIN REJECT SAVING REQUEST
+=====================================================
+*/
+
+exports.rejectSavingRequest = async (
+  req,
+  res
+) => {
+  try {
+
+    const request =
+      await DailySavingRequest.findById(
+        req.params.id
+      );
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving Request Not Found"
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "This saving request has already been processed"
+      });
+    }
+
+    request.status = "REJECTED";
+
+    request.rejectedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.rejectedAt = new Date();
+
+    request.rejectionReason =
+      req.body.rejectionReason ||
+      "Rejected by Admin";
+
+    await request.save();
+
+    res.status(200).json({
+      success: true,
+      message:
+        "Daily Saving Request Rejected Successfully",
+      request
+    });
+
+  } catch (error) {
+
+    console.error(
+      "REJECT SAVING REQUEST ERROR:",
+      error
+    );
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };

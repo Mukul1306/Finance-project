@@ -4,18 +4,39 @@ const router = express.Router();
 
 const {
   createDailySaving,
+
   getAllDailySavings,
+
   getDailySaving,
+
   updateDailySaving,
+
   closeDailySaving,
+
   terminateDailySaving,
+
   getSavingMemberDetails,
-  getSavingAccounts
+
+  getSavingAccounts,
+
+  // ==========================================
+  // SAVING REQUEST
+  // ==========================================
+  createSavingRequest,
+
+  getSavingRequests,
+
+  getSavingRequestsByAgent,
+
+  approveSavingRequest,
+
+  rejectSavingRequest
+
 } = require("../../controllers/daily/DailySavingController");
 
 
 // ==========================================
-// CREATE DAILY SAVING
+// ADMIN DIRECT CREATE DAILY SAVING
 // ==========================================
 
 router.post(
@@ -25,7 +46,57 @@ router.post(
 
 
 // ==========================================
-// GET ALL SAVING ACCOUNTS
+// AGENT CREATE DAILY SAVING REQUEST
+// ==========================================
+
+router.post(
+  "/saving-request",
+  createSavingRequest
+);
+
+
+// ==========================================
+// ADMIN GET PENDING SAVING REQUESTS
+// ==========================================
+
+router.get(
+  "/saving-requests",
+  getSavingRequests
+);
+
+
+// ==========================================
+// AGENT GET OWN SAVING REQUESTS
+// ==========================================
+
+router.get(
+  "/saving-requests/agent/:agentId",
+  getSavingRequestsByAgent
+);
+
+
+// ==========================================
+// ADMIN APPROVE SAVING REQUEST
+// ==========================================
+
+router.put(
+  "/saving-request/:id/approve",
+  approveSavingRequest
+);
+
+
+// ==========================================
+// ADMIN REJECT SAVING REQUEST
+// ==========================================
+
+router.put(
+  "/saving-request/:id/reject",
+  rejectSavingRequest
+);
+
+
+// ==========================================
+// GET ALL ACTIVE / EXISTING SAVINGS
 // ==========================================
 
 router.get(
@@ -71,6 +142,16 @@ router.put(
 router.put(
   "/close-saving/:id",
   closeDailySaving
+);
+
+
+// ==========================================
+// GET MEMBER DETAILS FOR NEW SAVING
+// ==========================================
+
+router.get(
+  "/saving-member/:memberId",
+  getSavingMemberDetails
 );
 
 
