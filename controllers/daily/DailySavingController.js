@@ -1,3 +1,5 @@
+
+const mongoose = require("mongoose");
 const DailySaving =
   require("../../models/daily/DailySaving");
 
@@ -974,6 +976,24 @@ exports.createSavingRequest = async (req, res) => {
       });
     }
 
+    // Check valid MongoDB Agent ID
+    if (!mongoose.Types.ObjectId.isValid(agentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Agent ID"
+      });
+    }
+
+    // Check agent actually exists
+    const agent = await DailyAgent.findById(agentId);
+
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: "Agent not found"
+      });
+    }
+
     // ==========================================
     // VALIDATION
     // ==========================================
@@ -985,10 +1005,24 @@ exports.createSavingRequest = async (req, res) => {
       });
     }
 
+    if (!mongoose.Types.ObjectId.isValid(member)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Member ID"
+      });
+    }
+
     if (!areaGroup) {
       return res.status(400).json({
         success: false,
         message: "Area Group is required"
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(areaGroup)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Area Group ID"
       });
     }
 
@@ -999,10 +1033,17 @@ exports.createSavingRequest = async (req, res) => {
       });
     }
 
-    if (!durationDays) {
+    if (!["FIXED", "FLEXIBLE"].includes(collectionType)) {
       return res.status(400).json({
         success: false,
-        message: "Duration is required"
+        message: "Invalid Collection Type"
+      });
+    }
+
+    if (!durationDays || Number(durationDays) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Duration must be greater than 0"
       });
     }
 
@@ -1012,6 +1053,10 @@ exports.createSavingRequest = async (req, res) => {
         message: "Start Date is required"
       });
     }
+
+    // ==========================================
+    // CHECK FIXED AMOUNT
+    // ==========================================
 
     if (
       collectionType === "FIXED" &&
@@ -1038,11 +1083,12 @@ exports.createSavingRequest = async (req, res) => {
     }
 
     if (memberData.status !== "ACTIVE") {
-  return res.status(400).json({
-    success: false,
-    message: "Only ACTIVE registered members can create a saving account"
-  });
-}
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only ACTIVE registered members can create a saving account"
+      });
+    }
 
     // ==========================================
     // CHECK AREA
@@ -1058,23 +1104,28 @@ exports.createSavingRequest = async (req, res) => {
       });
     }
 
- 
+    // ==========================================
+    // CHECK START DATE
+    // ==========================================
 
-  
+    const start = new Date(startDate);
 
- 
-
-   
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Start Date"
+      });
+    }
 
     // ==========================================
     // CALCULATE END DATE
     // ==========================================
 
-    const endDate = new Date(startDate);
+    const endDate = new Date(start);
 
     endDate.setDate(
       endDate.getDate() +
-      Number(durationDays)
+      Number(durationDays) - 1
     );
 
     // ==========================================
@@ -1084,7 +1135,7 @@ exports.createSavingRequest = async (req, res) => {
     const request =
       await DailySavingRequest.create({
 
-        member,
+        member: memberData._id,
 
         nomineeName:
           nomineeName || "",
@@ -1092,9 +1143,9 @@ exports.createSavingRequest = async (req, res) => {
         nomineeMobile:
           nomineeMobile || "",
 
-        areaGroup,
+        areaGroup: area._id,
 
-        requestedBy: agentId,
+        requestedBy: agent._id,
 
         collectionType,
 
@@ -1106,7 +1157,7 @@ exports.createSavingRequest = async (req, res) => {
         durationDays:
           Number(durationDays),
 
-        startDate,
+        startDate: start,
 
         endDate,
 
@@ -1126,7 +1177,7 @@ exports.createSavingRequest = async (req, res) => {
     // RESPONSE
     // ==========================================
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message:
         "Daily Saving Request Submitted Successfully. Waiting for Admin Approval.",
@@ -1140,14 +1191,14 @@ exports.createSavingRequest = async (req, res) => {
       error
     );
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: error.message
+      message:
+        error.message ||
+        "Failed to create saving request."
     });
   }
 };
-
-
 /*
 =====================================================
 ADMIN GET ALL PENDING SAVING REQUESTS
