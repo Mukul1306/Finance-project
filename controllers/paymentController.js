@@ -387,10 +387,16 @@ exports.getPaymentSummary = async (req, res) => {
     // installmentYear
     // =====================================================
 
-    let thisMonthCollection = 0;
-    let thisMonthPenalty = 0;
+   let thisMonthCollection = 0;
+let thisMonthPenalty = 0;
 
-    for (const payment of payments) {
+// OLD DUES COLLECTED THIS MONTH
+// Payment was received this month,
+// but the installment belongs to an earlier month.
+let oldDuesCollectedThisMonth = 0;
+let oldDuesPenaltyThisMonth = 0;
+
+for (const payment of payments) {
       if (
         Number(payment.installmentMonth) === selectedMonth &&
         Number(payment.installmentYear) === selectedYear
@@ -433,6 +439,50 @@ exports.getPaymentSummary = async (req, res) => {
         );
       }
     }
+    // =====================================================
+// OLD DUES COLLECTED IN SELECTED/CURRENT MONTH
+// =====================================================
+
+for (const payment of payments) {
+  const paymentDate = new Date(payment.paymentDate);
+
+  // Check when the money was actually collected
+  let collectedInSelectedPeriod = true;
+
+  if (periodStart) {
+    collectedInSelectedPeriod =
+      paymentDate >= periodStart &&
+      paymentDate <= periodEnd;
+  } else {
+    // No filter = current month
+    collectedInSelectedPeriod =
+      paymentDate.getFullYear() === selectedYear &&
+      paymentDate.getMonth() + 1 === selectedMonth;
+  }
+
+  if (!collectedInSelectedPeriod) {
+    continue;
+  }
+
+  const duePeriod =
+    Number(payment.installmentYear) * 12 +
+    Number(payment.installmentMonth);
+
+  const selectedPeriod =
+    selectedYear * 12 + selectedMonth;
+
+  // Installment belongs to an earlier month
+  if (duePeriod < selectedPeriod) {
+    oldDuesCollectedThisMonth += Number(
+      payment.installmentAmount || 0
+    );
+
+    oldDuesPenaltyThisMonth += Number(
+      payment.penaltyAmount || 0
+    );
+  }
+}
+
 
     // =====================================================
     // PENDING MONTH
@@ -639,13 +689,15 @@ exports.getPaymentSummary = async (req, res) => {
       monthlyTarget,
 
       // Only EMI belonging to selected month
-      thisMonthCollection,
+     thisMonthCollection,
 
-      // Penalty belonging to selected month
-      thisMonthPenalty,
+thisMonthPenalty,
 
-      // Actual money received in selected period
-      totalCollection,
+oldDuesCollectedThisMonth,
+
+oldDuesPenaltyThisMonth,
+
+totalCollection,
 
       // Target - selected month's EMI collection
       pendingThisMonth,
