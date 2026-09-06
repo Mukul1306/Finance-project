@@ -1037,6 +1037,13 @@ exports.createSavingRequest = async (req, res) => {
       });
     }
 
+    if (memberData.status !== "ACTIVE") {
+  return res.status(400).json({
+    success: false,
+    message: "Only ACTIVE registered members can create a saving account"
+  });
+}
+
     // ==========================================
     // CHECK AREA
     // ==========================================
@@ -1051,23 +1058,9 @@ exports.createSavingRequest = async (req, res) => {
       });
     }
 
-    // ==========================================
-    // CHECK EXISTING ACTIVE SAVING
-    // ==========================================
+ 
 
-    const activeSaving =
-      await DailySaving.findOne({
-        member,
-        status: "ACTIVE"
-      });
-
-    if (activeSaving) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "This member already has an ACTIVE saving account"
-      });
-    }
+  
 
  
 
@@ -1310,24 +1303,12 @@ exports.approveSavingRequest = async (
         message: "Member Not Found"
       });
     }
-
-    // ==========================================
-    // RECHECK ACTIVE SAVING
-    // ==========================================
-
-    const existingSaving =
-      await DailySaving.findOne({
-        member: request.member,
-        status: "ACTIVE"
-      });
-
-    if (existingSaving) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Member already has an ACTIVE saving account"
-      });
-    }
+if (member.status !== "ACTIVE") {
+  return res.status(400).json({
+    success: false,
+    message: "Only ACTIVE registered members can have a saving account approved"
+  });
+}
 
     // ==========================================
     // CREATE REAL SAVING ACCOUNT
