@@ -912,29 +912,81 @@ exports.getPaymentHistory = async (req, res) => {
 
 exports.getPenaltyCollection = async (req, res) => {
   try {
-
-    const { year, month } = req.query;
+    const { year = "all", month = "all" } = req.query;
 
     let match = {};
+    const today = new Date();
 
-    if (year && year !== "all") {
+    // Default: current month
+    if (year === "all" && month === "all") {
+      match.paymentDate = {
+        $gte: new Date(
+          today.getFullYear(),
+          today.getMonth(),
+          1,
+          0,
+          0,
+          0,
+          0
+        ),
+        $lte: new Date(
+          today.getFullYear(),
+          today.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999
+        )
+      };
+    }
 
-      if (month && month !== "all") {
+    // Selected year + selected month
+    else if (year !== "all" && month !== "all") {
+      match.paymentDate = {
+        $gte: new Date(
+          Number(year),
+          Number(month) - 1,
+          1,
+          0,
+          0,
+          0,
+          0
+        ),
+        $lte: new Date(
+          Number(year),
+          Number(month),
+          0,
+          23,
+          59,
+          59,
+          999
+        )
+      };
+    }
 
-        match.paymentDate = {
-          $gte: new Date(Number(year), Number(month) - 1, 1),
-          $lte: new Date(Number(year), Number(month), 0, 23, 59, 59)
-        };
-
-      } else {
-
-        match.paymentDate = {
-          $gte: new Date(Number(year), 0, 1),
-          $lte: new Date(Number(year), 11, 31, 23, 59, 59)
-        };
-
-      }
-
+    // Selected year + all months
+    else if (year !== "all" && month === "all") {
+      match.paymentDate = {
+        $gte: new Date(
+          Number(year),
+          0,
+          1,
+          0,
+          0,
+          0,
+          0
+        ),
+        $lte: new Date(
+          Number(year),
+          11,
+          31,
+          23,
+          59,
+          59,
+          999
+        )
+      };
     }
 
     const result = await Payment.aggregate([
@@ -956,11 +1008,9 @@ exports.getPenaltyCollection = async (req, res) => {
     });
 
   } catch (error) {
-
     res.status(500).json({
       success: false,
       message: error.message
     });
-
   }
 };
