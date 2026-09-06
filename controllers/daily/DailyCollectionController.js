@@ -1607,10 +1607,12 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     // 1. GET ACTIVE SAVINGS
     // ==========================================================
 
-    const savings = await DailySaving.find({
-      assignedAgent: agentId,
-      status: "ACTIVE"
-    })
+ const savings = await DailySaving.find({
+  assignedAgent: agentId,
+  status: {
+    $in: ["ACTIVE", "COMPLETED", "CLOSED", "TERMINATED"]
+  }
+})
       .populate(
         "member",
         "memberId memberName mobile fatherName"
@@ -1627,9 +1629,11 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     // ==========================================================
 
     const loans = await DailyLoan.find({
-      assignedAgent: agentId,
-      status: "ACTIVE"
-    })
+  assignedAgent: agentId,
+  status: {
+    $in: ["ACTIVE", "DUE", "OVERDUE", "CLOSED", "REJECTED"]
+  }
+})
       .populate(
         "member",
         "memberId memberName mobile fatherName"
