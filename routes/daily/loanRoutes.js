@@ -4,45 +4,33 @@ require("express");
 const router =
 express.Router();
 const {
+  createLoan,
+  getLoans,
+  getLoan,
+  getLoanDetails,
+  collectEmi,
+  collectPrincipal,
+  getAreas,
+  getMembersByArea,
+  getMember,
+  searchLoanMembers,
+  getLoanMemberDetails,
+  calculateLoan,
+  getLoanHistory,
+  loanDashboard,
+  closeLoan,
+  updateLoan,
+  getPendingInstallments,
+  getAgentLoans,
+  getAgentsByArea,
 
-createLoan,
-
-getLoans,
-
-getLoan,
-
-getLoanDetails,
-
-collectEmi,
-
-collectPrincipal,
-
-getAreas,
-
-getMembersByArea,
-
-getMember,
-
-searchLoanMembers,
-
-getLoanMemberDetails,
-
-calculateLoan,
-
-getLoanHistory,
-
-loanDashboard,
-
-closeLoan,
-updateLoan,
-getPendingInstallments,
-getAgentLoans,
-    getAgentsByArea
-
-
-} = require(
-"../../controllers/daily/loanController"
-);
+  // Loan Request
+  createLoanRequest,
+  getLoanRequests,
+  getLoanRequestsByAgent,
+  approveLoanRequest,
+  rejectLoanRequest
+} = require("../../controllers/daily/loanController");
 
 const {
   sendSingleNotification,
@@ -158,7 +146,39 @@ router.post(
   "/notification/pending-members",
   sendPendingMembersNotification
 );
+// ==========================================================
+// LOAN REQUESTS
+// ==========================================================
 
+// Agent → Create loan request
+router.post(
+  "/loan-request",
+  createLoanRequest
+);
+
+// Admin → Get all loan requests
+router.get(
+  "/loan-requests",
+  getLoanRequests
+);
+
+// Agent → Get own loan requests
+router.get(
+  "/loan-requests/agent/:agentId",
+  getLoanRequestsByAgent
+);
+
+// Admin → Approve loan request
+router.put(
+  "/loan-request/:id/approve",
+  approveLoanRequest
+);
+
+// Admin → Reject loan request
+router.put(
+  "/loan-request/:id/reject",
+  rejectLoanRequest
+);
 
 module.exports =
 router;

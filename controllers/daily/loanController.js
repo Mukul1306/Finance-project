@@ -4,7 +4,7 @@ const DailySaving = require("../../models/daily/DailySaving");
 const LoanCollection = require("../../models/daily/LoanCollection");
 const AreaGroup = require("../../models/daily/AreaGroup");
 const Agent = require("../../models/daily/Agent");
-
+const DailyLoanRequest = require("../../models/daily/DailyLoanRequest");
 
 
 // ==========================================
@@ -4205,3 +4205,1047 @@ exports.getAgentLoans = async (req, res) => {
 
 };
 
+// ==========================================================
+// AGENT - CREATE LOAN REQUEST
+// Agent can REQUEST a loan.
+// Agent does NOT create the actual DailyLoan.
+// ==========================================================
+
+exports.createLoanRequest = async (req, res) => {
+  try {
+    const {
+      member,
+      loanAmount,
+      interestRate,
+      loanType,
+      loanDate,
+      startDate,
+      durationDays,
+      durationWeeks,
+      durationMonths,
+      loanTenureMonths,
+      gracePeriod,
+      penaltyType,
+      penaltyValue,
+
+      nomineeName,
+      nomineeMobile,
+
+      passportPhotoSubmitted,
+      aadhaarNumber,
+      aadhaarSubmitted,
+      panNumber,
+      panSubmitted,
+      cheque1Number,
+      cheque2Number,
+      cheque1Submitted,
+      cheque2Submitted,
+      stampPaperSubmitted,
+
+      securityType,
+      securityDetails,
+
+      guarantor1Name,
+      guarantor1FatherName,
+      guarantor1Gender,
+      guarantor1Dob,
+      guarantor1Mobile,
+      guarantor1AlternateMobile,
+      guarantor1Email,
+      guarantor1Address,
+      guarantor1City,
+      guarantor1District,
+      guarantor1State,
+      guarantor1Pincode,
+      guarantor1PhotoSubmitted,
+      guarantor1AadhaarNumber,
+      guarantor1AadhaarSubmitted,
+      guarantor1PanNumber,
+      guarantor1PanSubmitted,
+      guarantor1Cheque1Number,
+      guarantor1Cheque2Number,
+      guarantor1Cheque1Submitted,
+      guarantor1Cheque2Submitted,
+      guarantor1StampPaperSubmitted,
+      guarantor1SecurityType,
+      guarantor1SecurityDetails,
+
+      guarantor2Name,
+      guarantor2FatherName,
+      guarantor2Gender,
+      guarantor2Dob,
+      guarantor2Mobile,
+      guarantor2AlternateMobile,
+      guarantor2Email,
+      guarantor2Address,
+      guarantor2City,
+      guarantor2District,
+      guarantor2State,
+      guarantor2Pincode,
+      guarantor2PhotoSubmitted,
+      guarantor2AadhaarNumber,
+      guarantor2AadhaarSubmitted,
+      guarantor2PanNumber,
+      guarantor2PanSubmitted,
+      guarantor2Cheque1Number,
+      guarantor2Cheque2Number,
+      guarantor2Cheque1Submitted,
+      guarantor2Cheque2Submitted,
+      guarantor2StampPaperSubmitted,
+      guarantor2SecurityType,
+      guarantor2SecurityDetails,
+
+      areaName,
+      remarks
+    } = req.body;
+
+    // ------------------------------------------
+    // AGENT ID
+    // ------------------------------------------
+
+    const agentId =
+      req.user?._id ||
+      req.user?.id ||
+      req.body.agentId;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    // ------------------------------------------
+    // BASIC VALIDATION
+    // ------------------------------------------
+
+    if (!member) {
+      return res.status(400).json({
+        success: false,
+        message: "Member is required"
+      });
+    }
+
+    if (!loanAmount || Number(loanAmount) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid loan amount is required"
+      });
+    }
+
+    if (!interestRate && Number(interestRate) !== 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Interest rate is required"
+      });
+    }
+
+    if (!loanType) {
+      return res.status(400).json({
+        success: false,
+        message: "Loan type is required"
+      });
+    }
+
+    // ------------------------------------------
+    // CHECK MEMBER
+    // ------------------------------------------
+
+    const memberData = await DailyMember.findById(member);
+
+    if (!memberData) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
+
+    if (memberData.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Member is not active"
+      });
+    }
+
+    // ------------------------------------------
+    // CHECK AGENT
+    // ------------------------------------------
+
+    const agent = await Agent.findById(agentId);
+
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: "Agent not found"
+      });
+    }
+
+    // ------------------------------------------
+    // VALIDATE DURATION
+    // ------------------------------------------
+
+    if (loanType === "DAILY" && Number(durationDays) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Duration in days is required"
+      });
+    }
+
+    if (loanType === "WEEKLY" && Number(durationWeeks) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Duration in weeks is required"
+      });
+    }
+
+    if (loanType === "MONTHLY" && Number(durationMonths) <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Duration in months is required"
+      });
+    }
+
+    // ------------------------------------------
+    // CALCULATE END DATE
+    // ------------------------------------------
+
+    const actualStartDate = startDate || loanDate || new Date();
+
+    const calculatedStartDate = new Date(actualStartDate);
+
+    if (Number.isNaN(calculatedStartDate.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid loan start date"
+      });
+    }
+
+    const endDate = new Date(calculatedStartDate);
+
+    if (loanType === "DAILY") {
+      endDate.setDate(
+        endDate.getDate() + Number(durationDays)
+      );
+    }
+
+    if (loanType === "WEEKLY") {
+      endDate.setDate(
+        endDate.getDate() + Number(durationWeeks) * 7
+      );
+    }
+
+    if (loanType === "MONTHLY") {
+      endDate.setMonth(
+        endDate.getMonth() + Number(durationMonths)
+      );
+    }
+
+    if (loanType === "FIXED") {
+      endDate.setMonth(
+        endDate.getMonth() + Number(loanTenureMonths || 1)
+      );
+    }
+
+    // ------------------------------------------
+    // CALCULATE LOAN VALUES
+    // ------------------------------------------
+
+    const amount = Number(loanAmount);
+    const rate = Number(interestRate);
+
+    let totalInterest = 0;
+    let totalPayable = 0;
+    let emiAmount = 0;
+    let totalInstallments = 1;
+
+    if (loanType === "DAILY") {
+      totalInstallments = Number(durationDays);
+
+      totalInterest = Math.round(
+        (amount * rate * Number(loanTenureMonths || 0)) / 100
+      );
+
+      totalPayable = amount + totalInterest;
+
+      emiAmount = Math.ceil(
+        totalPayable / totalInstallments
+      );
+    }
+
+    if (loanType === "WEEKLY") {
+      totalInstallments = Number(durationWeeks);
+
+      totalInterest = Math.round(
+        (amount * rate * Number(loanTenureMonths || 0)) / 100
+      );
+
+      totalPayable = amount + totalInterest;
+
+      emiAmount = Math.ceil(
+        totalPayable / totalInstallments
+      );
+    }
+
+    if (loanType === "MONTHLY") {
+      totalInstallments = Number(durationMonths);
+
+      totalInterest = Math.round(
+        (amount * rate * Number(loanTenureMonths || 0)) / 100
+      );
+
+      totalPayable = amount + totalInterest;
+
+      emiAmount = Math.ceil(
+        totalPayable / totalInstallments
+      );
+    }
+
+    if (loanType === "FIXED") {
+      totalInstallments = 1;
+
+      totalInterest = Math.round(
+        (amount * rate) / 100
+      );
+
+      totalPayable = amount + totalInterest;
+
+      emiAmount = totalInterest;
+    }
+
+    // ------------------------------------------
+    // CREATE REQUEST
+    // ------------------------------------------
+
+    const request = await DailyLoanRequest.create({
+      member: memberData._id,
+
+      memberId: memberData.memberId,
+      borrowerName: memberData.memberName,
+      fatherName: memberData.fatherName,
+      gender: memberData.gender,
+      dob: memberData.dob,
+      mobile: memberData.mobile,
+      alternateMobile: memberData.alternateMobile,
+      email: memberData.email,
+      address: memberData.residentialAddress,
+      city: memberData.city,
+      district: memberData.district,
+      state: memberData.state,
+      pincode: memberData.pincode,
+
+      areaName: areaName || "",
+
+      assignedAgent: agentId,
+
+      loanAmount: amount,
+      interestRate: rate,
+      loanType,
+
+      durationDays: Number(durationDays || 0),
+      durationWeeks: Number(durationWeeks || 0),
+      durationMonths: Number(durationMonths || 0),
+      loanTenureMonths: Number(loanTenureMonths || 10),
+
+      loanDate: calculatedStartDate,
+      startDate: calculatedStartDate,
+      endDate,
+
+      totalInterest,
+      totalPayable,
+      emiAmount,
+      totalInstallments,
+
+      nomineeName: nomineeName || "",
+      nomineeMobile: nomineeMobile || "",
+
+      passportPhotoSubmitted:
+        Boolean(passportPhotoSubmitted),
+
+      aadhaarNumber: aadhaarNumber || "",
+      aadhaarSubmitted:
+        Boolean(aadhaarSubmitted),
+
+      panNumber: panNumber || "",
+      panSubmitted:
+        Boolean(panSubmitted),
+
+      cheque1Number: cheque1Number || "",
+      cheque2Number: cheque2Number || "",
+
+      cheque1Submitted:
+        Boolean(cheque1Submitted),
+
+      cheque2Submitted:
+        Boolean(cheque2Submitted),
+
+      stampPaperSubmitted:
+        Boolean(stampPaperSubmitted),
+
+      securityType:
+        securityType || "UNSECURED",
+
+      securityDetails:
+        securityDetails || "",
+
+      // GUARANTOR 1
+      guarantor1Name: guarantor1Name || "",
+      guarantor1FatherName: guarantor1FatherName || "",
+      guarantor1Gender: guarantor1Gender || "",
+      guarantor1Dob: guarantor1Dob || null,
+      guarantor1Mobile: guarantor1Mobile || "",
+      guarantor1AlternateMobile:
+        guarantor1AlternateMobile || "",
+      guarantor1Email: guarantor1Email || "",
+      guarantor1Address: guarantor1Address || "",
+      guarantor1City: guarantor1City || "",
+      guarantor1District: guarantor1District || "",
+      guarantor1State: guarantor1State || "",
+      guarantor1Pincode: guarantor1Pincode || "",
+
+      guarantor1PhotoSubmitted:
+        Boolean(guarantor1PhotoSubmitted),
+
+      guarantor1AadhaarNumber:
+        guarantor1AadhaarNumber || "",
+
+      guarantor1AadhaarSubmitted:
+        Boolean(guarantor1AadhaarSubmitted),
+
+      guarantor1PanNumber:
+        guarantor1PanNumber || "",
+
+      guarantor1PanSubmitted:
+        Boolean(guarantor1PanSubmitted),
+
+      guarantor1Cheque1Number:
+        guarantor1Cheque1Number || "",
+
+      guarantor1Cheque2Number:
+        guarantor1Cheque2Number || "",
+
+      guarantor1Cheque1Submitted:
+        Boolean(guarantor1Cheque1Submitted),
+
+      guarantor1Cheque2Submitted:
+        Boolean(guarantor1Cheque2Submitted),
+
+      guarantor1StampPaperSubmitted:
+        Boolean(guarantor1StampPaperSubmitted),
+
+      guarantor1SecurityType:
+        guarantor1SecurityType || "UNSECURED",
+
+      guarantor1SecurityDetails:
+        guarantor1SecurityDetails || "",
+
+      // GUARANTOR 2
+      guarantor2Name: guarantor2Name || "",
+      guarantor2FatherName: guarantor2FatherName || "",
+      guarantor2Gender: guarantor2Gender || "",
+      guarantor2Dob: guarantor2Dob || null,
+      guarantor2Mobile: guarantor2Mobile || "",
+      guarantor2AlternateMobile:
+        guarantor2AlternateMobile || "",
+      guarantor2Email: guarantor2Email || "",
+      guarantor2Address: guarantor2Address || "",
+      guarantor2City: guarantor2City || "",
+      guarantor2District: guarantor2District || "",
+      guarantor2State: guarantor2State || "",
+      guarantor2Pincode: guarantor2Pincode || "",
+
+      guarantor2PhotoSubmitted:
+        Boolean(guarantor2PhotoSubmitted),
+
+      guarantor2AadhaarNumber:
+        guarantor2AadhaarNumber || "",
+
+      guarantor2AadhaarSubmitted:
+        Boolean(guarantor2AadhaarSubmitted),
+
+      guarantor2PanNumber:
+        guarantor2PanNumber || "",
+
+      guarantor2PanSubmitted:
+        Boolean(guarantor2PanSubmitted),
+
+      guarantor2Cheque1Number:
+        guarantor2Cheque1Number || "",
+
+      guarantor2Cheque2Number:
+        guarantor2Cheque2Number || "",
+
+      guarantor2Cheque1Submitted:
+        Boolean(guarantor2Cheque1Submitted),
+
+      guarantor2Cheque2Submitted:
+        Boolean(guarantor2Cheque2Submitted),
+
+      guarantor2StampPaperSubmitted:
+        Boolean(guarantor2StampPaperSubmitted),
+
+      guarantor2SecurityType:
+        guarantor2SecurityType || "UNSECURED",
+
+      guarantor2SecurityDetails:
+        guarantor2SecurityDetails || "",
+
+      gracePeriod: Number(gracePeriod || 0),
+
+      penaltyType:
+        penaltyType || "PERCENTAGE",
+
+      penaltyValue:
+        Number(penaltyValue || 0),
+
+      remarks: remarks || "",
+
+      status: "PENDING"
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Loan request submitted successfully. Waiting for admin approval.",
+      request
+    });
+
+  } catch (error) {
+    console.error("CREATE LOAN REQUEST ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ==========================================================
+// ADMIN - GET ALL LOAN REQUESTS
+// ==========================================================
+
+exports.getLoanRequests = async (req, res) => {
+  try {
+    const requests = await DailyLoanRequest.find()
+      .populate(
+        "member",
+        "memberName memberId mobile"
+      )
+      .populate(
+        "assignedAgent",
+        "name mobile agentId"
+      )
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      requests
+    });
+
+  } catch (error) {
+    console.error("GET LOAN REQUESTS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+// ==========================================================
+// AGENT - GET OWN LOAN REQUESTS
+// ==========================================================
+
+exports.getLoanRequestsByAgent = async (req, res) => {
+  try {
+    const { agentId } = req.params;
+
+    const requests = await DailyLoanRequest.find({
+      assignedAgent: agentId
+    })
+      .populate(
+        "member",
+        "memberName memberId mobile"
+      )
+      .sort({ createdAt: -1 });
+
+    return res.json({
+      success: true,
+      requests
+    });
+
+  } catch (error) {
+    console.error(
+      "GET AGENT LOAN REQUESTS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// ==========================================================
+// ADMIN - APPROVE LOAN REQUEST
+// This is the ONLY point where actual DailyLoan is created.
+// ==========================================================
+
+exports.approveLoanRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const request = await DailyLoanRequest.findById(id);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan request not found"
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Request is already ${request.status}`
+      });
+    }
+
+    // ------------------------------------------
+    // MEMBER CHECK
+    // ------------------------------------------
+
+    const member = await DailyMember.findById(
+      request.member
+    );
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
+
+    if (member.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Member is not active"
+      });
+    }
+
+    // ------------------------------------------
+    // GENERATE UNIQUE LOAN NUMBER
+    // ------------------------------------------
+
+    const lastLoan = await DailyLoan.findOne()
+      .sort({ createdAt: -1 });
+
+    let nextNumber = 1;
+
+    if (lastLoan?.loanNumber) {
+      const match =
+        String(lastLoan.loanNumber).match(
+          /(\d+)$/
+        );
+
+      if (match) {
+        nextNumber =
+          Number(match[1]) + 1;
+      }
+    }
+
+    let loanNumber =
+      `LN${String(nextNumber).padStart(6, "0")}`;
+
+    // Extra protection against duplicate number
+    let exists = await DailyLoan.findOne({
+      loanNumber
+    });
+
+    while (exists) {
+      nextNumber++;
+
+      loanNumber =
+        `LN${String(nextNumber).padStart(6, "0")}`;
+
+      exists = await DailyLoan.findOne({
+        loanNumber
+      });
+    }
+
+    // ------------------------------------------
+    // CREATE ACTUAL LOAN
+    // ------------------------------------------
+
+    const loan = await DailyLoan.create({
+      member: member._id,
+
+      memberId: member.memberId,
+
+      borrowerName: member.memberName,
+      fatherName: member.fatherName,
+      gender: member.gender,
+      dob: member.dob,
+      mobile: member.mobile,
+      alternateMobile: member.alternateMobile,
+      email: member.email,
+
+      address: member.residentialAddress,
+      city: member.city,
+      district: member.district,
+      state: member.state,
+      pincode: member.pincode,
+
+      areaName: request.areaName || "",
+
+      assignedAgent:
+        request.assignedAgent || null,
+
+      loanAmount:
+        request.loanAmount,
+
+      interestRate:
+        request.interestRate,
+
+      loanType:
+        request.loanType,
+
+      durationDays:
+        request.durationDays || 0,
+
+      durationWeeks:
+        request.durationWeeks || 0,
+
+      durationMonths:
+        request.durationMonths || 0,
+
+      loanTenureMonths:
+        request.loanTenureMonths || 10,
+
+      startDate:
+        request.startDate,
+
+      endDate:
+        request.endDate,
+
+      loanDate:
+        request.loanDate,
+
+      totalInterest:
+        request.totalInterest,
+
+      totalPayable:
+        request.totalPayable,
+
+      emiAmount:
+        request.emiAmount,
+
+      totalPaid: 0,
+
+      outstandingAmount:
+        request.loanType === "FIXED"
+          ? request.loanAmount
+          : request.totalPayable,
+
+      completedInstallments: 0,
+
+      pendingInstallments:
+        request.totalInstallments,
+
+      lastInstallmentNo: 0,
+
+      status: "ACTIVE",
+
+      nomineeName:
+        request.nomineeName || "",
+
+      nomineeMobile:
+        request.nomineeMobile || "",
+
+      passportPhotoSubmitted:
+        request.passportPhotoSubmitted,
+
+      aadhaarNumber:
+        request.aadhaarNumber || "",
+
+      aadhaarSubmitted:
+        request.aadhaarSubmitted,
+
+      panNumber:
+        request.panNumber || "",
+
+      panSubmitted:
+        request.panSubmitted,
+
+      cheque1Number:
+        request.cheque1Number || "",
+
+      cheque2Number:
+        request.cheque2Number || "",
+
+      cheque1Submitted:
+        request.cheque1Submitted,
+
+      cheque2Submitted:
+        request.cheque2Submitted,
+
+      stampPaperSubmitted:
+        request.stampPaperSubmitted,
+
+      securityType:
+        request.securityType,
+
+      securityDetails:
+        request.securityDetails,
+
+      // GUARANTOR 1
+      guarantor1Name:
+        request.guarantor1Name,
+
+      guarantor1FatherName:
+        request.guarantor1FatherName,
+
+      guarantor1Gender:
+        request.guarantor1Gender,
+
+      guarantor1Dob:
+        request.guarantor1Dob,
+
+      guarantor1Mobile:
+        request.guarantor1Mobile,
+
+      guarantor1AlternateMobile:
+        request.guarantor1AlternateMobile,
+
+      guarantor1Email:
+        request.guarantor1Email,
+
+      guarantor1Address:
+        request.guarantor1Address,
+
+      guarantor1City:
+        request.guarantor1City,
+
+      guarantor1District:
+        request.guarantor1District,
+
+      guarantor1State:
+        request.guarantor1State,
+
+      guarantor1Pincode:
+        request.guarantor1Pincode,
+
+      guarantor1PhotoSubmitted:
+        request.guarantor1PhotoSubmitted,
+
+      guarantor1AadhaarNumber:
+        request.guarantor1AadhaarNumber,
+
+      guarantor1AadhaarSubmitted:
+        request.guarantor1AadhaarSubmitted,
+
+      guarantor1PanNumber:
+        request.guarantor1PanNumber,
+
+      guarantor1PanSubmitted:
+        request.guarantor1PanSubmitted,
+
+      guarantor1Cheque1Number:
+        request.guarantor1Cheque1Number,
+
+      guarantor1Cheque2Number:
+        request.guarantor1Cheque2Number,
+
+      guarantor1Cheque1Submitted:
+        request.guarantor1Cheque1Submitted,
+
+      guarantor1Cheque2Submitted:
+        request.guarantor1Cheque2Submitted,
+
+      guarantor1StampPaperSubmitted:
+        request.guarantor1StampPaperSubmitted,
+
+      guarantor1SecurityType:
+        request.guarantor1SecurityType,
+
+      guarantor1SecurityDetails:
+        request.guarantor1SecurityDetails,
+
+      // GUARANTOR 2
+      guarantor2Name:
+        request.guarantor2Name,
+
+      guarantor2FatherName:
+        request.guarantor2FatherName,
+
+      guarantor2Gender:
+        request.guarantor2Gender,
+
+      guarantor2Dob:
+        request.guarantor2Dob,
+
+      guarantor2Mobile:
+        request.guarantor2Mobile,
+
+      guarantor2AlternateMobile:
+        request.guarantor2AlternateMobile,
+
+      guarantor2Email:
+        request.guarantor2Email,
+
+      guarantor2Address:
+        request.guarantor2Address,
+
+      guarantor2City:
+        request.guarantor2City,
+
+      guarantor2District:
+        request.guarantor2District,
+
+      guarantor2State:
+        request.guarantor2State,
+
+      guarantor2Pincode:
+        request.guarantor2Pincode,
+
+      guarantor2PhotoSubmitted:
+        request.guarantor2PhotoSubmitted,
+
+      guarantor2AadhaarNumber:
+        request.guarantor2AadhaarNumber,
+
+      guarantor2AadhaarSubmitted:
+        request.guarantor2AadhaarSubmitted,
+
+      guarantor2PanNumber:
+        request.guarantor2PanNumber,
+
+      guarantor2PanSubmitted:
+        request.guarantor2PanSubmitted,
+
+      guarantor2Cheque1Number:
+        request.guarantor2Cheque1Number,
+
+      guarantor2Cheque2Number:
+        request.guarantor2Cheque2Number,
+
+      guarantor2Cheque1Submitted:
+        request.guarantor2Cheque1Submitted,
+
+      guarantor2Cheque2Submitted:
+        request.guarantor2Cheque2Submitted,
+
+      guarantor2StampPaperSubmitted:
+        request.guarantor2StampPaperSubmitted,
+
+      guarantor2SecurityType:
+        request.guarantor2SecurityType,
+
+      guarantor2SecurityDetails:
+        request.guarantor2SecurityDetails,
+
+      gracePeriod:
+        request.gracePeriod,
+
+      penaltyType:
+        request.penaltyType,
+
+      penaltyValue:
+        request.penaltyValue,
+
+      remarks:
+        request.remarks
+    });
+
+    // ------------------------------------------
+    // UPDATE REQUEST
+    // ------------------------------------------
+
+    request.status = "APPROVED";
+    request.approvedBy =
+      req.user?._id || req.user?.id || null;
+    request.approvedAt = new Date();
+
+    await request.save();
+
+    return res.json({
+      success: true,
+      message: "Loan approved successfully",
+      loan
+    });
+
+  } catch (error) {
+    console.error(
+      "APPROVE LOAN REQUEST ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+
+// ==========================================================
+// ADMIN - REJECT LOAN REQUEST
+// ==========================================================
+
+exports.rejectLoanRequest = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      rejectionReason
+    } = req.body;
+
+    const request =
+      await DailyLoanRequest.findById(id);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan request not found"
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Request is already ${request.status}`
+      });
+    }
+
+    request.status = "REJECTED";
+
+    request.rejectedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.rejectedAt =
+      new Date();
+
+    request.rejectionReason =
+      rejectionReason || "Rejected by admin";
+
+    await request.save();
+
+    return res.json({
+      success: true,
+      message: "Loan request rejected successfully"
+    });
+
+  } catch (error) {
+    console.error(
+      "REJECT LOAN REQUEST ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
