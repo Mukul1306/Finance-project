@@ -3489,6 +3489,38 @@ exports.loanDashboard = async (req, res) => {
 
             ]);
 
+            // ==========================================
+// LOAN AMOUNT CURRENTLY IN FIELD
+// IMPORTANT:
+// Only loans which are still open.
+// CLOSED / REJECTED loans are excluded.
+// ==========================================
+
+const loanAmountInFieldSummary =
+    await DailyLoan.aggregate([
+        {
+            $match: {
+                loanType,
+                status: {
+                    $in: [
+                        "ACTIVE",
+                        "DUE",
+                        "OVERDUE"
+                    ]
+                }
+            }
+        },
+        {
+            $group: {
+                _id: null,
+
+                loanAmountInField: {
+                    $sum: "$loanAmount"
+                }
+            }
+        }
+    ]);
+
 
         // ==========================================
         // GET ONLY SELECTED TYPE LOANS
@@ -4026,11 +4058,15 @@ dashboard: {
     closedLoans,
     overdueLoans,
 
-    loanAmount:
-        loanSummary[0]?.loanAmount || 0,
+   loanAmount:
+    loanSummary[0]?.loanAmount || 0,
 
-    outstanding:
-        loanSummary[0]?.outstanding || 0,
+loanAmountInField:
+    loanAmountInFieldSummary[0]?.loanAmountInField || 0,
+
+outstanding:
+    loanSummary[0]?.outstanding || 0,
+
 
     totalPaid:
         loanSummary[0]?.totalPaid || 0,
