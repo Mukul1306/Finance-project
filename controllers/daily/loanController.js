@@ -54,16 +54,18 @@ const calculateLoanData = (
             break;
 
 
-        case "WEEKLY":
+case "WEEKLY":
 
-            // Example:
-            // 15 weeks = 105 days
-            // 105 / 30 = 3.5 months
-            interestMonths = (durationWeeks * 7) / 30;
+    // Weekly loan:
+    // Interest is calculated according to
+    // Loan Tenure (Months), same as Admin Create Loan.
 
-            totalInstallments = durationWeeks;
+    interestMonths = loanTenureMonths;
 
-            break;
+    // Number of weekly EMIs
+    totalInstallments = durationWeeks;
+
+    break;
 
 
         case "MONTHLY":
