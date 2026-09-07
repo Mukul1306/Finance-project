@@ -2352,18 +2352,15 @@ async (req, res) => {
 
 };
 
+=====================================================
+
 // =====================================================
-// GET ACTIVE AGENTS FOR TASK MANAGEMENT
-// Lightweight API - only agent information
+// GET ALL AGENTS FOR TASK MANAGEMENT
 // =====================================================
 
 exports.getTaskAgents = async (req, res) => {
   try {
-    const agents = await Agent.find({
-      status: {
-        $in: ["ACTIVE", "Active", "active"]
-      }
-    })
+    const agents = await Agent.find({})
       .select("_id name email mobile status")
       .sort({ name: 1 })
       .lean();
