@@ -100,6 +100,10 @@ app.use("/api/payment", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/loans", loanRoutes);
 app.use("/api/interest", interestRoutes);
+
+app.use("/api/daily", taskRoutes);
+
+
 app.use(
 "/api/daily",
 agentRoutes
@@ -112,6 +116,8 @@ app.use(
 "/api/daily",
 dailyMemberRoutes
 );
+
+
 app.use(
 "/api/daily",
 collectionRoutes
@@ -184,7 +190,7 @@ app.use(
 dailySavingRoutes
 );
 
-app.use("/api/daily", taskRoutes);
+
 
 app.use("/api/daily", agentDepositRoutes);
 // app.use("/api/dashboard", dashboardRoutes);
