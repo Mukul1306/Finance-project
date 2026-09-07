@@ -89,7 +89,7 @@ const userRoutes =
 require("./routes/daily/userRoutes");
 const memberPortalRoutes =
   require("./routes/memberPortalRoutes");
-  const taskRoutes = require("./routes/taskRoutes");
+ const taskRoutes = require("./routes/daily/taskRoutes");
 // ==========================================
 // 4. API ROUTE DECLARATION CORNER
 // ==========================================

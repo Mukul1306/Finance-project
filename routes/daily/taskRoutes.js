@@ -11,20 +11,20 @@ const {
   getAgentTaskHistory,
   startAgentTask,
   completeAgentTask,
-} = require("../controllers/daily/taskController");
+} = require("../../controllers/daily/taskController");
 
-// ================================
+// ==========================================
 // ADMIN TASK MANAGEMENT
-// ================================
+// ==========================================
 
 router.post("/tasks", createTask);
 router.get("/tasks", getTasks);
 router.get("/tasks/:id", getTaskDetails);
 router.put("/tasks/:id/status", updateTaskStatus);
 
-// ================================
+// ==========================================
 // AGENT TASK MANAGEMENT
-// ================================
+// ==========================================
 
 router.get("/agent/tasks", getAgentTasks);
 router.get("/agent/tasks/history", getAgentTaskHistory);
