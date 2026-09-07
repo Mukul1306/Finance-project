@@ -2351,3 +2351,34 @@ async (req, res) => {
   }
 
 };
+
+// =====================================================
+// GET ACTIVE AGENTS FOR TASK MANAGEMENT
+// Lightweight API - only agent information
+// =====================================================
+
+exports.getTaskAgents = async (req, res) => {
+  try {
+    const agents = await Agent.find({
+      status: {
+        $in: ["ACTIVE", "Active", "active"]
+      }
+    })
+      .select("_id name email mobile status")
+      .sort({ name: 1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      agents
+    });
+
+  } catch (error) {
+    console.error("GET TASK AGENTS ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};

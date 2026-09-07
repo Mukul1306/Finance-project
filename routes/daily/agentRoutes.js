@@ -11,7 +11,8 @@ const {
   getAgent,
   deleteAgent,
   getAgentProfile,
-  updateAgent
+  updateAgent,
+    getTaskAgents
 
 } = require("../../controllers/daily/agentController");
 
@@ -24,6 +25,11 @@ router.get(
   "/agents",
   getAgents
 );
+router.get(
+  "/task-agents",
+  getTaskAgents
+);
+
 router.get(
 "/agent-profile/:id",
 getAgentProfile
