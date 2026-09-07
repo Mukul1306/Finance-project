@@ -1028,176 +1028,158 @@ exports.savingDetails = async (req, res) => {
 USER PASSBOOK
 ====================================================
 */
-
 exports.passbook = async (req, res) => {
-
   try {
+    const { memberId } = req.params;
 
-    const { memberId } =
-      req.params;
+    // Validate member ID
+    if (!mongoose.Types.ObjectId.isValid(memberId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Member ID"
+      });
+    }
 
+    const memberObjectId = new mongoose.Types.ObjectId(memberId);
 
-    /*
-    ================================================
-    ALL TRANSACTIONS
-    ================================================
-    */
+    // ================================================
+    // ALL TRANSACTIONS
+    // ================================================
 
-    const transactions =
-      await DailyTransaction.find({
-        member: memberId
+    const transactions = await DailyTransaction.find({
+      member: memberObjectId
+    })
+      .populate(
+        "savingAccount",
+        "fixedAmount collectionType durationDays startDate endDate"
+      )
+      .sort({
+        collectionDate: -1
       })
-        .populate(
-          "savingAccount",
-          "fixedAmount collectionType durationDays startDate endDate"
-        )
-        .sort({
-          collectionDate: -1
-        })
-        .lean();
+      .lean();
 
 
-    /*
-    ================================================
-    TOTAL
-    ================================================
-    */
+    // ================================================
+    // TOTALS
+    // Calculate directly from transactions
+    // ================================================
 
-    const total =
-      await DailyTransaction.aggregate([
+    const totalSaved = transactions.reduce(
+      (sum, item) =>
+        sum + Number(item.dailyAmount || 0),
+      0
+    );
 
-        {
-          $match: {
-            member: memberId
-          }
-        },
+    const totalPenalty = transactions.reduce(
+      (sum, item) =>
+        sum + Number(item.penalty || 0),
+      0
+    );
 
-        {
-          $group: {
-
-            _id: null,
-
-            totalSaved: {
-              $sum: "$dailyAmount"
-            },
-
-            totalPenalty: {
-              $sum: "$penalty"
-            },
-
-            totalCollection: {
-              $sum: "$totalAmount"
-            }
-
-          }
-        }
-
-      ]);
+    const totalCollection = transactions.reduce(
+      (sum, item) =>
+        sum + Number(item.totalAmount || 0),
+      0
+    );
 
 
-    /*
-    ================================================
-    ACCOUNT-WISE SUMMARY
-    ================================================
-    */
+    // ================================================
+    // ALL SAVING ACCOUNTS
+    // ================================================
 
-    const savingAccounts =
-      await DailySaving.find({
-        member: memberId,
-        status: {
-          $in: SAVING_STATUSES
-        }
+    const savingAccounts = await DailySaving.find({
+      member: memberObjectId,
+      status: {
+        $in: SAVING_STATUSES
+      }
+    })
+      .populate("assignedAgent", "name mobile")
+      .populate("areaGroup", "areaName duration")
+      .sort({
+        startDate: -1,
+        createdAt: -1
+      });
+
+
+    // ================================================
+    // ACCOUNT-WISE SUMMARY
+    // ================================================
+
+    const accountSummaries = await Promise.all(
+      savingAccounts.map(async (saving) => {
+
+        const accountTransactions =
+          await DailyTransaction.find({
+            member: memberObjectId,
+            savingAccount: saving._id
+          })
+            .sort({
+              collectionDate: -1
+            })
+            .lean();
+
+
+        const accountTotalSaved =
+          accountTransactions.reduce(
+            (sum, item) =>
+              sum + Number(item.dailyAmount || 0),
+            0
+          );
+
+
+        const accountTotalPenalty =
+          accountTransactions.reduce(
+            (sum, item) =>
+              sum + Number(item.penalty || 0),
+            0
+          );
+
+
+        const accountTotalCollection =
+          accountTransactions.reduce(
+            (sum, item) =>
+              sum + Number(item.totalAmount || 0),
+            0
+          );
+
+
+        return {
+          saving,
+
+          summary: {
+            totalSaved: accountTotalSaved,
+
+            totalPenalty: accountTotalPenalty,
+
+            totalCollection: accountTotalCollection,
+
+            transactionCount:
+              accountTransactions.length
+          },
+
+          transactions: accountTransactions
+        };
       })
-        .populate(
-          "assignedAgent",
-          "name mobile"
-        )
-        .populate(
-          "areaGroup",
-          "areaName duration"
-        )
-        .sort({
-          startDate: -1,
-          createdAt: -1
-        });
+    );
 
 
-    const accountSummaries =
-      await Promise.all(
-
-        savingAccounts.map(
-          async (saving) => {
-
-            const accountTransactions =
-              await DailyTransaction.find({
-                member: memberId,
-                savingAccount:
-                  saving._id
-              }).lean();
-
-
-            return {
-
-              saving,
-
-              totalSaved:
-                accountTransactions.reduce(
-                  (sum, item) =>
-                    sum +
-                    Number(
-                      item.dailyAmount || 0
-                    ),
-                  0
-                ),
-
-              totalPenalty:
-                accountTransactions.reduce(
-                  (sum, item) =>
-                    sum +
-                    Number(
-                      item.penalty || 0
-                    ),
-                  0
-                ),
-
-              totalCollection:
-                accountTransactions.reduce(
-                  (sum, item) =>
-                    sum +
-                    Number(
-                      item.totalAmount || 0
-                    ),
-                  0
-                ),
-
-              transactionCount:
-                accountTransactions.length
-
-            };
-
-          }
-        )
-
-      );
-
+    // ================================================
+    // RESPONSE
+    // ================================================
 
     return res.status(200).json({
 
       success: true,
 
-      summary:
-        total.length > 0
-          ? total[0]
-          : {
-              totalSaved: 0,
-              totalPenalty: 0,
-              totalCollection: 0
-            },
+      summary: {
+        totalSaved,
+        totalPenalty,
+        totalCollection
+      },
 
       transactions,
 
-      accounts:
-        accountSummaries
+      accounts: accountSummaries
 
     });
 
@@ -1209,15 +1191,10 @@ exports.passbook = async (req, res) => {
     );
 
     return res.status(500).json({
-
       success: false,
-
       message: error.message
-
     });
-
   }
-
 };
 
 
