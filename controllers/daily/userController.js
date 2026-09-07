@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const DailyMember = require("../../models/daily/DailyMember");
 const DailySaving = require("../../models/daily/DailySaving");
 const DailyTransaction = require("../../models/daily/DailyTransaction");
