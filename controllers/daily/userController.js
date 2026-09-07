@@ -3,471 +3,660 @@ const DailySaving = require("../../models/daily/DailySaving");
 const DailyTransaction = require("../../models/daily/DailyTransaction");
 const DailyLoan = require("../../models/daily/DailyLoan");
 const LoanCollection = require("../../models/daily/LoanCollection");
-const AreaGroup = require("../../models/daily/AreaGroup");
-const DailyAgent = require("../../models/daily/Agent");
 
 /*
-==========================================
+====================================================
+HELPER
+====================================================
+*/
+
+const SAVING_STATUSES = [
+  "ACTIVE",
+  "COMPLETED",
+  "CLOSED",
+  "TERMINATED"
+];
+
+const LOAN_STATUSES = [
+  "ACTIVE",
+  "DUE",
+  "OVERDUE",
+  "CLOSED"
+];
+
+
+/*
+====================================================
 MEMBER LOGIN
-==========================================
+====================================================
 */
 
 exports.memberLogin = async (req, res) => {
-
   try {
-
     const { mobile, password } = req.body;
 
     if (!mobile || !password) {
-
       return res.status(400).json({
-
         success: false,
-
         message: "Mobile and Password are required"
-
       });
-
     }
 
     const member = await DailyMember.findOne({
-
       mobile,
-
       status: "ACTIVE"
-
     });
 
     if (!member) {
-
       return res.status(404).json({
-
         success: false,
-
         message: "Member not found"
-
       });
-
     }
 
     if (member.password !== password) {
-
       return res.status(401).json({
-
         success: false,
-
         message: "Invalid Password"
-
       });
-
     }
 
-    // Find Saving Account
+    /*
+    ================================================
+    GET ALL SAVING ACCOUNTS
+    ================================================
+    */
 
-    const saving = await DailySaving.findOne({
-
+    const savings = await DailySaving.find({
       member: member._id,
-
-      status: "ACTIVE"
-
+      status: {
+        $in: SAVING_STATUSES
+      }
     })
       .populate("assignedAgent", "name mobile")
-      .populate("areaGroup", "areaName");
+      .populate("areaGroup", "areaName duration")
+      .sort({ startDate: -1, createdAt: -1 });
 
-    // Check Active Loan
 
-    const loan = await DailyLoan.findOne({
+    /*
+    ================================================
+    GET ALL LOANS
+    ================================================
+    */
 
+    const loans = await DailyLoan.find({
       member: member._id,
-
       status: {
-        $in: [
-          "ACTIVE",
-          "DUE",
-          "OVERDUE"
-        ]
+        $in: LOAN_STATUSES
       }
+    })
+      .sort({
+        loanDate: -1,
+        createdAt: -1
+      });
 
-    });
 
     const responseMember = member.toObject();
 
     delete responseMember.password;
 
-    res.status(200).json({
 
+    return res.status(200).json({
       success: true,
-
       message: "Login Successful",
 
       member: responseMember,
 
-      saving,
+      // ALL ACCOUNTS
+      savings,
 
-      hasLoan: !!loan,
+      loans,
 
-      loanId: loan ? loan._id : null
+      // Number of accounts
+      savingCount: savings.length,
+      loanCount: loans.length,
 
+      hasLoan: loans.length > 0,
+
+      // Backward compatibility
+      saving: savings.length > 0 ? savings[0] : null,
+      loan: loans.length > 0 ? loans[0] : null,
+
+      loanId: loans.length > 0
+        ? loans[0]._id
+        : null
     });
 
-  }
+  } catch (error) {
+    console.log("MEMBER LOGIN ERROR:", error);
 
-  catch (error) {
-
-    console.log(error);
-
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
       message: error.message
-
     });
-
   }
-
 };
 
+
 /*
-==========================================
+====================================================
 USER DASHBOARD
-==========================================
+====================================================
 */
 
 exports.dashboard = async (req, res) => {
-
   try {
-
     const { memberId } = req.params;
 
-    // ==========================
-    // MEMBER
-    // ==========================
+    /*
+    ================================================
+    MEMBER
+    ================================================
+    */
 
     const member = await DailyMember.findById(memberId);
 
     if (!member) {
-
       return res.status(404).json({
-
         success: false,
-
         message: "Member Not Found"
-
       });
-
     }
 
-    // ==========================
-    // SAVING ACCOUNT
-    // ==========================
 
-    const saving = await DailySaving.findOne({
+    /*
+    ================================================
+    ALL SAVING ACCOUNTS
+    ================================================
+    */
 
+    const savings = await DailySaving.find({
       member: member._id,
-
-      status: "ACTIVE"
-
-    })
-
-    .populate(
-
-      "assignedAgent",
-
-      "name mobile"
-
-    )
-
-    .populate(
-
-      "areaGroup",
-
-      "areaName duration"
-
-    );
-
-    // ==========================
-    // ACTIVE LOAN
-    // ==========================
-
-    const loan = await DailyLoan.findOne({
-
-      member: member._id,
-
       status: {
-
-        $in: [
-
-          "ACTIVE",
-
-          "DUE",
-
-          "OVERDUE"
-
-        ]
-
+        $in: SAVING_STATUSES
       }
+    })
+      .populate("assignedAgent", "name mobile")
+      .populate("areaGroup", "areaName duration")
+      .sort({
+        startDate: -1,
+        createdAt: -1
+      });
 
-    });
 
-    // ==========================
-    // TODAY COLLECTION
-    // ==========================
+    /*
+    ================================================
+    ALL LOANS
+    ================================================
+    */
+
+    const loans = await DailyLoan.find({
+      member: member._id,
+      status: {
+        $in: LOAN_STATUSES
+      }
+    })
+      .sort({
+        loanDate: -1,
+        createdAt: -1
+      });
+
+
+    /*
+    ================================================
+    TODAY COLLECTION
+    ================================================
+    */
 
     const today = new Date();
 
-    today.setHours(0,0,0,0);
+    today.setHours(
+      0,
+      0,
+      0,
+      0
+    );
 
     const tomorrow = new Date(today);
 
     tomorrow.setDate(
-
-      tomorrow.getDate()+1
-
+      tomorrow.getDate() + 1
     );
 
+
     const todayCollection =
-
       await DailyTransaction.aggregate([
-
         {
+          $match: {
+            member: member._id,
 
-          $match:{
-
-            member:member._id,
-
-            collectionDate:{
-
-              $gte:today,
-
-              $lt:tomorrow
-
+            collectionDate: {
+              $gte: today,
+              $lt: tomorrow
             }
-
           }
-
         },
 
         {
+          $group: {
+            _id: null,
 
-          $group:{
-
-            _id:null,
-
-            amount:{
-
-              $sum:"$totalAmount"
-
+            amount: {
+              $sum: "$totalAmount"
             }
-
           }
-
         }
-
       ]);
 
-    // ==========================
-    // RECENT TRANSACTIONS
-    // ==========================
-
-    const recentTransactions =
-
-      await DailyTransaction.find({
-
-        member:member._id
-
-      })
-
-      .sort({
-
-        collectionDate:-1
-
-      })
-
-      .limit(10);
-
-        // ==========================
-    // TOTAL COLLECTION
-    // ==========================
-
-    const totalCollection = await DailyTransaction.aggregate([
-
-      {
-        $match: {
-          member: member._id
-        }
-      },
-
-      {
-        $group: {
-
-          _id: null,
-
-          totalDailyAmount: {
-            $sum: "$dailyAmount"
-          },
-
-          totalPenalty: {
-            $sum: "$penalty"
-          },
-
-          totalAmount: {
-            $sum: "$totalAmount"
-          }
-
-        }
-      }
-
-    ]);
-
-    const collection =
-
-      totalCollection.length
-        ? totalCollection[0]
-        : {
-
-            totalDailyAmount: 0,
-
-            totalPenalty: 0,
-
-            totalAmount: 0
-
-          };
-
-    // ==========================
-    // LOAN SUMMARY
-    // ==========================
-
-    let loanSummary = null;
-
-    if (loan) {
-
-      const paidInstallments =
-        await LoanCollection.countDocuments({
-
-          loan: loan._id
-
-        });
-
-      loanSummary = {
-
-        loanNumber:
-          loan.loanNumber,
-
-        loanAmount:
-          loan.loanAmount,
-
-        outstandingAmount:
-          loan.outstandingAmount,
-
-        totalPaid:
-          loan.totalPaid,
-
-        completedInstallments:
-          paidInstallments,
-
-        pendingInstallments:
-          loan.pendingInstallments,
-
-        status:
-          loan.status
-
-      };
-
-    }
-
-    // ==========================
-    // SAVING SUMMARY
-    // ==========================
-
-    let savingSummary = null;
-
-    if (saving) {
-
-      savingSummary = {
-
-        collectionType:
-          saving.collectionType,
-
-        fixedAmount:
-          saving.fixedAmount,
-
-        durationDays:
-          saving.durationDays,
-
-        completedDays:
-          saving.completedDays,
-
-        pendingDays:
-          saving.pendingDays,
-
-        totalSaved:
-          saving.totalSaved,
-
-        totalPenalty:
-          saving.totalPenalty,
-
-        pendingAmount:
-          saving.pendingAmount,
-
-        nextCollectionDate:
-          saving.nextCollectionDate,
-
-        endDate:
-          saving.endDate,
-
-        assignedAgent:
-          saving.assignedAgent,
-
-        areaGroup:
-          saving.areaGroup
-
-      };
-
-    }
-
-    // ==========================
-    // TODAY'S COLLECTION
-    // ==========================
 
     const todayAmount =
       todayCollection.length
         ? todayCollection[0].amount
         : 0;
 
-    // ==========================
-    // RESPONSE
-    // ==========================
 
-    res.status(200).json({
+    /*
+    ================================================
+    ALL RECENT TRANSACTIONS
+    ================================================
+    */
+
+    const recentTransactions =
+      await DailyTransaction.find({
+        member: member._id
+      })
+        .populate(
+          "savingAccount",
+          "fixedAmount collectionType durationDays startDate endDate"
+        )
+        .sort({
+          collectionDate: -1
+        })
+        .limit(10)
+        .lean();
+
+
+    /*
+    ================================================
+    TOTAL SAVING COLLECTION
+    ================================================
+    */
+
+    const totalCollection =
+      await DailyTransaction.aggregate([
+        {
+          $match: {
+            member: member._id
+          }
+        },
+
+        {
+          $group: {
+            _id: null,
+
+            totalDailyAmount: {
+              $sum: "$dailyAmount"
+            },
+
+            totalPenalty: {
+              $sum: "$penalty"
+            },
+
+            totalAmount: {
+              $sum: "$totalAmount"
+            }
+          }
+        }
+      ]);
+
+
+    const collection =
+      totalCollection.length
+        ? totalCollection[0]
+        : {
+            totalDailyAmount: 0,
+            totalPenalty: 0,
+            totalAmount: 0
+          };
+
+
+    /*
+    ================================================
+    SAVING ACCOUNT SUMMARIES
+    ================================================
+    */
+
+    const savingSummaries =
+      await Promise.all(
+        savings.map(async (saving) => {
+
+          const transactions =
+            await DailyTransaction.find({
+              member: member._id,
+              savingAccount: saving._id
+            }).lean();
+
+
+          const totalSaved =
+            transactions.reduce(
+              (sum, item) =>
+                sum +
+                Number(item.dailyAmount || 0),
+              0
+            );
+
+
+          const totalPenalty =
+            transactions.reduce(
+              (sum, item) =>
+                sum +
+                Number(item.penalty || 0),
+              0
+            );
+
+
+          const totalAmount =
+            transactions.reduce(
+              (sum, item) =>
+                sum +
+                Number(item.totalAmount || 0),
+              0
+            );
+
+
+          const durationDays =
+            Number(
+              saving.durationDays || 0
+            );
+
+
+          const completedDays =
+            Number(
+              saving.completedDays || 0
+            );
+
+
+          const progress =
+            durationDays > 0
+              ? Math.min(
+                  100,
+                  Math.round(
+                    (
+                      completedDays /
+                      durationDays
+                    ) * 100
+                  )
+                )
+              : 0;
+
+
+          return {
+            _id: saving._id,
+
+            collectionType:
+              saving.collectionType,
+
+            fixedAmount:
+              saving.fixedAmount,
+
+            durationDays:
+              saving.durationDays,
+
+            completedDays:
+              saving.completedDays,
+
+            pendingDays:
+              saving.pendingDays,
+
+            totalSaved:
+              saving.totalSaved ||
+              totalSaved,
+
+            totalPenalty:
+              saving.totalPenalty ||
+              totalPenalty,
+
+            pendingAmount:
+              saving.pendingAmount,
+
+            nextCollectionDate:
+              saving.nextCollectionDate,
+
+            startDate:
+              saving.startDate,
+
+            endDate:
+              saving.endDate,
+
+            status:
+              saving.status,
+
+            assignedAgent:
+              saving.assignedAgent,
+
+            areaGroup:
+              saving.areaGroup,
+
+            progress,
+
+            transactionCount:
+              transactions.length,
+
+            totalCollection:
+              totalAmount
+          };
+        })
+      );
+
+
+    /*
+    ================================================
+    LOAN SUMMARIES
+    ================================================
+    */
+
+    const loanSummaries =
+      await Promise.all(
+        loans.map(async (loan) => {
+
+          const collections =
+            await LoanCollection.find({
+              loan: loan._id
+            }).lean();
+
+
+          const totalPaid =
+            collections.reduce(
+              (sum, item) =>
+                sum +
+                Number(item.totalAmount || 0),
+              0
+            );
+
+
+          const totalPenalty =
+            collections.reduce(
+              (sum, item) =>
+                sum +
+                Number(item.penalty || 0),
+              0
+            );
+
+
+          return {
+            _id: loan._id,
+
+            loanNumber:
+              loan.loanNumber,
+
+            loanType:
+              loan.loanType,
+
+            loanAmount:
+              loan.loanAmount,
+
+            interestRate:
+              loan.interestRate,
+
+            totalInterest:
+              loan.totalInterest,
+
+            totalPayable:
+              loan.totalPayable,
+
+            emiAmount:
+              loan.emiAmount,
+
+            outstandingAmount:
+              loan.outstandingAmount,
+
+            totalPaid:
+              loan.totalPaid ??
+              totalPaid,
+
+            calculatedTotalPaid:
+              totalPaid,
+
+            totalPenalty,
+
+            completedInstallments:
+              loan.completedInstallments ??
+              collections.length,
+
+            pendingInstallments:
+              loan.pendingInstallments,
+
+            status:
+              loan.status,
+
+            loanDate:
+              loan.loanDate,
+
+            endDate:
+              loan.endDate
+          };
+        })
+      );
+
+
+    /*
+    ================================================
+    TOTAL LOAN OUTSTANDING
+    ================================================
+    */
+
+    const totalLoanOutstanding =
+      loans.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.outstandingAmount || 0
+          ),
+        0
+      );
+
+
+    /*
+    ================================================
+    TOTAL LOAN AMOUNT
+    ================================================
+    */
+
+    const totalLoanAmount =
+      loans.reduce(
+        (sum, loan) =>
+          sum +
+          Number(
+            loan.loanAmount || 0
+          ),
+        0
+      );
+
+
+    /*
+    ================================================
+    RESPONSE
+    ================================================
+    */
+
+    return res.status(200).json({
 
       success: true,
 
       member: {
-
         _id: member._id,
 
-        memberId: member.memberId,
+        memberId:
+          member.memberId,
 
-        memberName: member.memberName,
+        memberName:
+          member.memberName,
 
-        mobile: member.mobile,
+        mobile:
+          member.mobile,
 
-        email: member.email,
+        email:
+          member.email,
 
-        city: member.city,
+        city:
+          member.city,
 
-        status: member.status
-
+        status:
+          member.status
       },
 
-      saving: savingSummary,
 
-      loan: loanSummary,
+      /*
+      ============================================
+      ALL SAVINGS
+      ============================================
+      */
+
+      savings: savingSummaries,
+
+      savingCount:
+        savingSummaries.length,
+
+
+      /*
+      ============================================
+      ALL LOANS
+      ============================================
+      */
+
+      loans: loanSummaries,
+
+      loanCount:
+        loanSummaries.length,
+
+
+      /*
+      ============================================
+      BACKWARD COMPATIBILITY
+      ============================================
+      */
+
+      saving:
+        savingSummaries.length
+          ? savingSummaries[0]
+          : null,
+
+      loan:
+        loanSummaries.length
+          ? loanSummaries[0]
+          : null,
+
+
+      /*
+      ============================================
+      DASHBOARD
+      ============================================
+      */
 
       dashboard: {
 
-        todayCollection: todayAmount,
+        todayCollection:
+          todayAmount,
 
         totalSaved:
           collection.totalDailyAmount,
@@ -478,401 +667,548 @@ exports.dashboard = async (req, res) => {
         totalCollection:
           collection.totalAmount,
 
+        totalSavingAccounts:
+          savings.length,
+
+        totalLoanAccounts:
+          loans.length,
+
+        totalLoanAmount,
+
+        totalLoanOutstanding,
+
         recentTransactions:
           recentTransactions.length
-
       },
+
 
       recentTransactions
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "USER DASHBOARD ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
       message: error.message
-
     });
-
   }
+};
 
-};  
 
 /*
-==========================================
+====================================================
 USER PROFILE
-==========================================
+====================================================
 */
 
 exports.profile = async (req, res) => {
-
   try {
 
-    const { memberId } = req.params;
+    const { memberId } =
+      req.params;
 
-    const member = await DailyMember.findById(memberId);
+
+    const member =
+      await DailyMember.findById(
+        memberId
+      );
+
 
     if (!member) {
-
       return res.status(404).json({
-
         success: false,
-
         message: "Member Not Found"
-
       });
-
     }
 
-    const saving = await DailySaving.findOne({
 
-      member: member._id,
+    const savings =
+      await DailySaving.find({
+        member: member._id,
+        status: {
+          $in: SAVING_STATUSES
+        }
+      })
+        .populate(
+          "assignedAgent",
+          "name mobile"
+        )
+        .populate(
+          "areaGroup",
+          "areaName duration"
+        )
+        .sort({
+          startDate: -1,
+          createdAt: -1
+        });
 
-      status: "ACTIVE"
 
-    })
+    const loans =
+      await DailyLoan.find({
+        member: member._id,
+        status: {
+          $in: LOAN_STATUSES
+        }
+      })
+        .sort({
+          loanDate: -1,
+          createdAt: -1
+        });
 
-    .populate(
 
-      "assignedAgent",
-
-      "name mobile email"
-
-    )
-
-    .populate(
-
-      "areaGroup",
-
-      "areaName duration maxMembers"
-
-    );
-
-    res.status(200).json({
+    return res.status(200).json({
 
       success: true,
 
       member,
 
-      saving
+      savings,
+
+      loans,
+
+      savingCount:
+        savings.length,
+
+      loanCount:
+        loans.length
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "USER PROFILE ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
       message: error.message
-
     });
-
   }
-
 };
 
 
-
 /*
-==========================================
+====================================================
 SAVING DETAILS
-==========================================
+====================================================
 */
 
 exports.savingDetails = async (req, res) => {
 
   try {
 
-    const { memberId } = req.params;
+    const { memberId } =
+      req.params;
 
-    const saving = await DailySaving.findOne({
 
-      member: memberId,
+    /*
+    ================================================
+    GET ALL SAVINGS
+    ================================================
+    */
 
-      status: "ACTIVE"
+    const savings =
+      await DailySaving.find({
+        member: memberId,
+        status: {
+          $in: SAVING_STATUSES
+        }
+      })
+        .populate(
+          "assignedAgent",
+          "name mobile"
+        )
+        .populate(
+          "areaGroup",
+          "areaName duration"
+        )
+        .sort({
+          startDate: -1,
+          createdAt: -1
+        });
 
-    })
 
-    .populate(
-
-      "assignedAgent",
-
-      "name mobile"
-
-    )
-
-    .populate(
-
-      "areaGroup",
-
-      "areaName duration"
-
-    );
-
-    if (!saving) {
+    if (!savings.length) {
 
       return res.status(404).json({
-
         success: false,
-
         message: "Saving Account Not Found"
-
       });
 
     }
 
-    // ==========================
-    // ALL SAVING TRANSACTIONS
-    // ==========================
 
-    const transactions = await DailyTransaction.find({
+    /*
+    ================================================
+    BUILD EACH SAVING ACCOUNT
+    ================================================
+    */
 
-      member: memberId
+    const accounts =
+      await Promise.all(
 
-    })
+        savings.map(
+          async (saving) => {
 
-    .sort({
+            const transactions =
+              await DailyTransaction.find({
+                member: memberId,
+                savingAccount:
+                  saving._id
+              })
+                .sort({
+                  collectionDate: -1
+                })
+                .lean();
 
-      collectionDate: -1
 
-    });
+            const totalSaved =
+              transactions.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.dailyAmount || 0
+                  ),
+                0
+              );
 
-    // ==========================
-    // TOTAL SAVED
-    // ==========================
 
-    const summary = await DailyTransaction.aggregate([
+            const totalPenalty =
+              transactions.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.penalty || 0
+                  ),
+                0
+              );
 
-      {
 
-        $match: {
+            const totalCollection =
+              transactions.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.totalAmount || 0
+                  ),
+                0
+              );
 
-          member: saving.member
 
-        }
+            const durationDays =
+              Number(
+                saving.durationDays || 0
+              );
 
-      },
 
-      {
+            const completedDays =
+              Number(
+                saving.completedDays || 0
+              );
 
-        $group: {
 
-          _id: null,
+            const progress =
+              durationDays > 0
+                ? Math.min(
+                    100,
+                    Math.round(
+                      (
+                        completedDays /
+                        durationDays
+                      ) * 100
+                    )
+                  )
+                : 0;
 
-          totalSaved: {
 
-            $sum: "$dailyAmount"
+            return {
 
-          },
+              saving,
 
-          totalPenalty: {
+              summary: {
 
-            $sum: "$penalty"
+                totalSaved:
+                  saving.totalSaved ??
+                  totalSaved,
 
-          },
+                totalPenalty:
+                  saving.totalPenalty ??
+                  totalPenalty,
 
-          totalCollection: {
+                totalCollection,
 
-            $sum: "$totalAmount"
+                completedDays,
+
+                pendingDays:
+                  saving.pendingDays,
+
+                pendingAmount:
+                  saving.pendingAmount,
+
+                progress,
+
+                transactionCount:
+                  transactions.length
+              },
+
+              transactions
+
+            };
 
           }
+        )
 
-        }
+      );
 
-      }
 
-    ]);
+    /*
+    ================================================
+    RESPONSE
+    ================================================
+    */
 
-    const data =
-
-      summary.length
-
-      ? summary[0]
-
-      : {
-
-          totalSaved: 0,
-
-          totalPenalty: 0,
-
-          totalCollection: 0
-
-        };
-
-    // ==========================
-    // SAVING PROGRESS
-    // ==========================
-
-    const progress = Math.round(
-
-      (saving.completedDays /
-
-      saving.durationDays) * 100
-
-    );
-
-    res.status(200).json({
+    return res.status(200).json({
 
       success: true,
 
-      saving,
+      /*
+      New multi-account response
+      */
 
-      summary: {
+      accounts,
 
-        totalSaved: data.totalSaved,
+      savings:
+        accounts.map(
+          item => item.saving
+        ),
 
-        totalPenalty: data.totalPenalty,
 
-        totalCollection: data.totalCollection,
+      /*
+      First account for old frontend
+      */
 
-        completedDays: saving.completedDays,
+      saving:
+        accounts[0].saving,
 
-        pendingDays: saving.pendingDays,
+      summary:
+        accounts[0].summary,
 
-        pendingAmount: saving.pendingAmount,
-
-        progress:
-
-          progress > 100
-
-          ? 100
-
-          : progress
-
-      },
-
-      transactions
+      transactions:
+        accounts[0].transactions
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "SAVING DETAILS ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
       message: error.message
-
     });
 
   }
 
 };
+
+
 /*
-==========================================
+====================================================
 USER PASSBOOK
-==========================================
+====================================================
 */
 
 exports.passbook = async (req, res) => {
 
   try {
 
-    const { memberId } = req.params;
+    const { memberId } =
+      req.params;
 
-    const transactions = await DailyTransaction.find({
 
-      member: memberId
+    /*
+    ================================================
+    ALL TRANSACTIONS
+    ================================================
+    */
 
-    })
+    const transactions =
+      await DailyTransaction.find({
+        member: memberId
+      })
+        .populate(
+          "savingAccount",
+          "fixedAmount collectionType durationDays startDate endDate"
+        )
+        .sort({
+          collectionDate: -1
+        })
+        .lean();
 
-    .sort({
 
-      collectionDate: -1
+    /*
+    ================================================
+    TOTAL
+    ================================================
+    */
 
-    });
+    const total =
+      await DailyTransaction.aggregate([
 
-    const total = await DailyTransaction.aggregate([
+        {
+          $match: {
+            member: memberId
+          }
+        },
 
-      {
+        {
+          $group: {
 
-        $match: {
+            _id: null,
 
-          member: transactions.length
-            ? transactions[0].member
-            : null
+            totalSaved: {
+              $sum: "$dailyAmount"
+            },
 
-        }
+            totalPenalty: {
+              $sum: "$penalty"
+            },
 
-      },
-
-      {
-
-        $group: {
-
-          _id: null,
-
-          totalSaved: {
-
-            $sum: "$dailyAmount"
-
-          },
-
-          totalPenalty: {
-
-            $sum: "$penalty"
-
-          },
-
-          totalCollection: {
-
-            $sum: "$totalAmount"
+            totalCollection: {
+              $sum: "$totalAmount"
+            }
 
           }
-
         }
 
-      }
+      ]);
 
-    ]);
 
-    res.status(200).json({
+    /*
+    ================================================
+    ACCOUNT-WISE SUMMARY
+    ================================================
+    */
+
+    const savingAccounts =
+      await DailySaving.find({
+        member: memberId,
+        status: {
+          $in: SAVING_STATUSES
+        }
+      })
+        .populate(
+          "assignedAgent",
+          "name mobile"
+        )
+        .populate(
+          "areaGroup",
+          "areaName duration"
+        )
+        .sort({
+          startDate: -1,
+          createdAt: -1
+        });
+
+
+    const accountSummaries =
+      await Promise.all(
+
+        savingAccounts.map(
+          async (saving) => {
+
+            const accountTransactions =
+              await DailyTransaction.find({
+                member: memberId,
+                savingAccount:
+                  saving._id
+              }).lean();
+
+
+            return {
+
+              saving,
+
+              totalSaved:
+                accountTransactions.reduce(
+                  (sum, item) =>
+                    sum +
+                    Number(
+                      item.dailyAmount || 0
+                    ),
+                  0
+                ),
+
+              totalPenalty:
+                accountTransactions.reduce(
+                  (sum, item) =>
+                    sum +
+                    Number(
+                      item.penalty || 0
+                    ),
+                  0
+                ),
+
+              totalCollection:
+                accountTransactions.reduce(
+                  (sum, item) =>
+                    sum +
+                    Number(
+                      item.totalAmount || 0
+                    ),
+                  0
+                ),
+
+              transactionCount:
+                accountTransactions.length
+
+            };
+
+          }
+        )
+
+      );
+
+
+    return res.status(200).json({
 
       success: true,
 
       summary:
-
         total.length > 0
+          ? total[0]
+          : {
+              totalSaved: 0,
+              totalPenalty: 0,
+              totalCollection: 0
+            },
 
-        ? total[0]
+      transactions,
 
-        : {
-
-            totalSaved: 0,
-
-            totalPenalty: 0,
-
-            totalCollection: 0
-
-          },
-
-      transactions
+      accounts:
+        accountSummaries
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "PASSBOOK ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
@@ -885,42 +1221,40 @@ exports.passbook = async (req, res) => {
 };
 
 
-
 /*
-==========================================
+====================================================
 USER LOAN DETAILS
-==========================================
+====================================================
 */
 
 exports.loanDetails = async (req, res) => {
 
   try {
 
-    const { memberId } = req.params;
+    const { memberId } =
+      req.params;
 
-    const loan = await DailyLoan.findOne({
 
-      member: memberId,
+    /*
+    ================================================
+    GET ALL LOANS
+    ================================================
+    */
 
-      status: {
+    const loans =
+      await DailyLoan.find({
+        member: memberId,
+        status: {
+          $in: LOAN_STATUSES
+        }
+      })
+        .sort({
+          loanDate: -1,
+          createdAt: -1
+        });
 
-        $in: [
 
-          "ACTIVE",
-
-          "DUE",
-
-          "OVERDUE",
-
-          "CLOSED"
-
-        ]
-
-      }
-
-    });
-
-    if (!loan) {
+    if (!loans.length) {
 
       return res.status(404).json({
 
@@ -932,79 +1266,129 @@ exports.loanDetails = async (req, res) => {
 
     }
 
-    const collections = await LoanCollection.find({
 
-      loan: loan._id
+    /*
+    ================================================
+    BUILD EACH LOAN
+    ================================================
+    */
 
-    })
+    const accounts =
+      await Promise.all(
 
-    .sort({
+        loans.map(
+          async (loan) => {
 
-      paymentDate: -1
+            const collections =
+              await LoanCollection.find({
+                loan: loan._id
+              })
+                .sort({
+                  paymentDate: -1
+                })
+                .lean();
 
-    });
 
-    const totalPaid = collections.reduce(
+            const totalPaid =
+              collections.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.totalAmount || 0
+                  ),
+                0
+              );
 
-      (sum, item) =>
 
-      sum + item.totalAmount,
+            const totalPenalty =
+              collections.reduce(
+                (sum, item) =>
+                  sum +
+                  Number(
+                    item.penalty || 0
+                  ),
+                0
+              );
 
-      0
 
-    );
+            return {
 
-    const totalPenalty = collections.reduce(
+              loan,
 
-      (sum, item) =>
+              summary: {
 
-      sum + item.penalty,
+                totalPaid:
+                  loan.totalPaid ??
+                  totalPaid,
 
-      0
+                calculatedTotalPaid:
+                  totalPaid,
 
-    );
+                totalPenalty,
 
-    res.status(200).json({
+                totalInstallments:
+                  collections.length,
+
+                outstandingAmount:
+                  loan.outstandingAmount,
+
+                loanAmount:
+                  loan.loanAmount,
+
+                status:
+                  loan.status
+
+              },
+
+              collections
+
+            };
+
+          }
+        )
+
+      );
+
+
+    return res.status(200).json({
 
       success: true,
 
-      loan,
+      /*
+      New multi-loan response
+      */
 
-      summary: {
+      accounts,
 
-        totalPaid,
+      loans:
+        accounts.map(
+          item => item.loan
+        ),
 
-        totalPenalty,
 
-        totalInstallments:
+      /*
+      First loan for old frontend
+      */
 
-          collections.length,
+      loan:
+        accounts[0].loan,
 
-        outstandingAmount:
+      summary:
+        accounts[0].summary,
 
-          loan.outstandingAmount,
-
-        loanAmount:
-
-          loan.loanAmount,
-
-        status:
-
-          loan.status
-
-      },
-
-      collections
+      collections:
+        accounts[0].collections
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "LOAN DETAILS ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
@@ -1015,25 +1399,33 @@ exports.loanDetails = async (req, res) => {
   }
 
 };
+
+
 /*
-==========================================
+====================================================
 LOAN HISTORY
-==========================================
+====================================================
 */
 
 exports.loanHistory = async (req, res) => {
 
   try {
 
-    const { memberId } = req.params;
+    const { memberId } =
+      req.params;
 
-    const loan = await DailyLoan.findOne({
 
-      member: memberId
+    const loans =
+      await DailyLoan.find({
+        member: memberId
+      })
+        .sort({
+          loanDate: -1,
+          createdAt: -1
+        });
 
-    });
 
-    if (!loan) {
+    if (!loans.length) {
 
       return res.status(404).json({
 
@@ -1045,35 +1437,69 @@ exports.loanHistory = async (req, res) => {
 
     }
 
-    const history = await LoanCollection.find({
 
-      loan: loan._id
+    const histories =
+      await Promise.all(
 
-    })
+        loans.map(
+          async (loan) => {
 
-    .sort({
+            const history =
+              await LoanCollection.find({
+                loan: loan._id
+              })
+                .sort({
+                  paymentDate: -1
+                })
+                .lean();
 
-      paymentDate: -1
 
-    });
+            return {
 
-    res.status(200).json({
+              loan,
+
+              history
+
+            };
+
+          }
+        )
+
+      );
+
+
+    return res.status(200).json({
 
       success: true,
 
-      loan,
+      accounts:
+        histories,
 
-      history
+      loans:
+        histories.map(
+          item => item.loan
+        ),
+
+      /*
+      Backward compatibility
+      */
+
+      loan:
+        histories[0].loan,
+
+      history:
+        histories[0].history
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "LOAN HISTORY ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
@@ -1086,11 +1512,10 @@ exports.loanHistory = async (req, res) => {
 };
 
 
-
 /*
-==========================================
+====================================================
 CHANGE PASSWORD
-==========================================
+====================================================
 */
 
 exports.changePassword = async (req, res) => {
@@ -1098,18 +1523,18 @@ exports.changePassword = async (req, res) => {
   try {
 
     const {
-
       memberId,
-
       oldPassword,
-
       newPassword,
-
       confirmPassword
-
     } = req.body;
 
-    const member = await DailyMember.findById(memberId);
+
+    const member =
+      await DailyMember.findById(
+        memberId
+      );
+
 
     if (!member) {
 
@@ -1123,7 +1548,11 @@ exports.changePassword = async (req, res) => {
 
     }
 
-    if (member.password !== oldPassword) {
+
+    if (
+      member.password !==
+      oldPassword
+    ) {
 
       return res.status(400).json({
 
@@ -1135,37 +1564,48 @@ exports.changePassword = async (req, res) => {
 
     }
 
-    if (newPassword !== confirmPassword) {
+
+    if (
+      newPassword !==
+      confirmPassword
+    ) {
 
       return res.status(400).json({
 
         success: false,
 
-        message: "Password does not match"
+        message:
+          "Password does not match"
 
       });
 
     }
 
-    member.password = newPassword;
+
+    member.password =
+      newPassword;
+
 
     await member.save();
 
-    res.status(200).json({
+
+    return res.status(200).json({
 
       success: true,
 
-      message: "Password Changed Successfully"
+      message:
+        "Password Changed Successfully"
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
+    console.log(
+      "CHANGE PASSWORD ERROR:",
+      error
+    );
 
-    console.log(error);
-
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
@@ -1178,34 +1618,33 @@ exports.changePassword = async (req, res) => {
 };
 
 
-
 /*
-==========================================
+====================================================
 LOGOUT
-==========================================
+====================================================
 */
 
 exports.logout = async (req, res) => {
 
   try {
 
-    res.status(200).json({
+    return res.status(200).json({
 
       success: true,
 
-      message: "Logout Successful"
+      message:
+        "Logout Successful"
 
     });
 
-  }
+  } catch (error) {
 
-  catch (error) {
-
-    res.status(500).json({
+    return res.status(500).json({
 
       success: false,
 
-      message: error.message
+      message:
+        error.message
 
     });
 
