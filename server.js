@@ -103,25 +103,10 @@ app.use("/api/interest", interestRoutes);
 
 app.use("/api/daily", taskRoutes);
 
-
-app.use(
-"/api/daily",
-agentRoutes
-);
-app.use(
-"/api/daily",
-areaGroupRoutes
-);
-app.use(
-"/api/daily",
-dailyMemberRoutes
-);
-
-
-app.use(
-"/api/daily",
-collectionRoutes
-);
+app.use("/api/daily", agentRoutes);
+app.use("/api/daily", areaGroupRoutes);
+app.use("/api/daily", dailyMemberRoutes);
+app.use("/api/daily", collectionRoutes);
 
 app.use(
   "/api/daily/penalty",
