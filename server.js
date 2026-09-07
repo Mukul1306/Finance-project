@@ -89,6 +89,7 @@ const userRoutes =
 require("./routes/daily/userRoutes");
 const memberPortalRoutes =
   require("./routes/memberPortalRoutes");
+  const taskRoutes = require("./routes/taskRoutes");
 // ==========================================
 // 4. API ROUTE DECLARATION CORNER
 // ==========================================
@@ -182,6 +183,9 @@ app.use(
 "/api/daily",
 dailySavingRoutes
 );
+
+app.use("/api/daily", taskRoutes);
+
 app.use("/api/daily", agentDepositRoutes);
 // app.use("/api/dashboard", dashboardRoutes);
 
