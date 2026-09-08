@@ -2263,73 +2263,24 @@ exports.getUnifiedAgentCollection = async (req, res) => {
           // ====================================================
           // MONTHLY
           // ====================================================
+else if (
+  loan.loanType === "MONTHLY" ||
+  loan.loanType === "FIXED"
+) {
+  const monthDiff =
+    (todayDate.getUTCFullYear() - loanDate.getUTCFullYear()) * 12 +
+    (todayDate.getUTCMonth() - loanDate.getUTCMonth());
 
-          else if (
-            loan.loanType ===
-            "MONTHLY"
-          ) {
-
-            const monthDiff =
-              (
-                todayDate.getUTCFullYear() -
-                loanDate.getUTCFullYear()
-              ) *
-                12 +
-              (
-                todayDate.getUTCMonth() -
-                loanDate.getUTCMonth()
-              );
-
-            if (
-              todayDate.getUTCDate() >=
-              loanDate.getUTCDate()
-            ) {
-
-              dueTillToday =
-                monthDiff + 1;
-
-            } else {
-
-              dueTillToday =
-                monthDiff;
-            }
-          }
-
-
-          // ====================================================
-          // FIXED
-          // ====================================================
-
-          else if (
-            loan.loanType ===
-            "FIXED"
-          ) {
-
-            const monthDiff =
-              (
-                todayDate.getUTCFullYear() -
-                loanDate.getUTCFullYear()
-              ) *
-                12 +
-              (
-                todayDate.getUTCMonth() -
-                loanDate.getUTCMonth()
-              );
-
-            if (
-              todayDate.getUTCDate() >=
-              loanDate.getUTCDate()
-            ) {
-
-              dueTillToday =
-                monthDiff + 1;
-
-            } else {
-
-              dueTillToday =
-                monthDiff;
-            }
-          }
+  if (monthDiff <= 0) {
+    dueTillToday = 0;
+  } else if (
+    todayDate.getUTCDate() >= loanDate.getUTCDate()
+  ) {
+    dueTillToday = monthDiff;
+  } else {
+    dueTillToday = monthDiff - 1;
+  }
+}
 
 
           // ====================================================
@@ -2403,13 +2354,14 @@ exports.getUnifiedAgentCollection = async (req, res) => {
                 )
               );
 
-            } else {
-
-              dueDate.setUTCMonth(
-                dueDate.getUTCMonth() +
-                (i - 1)
-              );
-            }
+         } else if (
+  loan.loanType === "MONTHLY" ||
+  loan.loanType === "FIXED"
+) {
+  dueDate.setUTCMonth(
+    dueDate.getUTCMonth() + i
+  );
+}
 
 
             dueDate.setUTCHours(
