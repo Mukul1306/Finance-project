@@ -10,7 +10,7 @@ const {
   getDailySaving,
 
   updateDailySaving,
-
+  getSavingDetails,
   closeDailySaving,
 
   terminateDailySaving,
@@ -84,7 +84,10 @@ router.put(
   approveSavingRequest
 );
 
-
+router.get(
+  "/saving-details/:id",
+  getSavingDetails
+);
 // ==========================================
 // ADMIN REJECT SAVING REQUEST
 // ==========================================

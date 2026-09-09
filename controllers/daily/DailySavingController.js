@@ -411,6 +411,186 @@ exports.getDailySaving = async (req, res) => {
   }
 
 };
+
+// =====================================================
+// GET COMPLETE SAVING / MEMBER DETAILS
+// =====================================================
+
+exports.getSavingDetails = async (req, res) => {
+
+  try {
+
+    const saving =
+      await DailySaving.findById(
+        req.params.id
+      )
+        .populate("member")
+        .populate(
+          "areaGroup",
+          "areaName"
+        )
+        .populate(
+          "assignedAgent",
+          "name mobile"
+        );
+
+
+    if (!saving) {
+
+      return res.status(404).json({
+
+        success: false,
+
+        message:
+          "Saving Account Not Found"
+
+      });
+
+    }
+
+
+    // ==========================================
+    // ALL TRANSACTIONS FOR THIS SAVING
+    // ==========================================
+
+    const transactions =
+      await DailyTransaction.find({
+
+        savingAccount:
+          saving._id
+
+      })
+        .sort({
+          paymentForDate: -1,
+          collectionDate: -1
+        })
+        .lean();
+
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    return res.status(200).json({
+
+      success: true,
+
+      member:
+        saving.member,
+
+      saving: {
+
+        _id:
+          saving._id,
+
+        status:
+          saving.status,
+
+        collectionType:
+          saving.collectionType,
+
+        fixedAmount:
+          Number(
+            saving.fixedAmount || 0
+          ),
+
+        durationDays:
+          Number(
+            saving.durationDays || 0
+          ),
+
+        startDate:
+          saving.startDate,
+
+        endDate:
+          saving.endDate,
+
+        graceDays:
+          Number(
+            saving.graceDays || 0
+          ),
+
+        penaltyType:
+          saving.penaltyType,
+
+        penaltyValue:
+          Number(
+            saving.penaltyValue || 0
+          ),
+
+        totalSaved:
+          Number(
+            saving.totalSaved || 0
+          ),
+
+        totalPenalty:
+          Number(
+            saving.totalPenalty || 0
+          ),
+
+        totalDaysPaid:
+          Number(
+            saving.totalDaysPaid || 0
+          ),
+
+        completedDays:
+          Number(
+            saving.completedDays || 0
+          ),
+
+        pendingDays:
+          Number(
+            saving.pendingDays || 0
+          ),
+
+        pendingAmount:
+          Number(
+            saving.pendingAmount || 0
+          ),
+
+        lastCollectionDate:
+          saving.lastCollectionDate,
+
+        nomineeName:
+          saving.nomineeName,
+
+        nomineeMobile:
+          saving.nomineeMobile
+
+      },
+
+      area:
+        saving.areaGroup,
+
+      assignedAgent:
+        saving.assignedAgent,
+
+      transactions
+
+    });
+
+
+  } catch (error) {
+
+    console.error(
+      "GET SAVING DETAILS ERROR:",
+      error
+    );
+
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        error.message
+
+    });
+
+  }
+
+};
+
 /*
 =========================================
 UPDATE DAILY SAVING ACCOUNT
