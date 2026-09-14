@@ -1607,40 +1607,24 @@ exports.getUnifiedAgentCollection = async (req, res) => {
     // 1. GET ACTIVE SAVINGS
     // ==========================================================
 
- const savings = await DailySaving.find({
-  assignedAgent: agentId,
-  status: {
-    $in: ["ACTIVE", "COMPLETED", "CLOSED", "TERMINATED"]
-  }
-})
-      .populate(
-        "member",
-        "memberId memberName mobile fatherName"
-      )
-      .populate(
-        "areaGroup",
-        "areaName"
-      )
-      .lean();
+const [savings, loans] = await Promise.all([
+  DailySaving.find({
+    assignedAgent: agentId,
+    status: "ACTIVE"
+  })
+    .populate("member", "memberId memberName mobile fatherName")
+    .populate("areaGroup", "areaName")
+    .lean(),
 
-
-    // ==========================================================
-    // 2. GET ACTIVE LOANS
-    // ==========================================================
-
-    const loans = await DailyLoan.find({
-  assignedAgent: agentId,
-  status: {
-    $in: ["ACTIVE", "DUE", "OVERDUE", "CLOSED", "REJECTED"]
-  }
-})
-      .populate(
-        "member",
-        "memberId memberName mobile fatherName"
-      )
-      .lean();
-
-
+  DailyLoan.find({
+    assignedAgent: agentId,
+    status: {
+      $in: ["ACTIVE", "DUE", "OVERDUE"]
+    }
+  })
+    .populate("member", "memberId memberName mobile fatherName")
+    .lean()
+]);
     // ==========================================================
     // 3. GET SAVING TRANSACTIONS - ONE QUERY
     // ==========================================================
