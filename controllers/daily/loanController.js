@@ -4481,6 +4481,7 @@ exports.createLoanRequest = async (req, res) => {
         endDate.getMonth() + Number(loanTenureMonths || 1)
       );
     }
+    
 
     // ------------------------------------------
     // CALCULATE LOAN VALUES
@@ -4535,19 +4536,25 @@ exports.createLoanRequest = async (req, res) => {
         totalPayable / totalInstallments
       );
     }
+if (loanType === "FIXED") {
+  // FIXED loan = interest only every month
+  // Principal is paid separately when the loan is closed
 
-    if (loanType === "FIXED") {
-      totalInstallments = 1;
+  totalInstallments = 0;
 
-      totalInterest = Math.round(
-        (amount * rate) / 100
-      );
+  // Monthly interest
+  const monthlyInterest = Math.round(
+    (amount * rate) / 100
+  );
 
-      totalPayable = amount + totalInterest;
+  totalInterest = monthlyInterest;
 
-      emiAmount = totalInterest;
-    }
+  // Principal remains outstanding
+  totalPayable = amount;
 
+  // Monthly amount to collect = interest only
+  emiAmount = monthlyInterest;
+}
     // ------------------------------------------
     // CREATE REQUEST
     // ------------------------------------------
