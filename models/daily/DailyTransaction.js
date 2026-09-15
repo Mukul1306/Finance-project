@@ -72,6 +72,11 @@ default:Date.now
 timestamps:true
 });
 
+dailyTransactionSchema.index({
+  savingAccount: 1,
+  paymentForDate: 1
+});
+
 module.exports =
 mongoose.model(
 "DailyTransaction",

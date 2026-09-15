@@ -530,7 +530,10 @@ penaltyValue: {
 }, {
   timestamps: true
 });
-
+dailyLoanSchema.index({
+  assignedAgent: 1,
+  status: 1
+});
 module.exports =
 mongoose.models.DailyLoan ||
 mongoose.model(

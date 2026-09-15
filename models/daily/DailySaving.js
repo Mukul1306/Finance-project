@@ -126,6 +126,9 @@ terminatedBy: {
   default: 0
 },
 
+
+
+
 nextCollectionDate: {
   type: Date
 },
@@ -139,6 +142,11 @@ completedDate: {
 
 },{
   timestamps:true
+});
+
+dailySavingSchema.index({
+  assignedAgent: 1,
+  status: 1
 });
 
 module.exports =

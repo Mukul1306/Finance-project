@@ -140,6 +140,12 @@ delayDays: {
   timestamps: true
 });
 
+loanCollectionSchema.index({
+  loan: 1,
+  installmentNo: 1
+});
+
+
 module.exports =
 mongoose.models.LoanCollection ||
 mongoose.model(
