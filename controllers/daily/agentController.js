@@ -1621,12 +1621,11 @@ Object.values(monthlyHistory).sort(
     // =========================
     // TODAY
     // =========================
-// =========================
-// TODAY - IST
-// =========================
+const todayKey = getISTDateKey(new Date());
 
-const todayKey =
-  getISTDateKey(new Date());
+const today = new Date(
+  `${todayKey}T00:00:00+05:30`
+);
 
 // ======================================
 // TODAY COLLECTIONS
@@ -1637,97 +1636,96 @@ let todayCollection = 0;
 // EVERYTHING PHYSICALLY COLLECTED TODAY
 let todayActualCollection = 0;
 
-collections.forEach((item) => {
 
-  if (!item.collectionDate) {
-    return;
-  }
+collections.forEach(item => {
 
-  // =====================================================
-  // ACTUAL COLLECTION DATE IN IST
-  // =====================================================
+    if (!item.collectionDate) {
+        return;
+    }
 
-  const collectionDateKey =
-    getISTDateKey(
-      item.collectionDate
-    );
+    const collectionDate =
+        new Date(item.collectionDate);
 
-  // Only money physically collected today
-  if (
-    collectionDateKey !==
-    todayKey
-  ) {
-    return;
-  }
+    collectionDate.setHours(0, 0, 0, 0);
 
-  const amount =
-    Number(
-      item.totalAmount || 0
-    );
 
-  // =====================================================
-  // ACTUAL COLLECTION
-  // =====================================================
+    // ======================================
+    // ONLY MONEY COLLECTED TODAY
+    // ======================================
 
-  todayActualCollection +=
-    amount;
-
-  // =====================================================
-  // TODAY'S COLLECTION
-  // =====================================================
-
-  // DAILY SAVING
-  if (
-    item.type === "DAILY"
-  ) {
-
-    const paymentForDateKey =
-      item.paymentForDate
-        ? getISTDateKey(
-            item.paymentForDate
-          )
-        : collectionDateKey;
-
-    // Only today's saving
     if (
-      paymentForDateKey ===
-      todayKey
+        collectionDate.getTime() !==
+        today.getTime()
     ) {
-      todayCollection +=
-        amount;
+        return;
     }
 
-  }
 
-  // =====================================================
-  // LOAN EMI
-  // =====================================================
+    // ======================================
+    // TODAY'S ACTUAL COLLECTION
+    // ======================================
+    // Includes:
+    //
+    // Daily Saving:
+    // - today's saving
+    // - old pending saving
+    //
+    // Loan:
+    // - today's EMI
+    // - old pending EMI
+    //
+    // Only condition:
+    // MONEY WAS COLLECTED TODAY
+    // ======================================
 
-  else if (
-    item.type === "LOAN EMI"
-  ) {
+    todayActualCollection +=
+        Number(item.totalAmount || 0);
 
-    const dueDate =
-      item.paymentForDate;
 
-    if (!dueDate) {
-      return;
+    // ======================================
+    // TODAY'S COLLECTION
+    // ======================================
+    // This is different.
+    //
+    // Daily Saving collected today
+    // always counts.
+    //
+    // Loan EMI counts only when its
+    // DUE DATE is today.
+    // ======================================
+
+    if (item.type === "DAILY") {
+
+        todayCollection +=
+            Number(item.totalAmount || 0);
+
     }
 
-    const dueDateKey =
-      getISTDateKey(
-        dueDate
-      );
 
-    // Only EMI whose due date is today
-    if (
-      dueDateKey ===
-      todayKey
-    ) {
-      todayCollection +=
-        amount;
+    else if (item.type === "LOAN EMI") {
+
+        if (item.paymentForDate) {
+
+            const dueDate =
+                new Date(item.paymentForDate);
+
+            dueDate.setHours(0, 0, 0, 0);
+
+
+            if (
+                dueDate.getTime() ===
+                today.getTime()
+            ) {
+
+                todayCollection +=
+                    Number(item.totalAmount || 0);
+
+            }
+
+        }
+
     }
-  }
+
 });
     // =========================
     // TOTAL
