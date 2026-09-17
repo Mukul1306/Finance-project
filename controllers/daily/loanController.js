@@ -4273,17 +4273,13 @@ exports.getAgentLoans = async (req, res) => {
           ]
         }
       })
-      .populate(
-        "member",
-        "memberName memberId mobile fatherName"
-      )
-      .populate(
-        "areaGroup",
-        "areaName"
-      )
-      .sort({
-        createdAt: -1
-      })
+   .populate(
+  "member",
+  "memberName memberId mobile fatherName"
+)
+.sort({
+  createdAt: -1
+})
       .lean();
 
     // =====================================================
