@@ -4235,6 +4235,61 @@ const getISTDateKey = (value) => {
 
   return `${result.year}-${result.month}-${result.day}`;
 };
+// ==========================================================
+// ADD MONTHS SAFELY
+// ==========================================================
+// Prevents JavaScript date overflow.
+//
+// Example:
+// 31 Jan + 1 month
+// should become 28 Feb / 29 Feb,
+// not March.
+//
+// Used for MONTHLY and FIXED loan due dates.
+// ==========================================================
+
+const addMonthsUTC = (dateValue, months) => {
+  const source = new Date(dateValue);
+
+  if (Number.isNaN(source.getTime())) {
+    return new Date(NaN);
+  }
+
+  const originalDay =
+    source.getUTCDate();
+
+  const result =
+    new Date(source);
+
+  // Start from day 1 so month changes
+  // don't overflow into the next month.
+  result.setUTCDate(1);
+
+  result.setUTCMonth(
+    result.getUTCMonth() +
+    Number(months)
+  );
+
+  // Last day of target month
+  const lastDay =
+    new Date(
+      Date.UTC(
+        result.getUTCFullYear(),
+        result.getUTCMonth() + 1,
+        0
+      )
+    ).getUTCDate();
+
+  result.setUTCDate(
+    Math.min(
+      originalDay,
+      lastDay
+    )
+  );
+
+  return result;
+};
+
 
 exports.getAgentLoans = async (req, res) => {
   try {
@@ -4932,6 +4987,7 @@ exports.getAgentLoans = async (req, res) => {
     });
   }
 };
+
 
 // ==========================================================
 // AGENT - CREATE LOAN REQUEST
