@@ -4237,15 +4237,17 @@ const getISTDateKey = (value) => {
 };
 
 exports.getAgentLoans = async (req, res) => {
-
   try {
 
-    const agentId =
-      req.params.agentId;
+    // ===================================================
+    // AGENT ID
+    // ===================================================
 
-    // =====================================================
+    const agentId = req.params.agentId;
+
+    // ===================================================
     // VALIDATE AGENT ID
-    // =====================================================
+    // ===================================================
 
     if (
       !agentId ||
@@ -4257,9 +4259,12 @@ exports.getAgentLoans = async (req, res) => {
       });
     }
 
-    // =====================================================
-    // GET AGENT LOANS
-    // =====================================================
+    // ===================================================
+    // GET ACTIVE AGENT LOANS
+    // IMPORTANT:
+    // areaGroup populate removed because DailyLoan
+    // stores areaName as String.
+    // ===================================================
 
     const loans =
       await DailyLoan.find({
@@ -4273,23 +4278,23 @@ exports.getAgentLoans = async (req, res) => {
           ]
         }
       })
-   .populate(
-  "member",
-  "memberName memberId mobile fatherName"
-)
-.sort({
-  createdAt: -1
-})
-      .lean();
+        .populate(
+          "member",
+          "memberName memberId mobile fatherName"
+        )
+        .sort({
+          createdAt: -1
+        })
+        .lean();
 
-    // =====================================================
-    // GET ALL LOAN COLLECTIONS
+    // ===================================================
+    // GET ALL COLLECTIONS FOR THESE LOANS
     // ONE QUERY
-    // =====================================================
+    // ===================================================
 
     const loanIds =
       loans.map(
-        loan => loan._id
+        (loan) => loan._id
       );
 
     const collections =
@@ -4299,22 +4304,21 @@ exports.getAgentLoans = async (req, res) => {
               $in: loanIds
             }
           })
-          .select(
-            "loan installmentNo paymentDate dueDate totalAmount emiType status"
-          )
-          .lean()
+            .select(
+              "loan installmentNo paymentDate dueDate totalAmount emiType status"
+            )
+            .lean()
         : [];
 
-    // =====================================================
+    // ===================================================
     // GROUP COLLECTIONS BY LOAN
-    // =====================================================
+    // ===================================================
 
     const collectionsByLoan =
       new Map();
 
     for (
-      const collection
-      of collections
+      const collection of collections
     ) {
 
       if (!collection?.loan) {
@@ -4340,9 +4344,9 @@ exports.getAgentLoans = async (req, res) => {
         .push(collection);
     }
 
-    // =====================================================
+    // ===================================================
     // TODAY IN IST
-    // =====================================================
+    // ===================================================
 
     const todayKey =
       getISTDateKey(
@@ -4354,15 +4358,23 @@ exports.getAgentLoans = async (req, res) => {
         `${todayKey}T00:00:00+05:30`
       );
 
-    // =====================================================
+    // ===================================================
     // PROCESS EACH LOAN
-    // =====================================================
+    // ===================================================
 
     const updatedLoans =
       loans.map((loan) => {
 
+        // =================================================
+        // LOAN ID
+        // =================================================
+
         const loanId =
           loan._id.toString();
+
+        // =================================================
+        // GET COLLECTIONS FOR THIS LOAN
+        // =================================================
 
         const loanCollections =
           collectionsByLoan.get(
@@ -4370,27 +4382,30 @@ exports.getAgentLoans = async (req, res) => {
           ) || [];
 
         // =================================================
-        // PAID INSTALLMENT NUMBERS
+        // PAID INSTALLMENTS
         //
-        // installmentNo = 0 is PRINCIPAL PAYMENT,
-        // so it must NOT count as an EMI.
+        // installmentNo = 0
+        // means principal payment.
+        //
+        // It must NOT be treated as an EMI.
         // =================================================
 
         const paidInstallments =
           new Set(
             loanCollections
               .map(
-                item =>
+                (item) =>
                   Number(
                     item.installmentNo
                   )
               )
               .filter(
-                no =>
+                (no) =>
                   Number.isFinite(no)
               )
               .filter(
-                no => no > 0
+                (no) =>
+                  no > 0
               )
           );
 
@@ -4404,11 +4419,9 @@ exports.getAgentLoans = async (req, res) => {
             ...loan,
 
             pastDueEMIs: 0,
-
             pastDueEMIAmount: 0,
 
             todayDueEMI: 0,
-
             todayDueEMIAmount: 0
           };
         }
@@ -4418,6 +4431,19 @@ exports.getAgentLoans = async (req, res) => {
             loan.loanDate
           );
 
+        if (!loanDateKey) {
+
+          return {
+            ...loan,
+
+            pastDueEMIs: 0,
+            pastDueEMIAmount: 0,
+
+            todayDueEMI: 0,
+            todayDueEMIAmount: 0
+          };
+        }
+
         const loanDate =
           new Date(
             `${loanDateKey}T00:00:00+05:30`
@@ -4425,6 +4451,10 @@ exports.getAgentLoans = async (req, res) => {
 
         // =================================================
         // TOTAL INSTALLMENTS
+        //
+        // FIXED:
+        // No fixed EMI count.
+        // It is monthly interest-only.
         // =================================================
 
         let totalInstallments = 0;
@@ -4464,16 +4494,36 @@ exports.getAgentLoans = async (req, res) => {
           "FIXED"
         ) {
 
-          // FIXED = interest only.
+          // FIXED = monthly interest only.
           // There is no fixed EMI count.
           totalInstallments = 0;
         }
 
         // =================================================
-        // HOW MANY INSTALLMENTS ARE DUE BY TODAY?
+        // HOW MANY INSTALLMENTS HAVE BECOME DUE?
+        //
+        // IMPORTANT:
+        //
+        // Loan date itself is NOT an EMI date.
+        //
+        // DAILY:
+        // loanDate + 1 day
+        //
+        // WEEKLY:
+        // loanDate + 7 days
+        //
+        // MONTHLY:
+        // loanDate + 1 month
+        //
+        // FIXED:
+        // loanDate + 1 month
         // =================================================
 
         let dueTillToday = 0;
+
+        // =================================================
+        // LOAN HAS NOT STARTED
+        // =================================================
 
         if (
           todayDate <
@@ -4502,9 +4552,21 @@ exports.getAgentLoans = async (req, res) => {
               86400000
             );
 
-          dueTillToday =
-            days + 1;
+          // Loan date is NOT EMI date.
+          //
+          // Example:
+          // 14 Sep -> 0
+          // 15 Sep -> 1
+          // 16 Sep -> 2
+          // 17 Sep -> 3
 
+          dueTillToday =
+            Math.max(
+              0,
+              days
+            );
+
+          // DAILY has tenure.
           dueTillToday =
             Math.min(
               dueTillToday,
@@ -4530,10 +4592,20 @@ exports.getAgentLoans = async (req, res) => {
               86400000
             );
 
+          // First weekly EMI after 7 days.
+          //
+          // Example:
+          // 14 Sep -> 0
+          // 21 Sep -> 1
+          // 28 Sep -> 2
+
           dueTillToday =
-            Math.floor(
-              days / 7
-            ) + 1;
+            Math.max(
+              0,
+              Math.floor(
+                days / 7
+              )
+            );
 
           dueTillToday =
             Math.min(
@@ -4565,37 +4637,42 @@ exports.getAgentLoans = async (req, res) => {
               loanDate.getUTCMonth()
             );
 
+          // No monthly EMI during same month.
           if (
-            monthDiff < 0
+            monthDiff <= 0
           ) {
 
             dueTillToday = 0;
 
-          } else if (
-            monthDiff === 0
-          ) {
-
-            dueTillToday =
-              todayDate.getUTCDate() >=
-              loanDate.getUTCDate()
-                ? 1
-                : 0;
-
-          } else if (
-            todayDate.getUTCDate() >=
-            loanDate.getUTCDate()
-          ) {
-
-            dueTillToday =
-              monthDiff + 1;
-
           } else {
 
-            dueTillToday =
+            // Start with number of months passed.
+            let possibleInstallments =
               monthDiff;
+
+            // Check whether the current month's
+            // anniversary has actually arrived.
+            const currentDueDate =
+              addMonthsUTC(
+                loanDate,
+                possibleInstallments
+              );
+
+            if (
+              currentDueDate >
+              todayDate
+            ) {
+              possibleInstallments--;
+            }
+
+            dueTillToday =
+              Math.max(
+                0,
+                possibleInstallments
+              );
           }
 
-          // MONTHLY has tenure.
+          // MONTHLY has fixed tenure.
           if (
             loan.loanType ===
             "MONTHLY"
@@ -4608,8 +4685,8 @@ exports.getAgentLoans = async (req, res) => {
               );
           }
 
-          // FIXED intentionally has NO
-          // tenure cap.
+          // FIXED intentionally has
+          // NO installment-count cap.
         }
 
         // =================================================
@@ -4625,7 +4702,7 @@ exports.getAgentLoans = async (req, res) => {
         let todayDueEMIAmount = 0;
 
         // =================================================
-        // CHECK EACH DUE INSTALLMENT
+        // CHECK EACH UNPAID INSTALLMENT
         // =================================================
 
         for (
@@ -4637,9 +4714,9 @@ exports.getAgentLoans = async (req, res) => {
           installmentNo++
         ) {
 
-          // -----------------------------------------------
+          // =================================================
           // ALREADY PAID
-          // -----------------------------------------------
+          // =================================================
 
           if (
             paidInstallments.has(
@@ -4649,23 +4726,41 @@ exports.getAgentLoans = async (req, res) => {
             continue;
           }
 
-          // -----------------------------------------------
-          // CALCULATE DUE DATE
-          // -----------------------------------------------
+          // =================================================
+          // CALCULATE CORRECT DUE DATE
+          //
+          // IMPORTANT:
+          //
+          // installment 1 is NOT loanDate.
+          //
+          // DAILY:
+          // installment 1 = +1 day
+          //
+          // WEEKLY:
+          // installment 1 = +7 days
+          //
+          // MONTHLY:
+          // installment 1 = +1 month
+          //
+          // FIXED:
+          // installment 1 = +1 month
+          // =================================================
 
-          const dueDate =
-            new Date(
-              loanDate
-            );
+          let dueDate;
 
           if (
             loan.loanType ===
             "DAILY"
           ) {
 
+            dueDate =
+              new Date(
+                loanDate
+              );
+
             dueDate.setUTCDate(
               dueDate.getUTCDate() +
-              (installmentNo - 1)
+              installmentNo
             );
 
           } else if (
@@ -4673,11 +4768,15 @@ exports.getAgentLoans = async (req, res) => {
             "WEEKLY"
           ) {
 
+            dueDate =
+              new Date(
+                loanDate
+              );
+
             dueDate.setUTCDate(
               dueDate.getUTCDate() +
               (
-                (installmentNo - 1) *
-                7
+                installmentNo * 7
               )
             );
 
@@ -4688,34 +4787,43 @@ exports.getAgentLoans = async (req, res) => {
               "FIXED"
           ) {
 
-            dueDate.setUTCMonth(
-              dueDate.getUTCMonth() +
-              (
-                installmentNo - 1
-              )
-            );
+            dueDate =
+              addMonthsUTC(
+                loanDate,
+                installmentNo
+              );
+
+          } else {
+
+            continue;
           }
 
-          // -----------------------------------------------
-          // IST DATE KEY
-          // -----------------------------------------------
+          // =================================================
+          // DUE DATE KEY IN IST
+          // =================================================
 
           const dueDateKey =
             getISTDateKey(
               dueDate
             );
 
-          // -----------------------------------------------
+          // =================================================
           // EMI AMOUNT
-          // -----------------------------------------------
+          // =================================================
 
           let emiAmount =
             Number(
               loan.emiAmount || 0
             );
 
-          // FIXED LOAN:
-          // Monthly interest only
+          // =================================================
+          // FIXED LOAN
+          //
+          // Monthly interest only.
+          //
+          // Example:
+          // ₹50,000 × 2% = ₹1,000
+          // =================================================
 
           if (
             loan.loanType ===
@@ -4733,7 +4841,6 @@ exports.getAgentLoans = async (req, res) => {
             const rate =
               Number(
                 loan.interestRate ??
-                loan.interest ??
                 0
               );
 
@@ -4746,11 +4853,13 @@ exports.getAgentLoans = async (req, res) => {
               );
           }
 
-          // -----------------------------------------------
+          // =================================================
           // PAST DUE
           //
-          // Due date BEFORE today
-          // -----------------------------------------------
+          // ONLY BEFORE TODAY
+          //
+          // TODAY'S EMI IS NOT PAST DUE.
+          // =================================================
 
           if (
             dueDateKey <
@@ -4761,14 +4870,11 @@ exports.getAgentLoans = async (req, res) => {
 
             pastDueEMIAmount +=
               emiAmount;
-
           }
 
-          // -----------------------------------------------
+          // =================================================
           // TODAY'S EMI
-          //
-          // Due date EXACTLY today
-          // -----------------------------------------------
+          // =================================================
 
           else if (
             dueDateKey ===
@@ -4783,22 +4889,23 @@ exports.getAgentLoans = async (req, res) => {
         }
 
         // =================================================
-        // RETURN LOAN
+        // RETURN UPDATED LOAN
         // =================================================
 
         return {
-
           ...loan,
 
-          // Number of unpaid past-due EMIs
+          // Number of unpaid EMIs whose
+          // due date is BEFORE today.
           pastDueEMIs,
 
-          // Money represented by past-due EMIs
+          // Total amount of those past-due EMIs.
           pastDueEMIAmount,
 
-          // Today's unpaid EMI
+          // Today's unpaid EMI count.
           todayDueEMI,
 
+          // Today's unpaid EMI amount.
           todayDueEMIAmount
         };
       });
@@ -4808,11 +4915,8 @@ exports.getAgentLoans = async (req, res) => {
     // =====================================================
 
     return res.json({
-
       success: true,
-
       loans: updatedLoans
-
     });
 
   } catch (error) {
@@ -4823,12 +4927,8 @@ exports.getAgentLoans = async (req, res) => {
     );
 
     return res.status(500).json({
-
       success: false,
-
-      message:
-        error.message
-
+      message: error.message
     });
   }
 };
