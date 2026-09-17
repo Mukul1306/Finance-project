@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const DailyLoan = require("../../models/daily/DailyLoan");
 const DailyMember = require("../../models/daily/DailyMember");
 const DailySaving = require("../../models/daily/DailySaving");
@@ -4205,6 +4206,34 @@ exports.getAgentsByArea = async (req, res) => {
       message: error.message
     });
   }
+};
+// ==========================================================
+// IST DATE KEY
+// ==========================================================
+
+const getISTDateKey = (value) => {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+
+  const result = {};
+
+  for (const part of parts) {
+    if (part.type !== "literal") {
+      result[part.type] = part.value;
+    }
+  }
+
+  return `${result.year}-${result.month}-${result.day}`;
 };
 
 exports.getAgentLoans = async (req, res) => {
