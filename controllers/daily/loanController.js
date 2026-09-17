@@ -4211,34 +4211,601 @@ exports.getAgentLoans = async (req, res) => {
 
   try {
 
-    const agentId = req.params.agentId;
+    const agentId =
+      req.params.agentId;
 
-    const loans = await DailyLoan.find({
+    // =====================================================
+    // VALIDATE AGENT ID
+    // =====================================================
 
-      assignedAgent: agentId,
+    if (
+      !agentId ||
+      !mongoose.Types.ObjectId.isValid(agentId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Agent ID"
+      });
+    }
 
-      status: {
-        $in: ["ACTIVE", "DUE", "OVERDUE"]
+    // =====================================================
+    // GET AGENT LOANS
+    // =====================================================
+
+    const loans =
+      await DailyLoan.find({
+        assignedAgent: agentId,
+
+        status: {
+          $in: [
+            "ACTIVE",
+            "DUE",
+            "OVERDUE"
+          ]
+        }
+      })
+      .populate(
+        "member",
+        "memberName memberId mobile fatherName"
+      )
+      .populate(
+        "areaGroup",
+        "areaName"
+      )
+      .sort({
+        createdAt: -1
+      })
+      .lean();
+
+    // =====================================================
+    // GET ALL LOAN COLLECTIONS
+    // ONE QUERY
+    // =====================================================
+
+    const loanIds =
+      loans.map(
+        loan => loan._id
+      );
+
+    const collections =
+      loanIds.length > 0
+        ? await LoanCollection.find({
+            loan: {
+              $in: loanIds
+            }
+          })
+          .select(
+            "loan installmentNo paymentDate dueDate totalAmount emiType status"
+          )
+          .lean()
+        : [];
+
+    // =====================================================
+    // GROUP COLLECTIONS BY LOAN
+    // =====================================================
+
+    const collectionsByLoan =
+      new Map();
+
+    for (
+      const collection
+      of collections
+    ) {
+
+      if (!collection?.loan) {
+        continue;
       }
 
-    })
-    .populate("member", "memberName memberId mobile")
-    .sort({ createdAt: -1 });
+      const loanId =
+        collection.loan.toString();
 
-    res.json({
+      if (
+        !collectionsByLoan.has(
+          loanId
+        )
+      ) {
+        collectionsByLoan.set(
+          loanId,
+          []
+        );
+      }
+
+      collectionsByLoan
+        .get(loanId)
+        .push(collection);
+    }
+
+    // =====================================================
+    // TODAY IN IST
+    // =====================================================
+
+    const todayKey =
+      getISTDateKey(
+        new Date()
+      );
+
+    const todayDate =
+      new Date(
+        `${todayKey}T00:00:00+05:30`
+      );
+
+    // =====================================================
+    // PROCESS EACH LOAN
+    // =====================================================
+
+    const updatedLoans =
+      loans.map((loan) => {
+
+        const loanId =
+          loan._id.toString();
+
+        const loanCollections =
+          collectionsByLoan.get(
+            loanId
+          ) || [];
+
+        // =================================================
+        // PAID INSTALLMENT NUMBERS
+        //
+        // installmentNo = 0 is PRINCIPAL PAYMENT,
+        // so it must NOT count as an EMI.
+        // =================================================
+
+        const paidInstallments =
+          new Set(
+            loanCollections
+              .map(
+                item =>
+                  Number(
+                    item.installmentNo
+                  )
+              )
+              .filter(
+                no =>
+                  Number.isFinite(no)
+              )
+              .filter(
+                no => no > 0
+              )
+          );
+
+        // =================================================
+        // LOAN DATE
+        // =================================================
+
+        if (!loan.loanDate) {
+
+          return {
+            ...loan,
+
+            pastDueEMIs: 0,
+
+            pastDueEMIAmount: 0,
+
+            todayDueEMI: 0,
+
+            todayDueEMIAmount: 0
+          };
+        }
+
+        const loanDateKey =
+          getISTDateKey(
+            loan.loanDate
+          );
+
+        const loanDate =
+          new Date(
+            `${loanDateKey}T00:00:00+05:30`
+          );
+
+        // =================================================
+        // TOTAL INSTALLMENTS
+        // =================================================
+
+        let totalInstallments = 0;
+
+        if (
+          loan.loanType ===
+          "DAILY"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.durationDays || 0
+            );
+
+        } else if (
+          loan.loanType ===
+          "WEEKLY"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.durationWeeks || 0
+            );
+
+        } else if (
+          loan.loanType ===
+          "MONTHLY"
+        ) {
+
+          totalInstallments =
+            Number(
+              loan.durationMonths || 0
+            );
+
+        } else if (
+          loan.loanType ===
+          "FIXED"
+        ) {
+
+          // FIXED = interest only.
+          // There is no fixed EMI count.
+          totalInstallments = 0;
+        }
+
+        // =================================================
+        // HOW MANY INSTALLMENTS ARE DUE BY TODAY?
+        // =================================================
+
+        let dueTillToday = 0;
+
+        if (
+          todayDate <
+          loanDate
+        ) {
+
+          dueTillToday = 0;
+
+        }
+
+        // =================================================
+        // DAILY
+        // =================================================
+
+        else if (
+          loan.loanType ===
+          "DAILY"
+        ) {
+
+          const days =
+            Math.floor(
+              (
+                todayDate -
+                loanDate
+              ) /
+              86400000
+            );
+
+          dueTillToday =
+            days + 1;
+
+          dueTillToday =
+            Math.min(
+              dueTillToday,
+              totalInstallments
+            );
+        }
+
+        // =================================================
+        // WEEKLY
+        // =================================================
+
+        else if (
+          loan.loanType ===
+          "WEEKLY"
+        ) {
+
+          const days =
+            Math.floor(
+              (
+                todayDate -
+                loanDate
+              ) /
+              86400000
+            );
+
+          dueTillToday =
+            Math.floor(
+              days / 7
+            ) + 1;
+
+          dueTillToday =
+            Math.min(
+              dueTillToday,
+              totalInstallments
+            );
+        }
+
+        // =================================================
+        // MONTHLY / FIXED
+        // =================================================
+
+        else if (
+          loan.loanType ===
+            "MONTHLY" ||
+          loan.loanType ===
+            "FIXED"
+        ) {
+
+          const monthDiff =
+            (
+              (
+                todayDate.getUTCFullYear() -
+                loanDate.getUTCFullYear()
+              ) * 12
+            ) +
+            (
+              todayDate.getUTCMonth() -
+              loanDate.getUTCMonth()
+            );
+
+          if (
+            monthDiff < 0
+          ) {
+
+            dueTillToday = 0;
+
+          } else if (
+            monthDiff === 0
+          ) {
+
+            dueTillToday =
+              todayDate.getUTCDate() >=
+              loanDate.getUTCDate()
+                ? 1
+                : 0;
+
+          } else if (
+            todayDate.getUTCDate() >=
+            loanDate.getUTCDate()
+          ) {
+
+            dueTillToday =
+              monthDiff + 1;
+
+          } else {
+
+            dueTillToday =
+              monthDiff;
+          }
+
+          // MONTHLY has tenure.
+          if (
+            loan.loanType ===
+            "MONTHLY"
+          ) {
+
+            dueTillToday =
+              Math.min(
+                dueTillToday,
+                totalInstallments
+              );
+          }
+
+          // FIXED intentionally has NO
+          // tenure cap.
+        }
+
+        // =================================================
+        // CALCULATE PAST DUE
+        // =================================================
+
+        let pastDueEMIs = 0;
+
+        let pastDueEMIAmount = 0;
+
+        let todayDueEMI = 0;
+
+        let todayDueEMIAmount = 0;
+
+        // =================================================
+        // CHECK EACH DUE INSTALLMENT
+        // =================================================
+
+        for (
+          let installmentNo = 1;
+
+          installmentNo <=
+          dueTillToday;
+
+          installmentNo++
+        ) {
+
+          // -----------------------------------------------
+          // ALREADY PAID
+          // -----------------------------------------------
+
+          if (
+            paidInstallments.has(
+              installmentNo
+            )
+          ) {
+            continue;
+          }
+
+          // -----------------------------------------------
+          // CALCULATE DUE DATE
+          // -----------------------------------------------
+
+          const dueDate =
+            new Date(
+              loanDate
+            );
+
+          if (
+            loan.loanType ===
+            "DAILY"
+          ) {
+
+            dueDate.setUTCDate(
+              dueDate.getUTCDate() +
+              (installmentNo - 1)
+            );
+
+          } else if (
+            loan.loanType ===
+            "WEEKLY"
+          ) {
+
+            dueDate.setUTCDate(
+              dueDate.getUTCDate() +
+              (
+                (installmentNo - 1) *
+                7
+              )
+            );
+
+          } else if (
+            loan.loanType ===
+              "MONTHLY" ||
+            loan.loanType ===
+              "FIXED"
+          ) {
+
+            dueDate.setUTCMonth(
+              dueDate.getUTCMonth() +
+              (
+                installmentNo - 1
+              )
+            );
+          }
+
+          // -----------------------------------------------
+          // IST DATE KEY
+          // -----------------------------------------------
+
+          const dueDateKey =
+            getISTDateKey(
+              dueDate
+            );
+
+          // -----------------------------------------------
+          // EMI AMOUNT
+          // -----------------------------------------------
+
+          let emiAmount =
+            Number(
+              loan.emiAmount || 0
+            );
+
+          // FIXED LOAN:
+          // Monthly interest only
+
+          if (
+            loan.loanType ===
+              "FIXED" &&
+            emiAmount <= 0
+          ) {
+
+            const principal =
+              Number(
+                loan.outstandingAmount ??
+                loan.loanAmount ??
+                0
+              );
+
+            const rate =
+              Number(
+                loan.interestRate ??
+                loan.interest ??
+                0
+              );
+
+            emiAmount =
+              Math.round(
+                (
+                  principal *
+                  rate
+                ) / 100
+              );
+          }
+
+          // -----------------------------------------------
+          // PAST DUE
+          //
+          // Due date BEFORE today
+          // -----------------------------------------------
+
+          if (
+            dueDateKey <
+            todayKey
+          ) {
+
+            pastDueEMIs += 1;
+
+            pastDueEMIAmount +=
+              emiAmount;
+
+          }
+
+          // -----------------------------------------------
+          // TODAY'S EMI
+          //
+          // Due date EXACTLY today
+          // -----------------------------------------------
+
+          else if (
+            dueDateKey ===
+            todayKey
+          ) {
+
+            todayDueEMI += 1;
+
+            todayDueEMIAmount +=
+              emiAmount;
+          }
+        }
+
+        // =================================================
+        // RETURN LOAN
+        // =================================================
+
+        return {
+
+          ...loan,
+
+          // Number of unpaid past-due EMIs
+          pastDueEMIs,
+
+          // Money represented by past-due EMIs
+          pastDueEMIAmount,
+
+          // Today's unpaid EMI
+          todayDueEMI,
+
+          todayDueEMIAmount
+        };
+      });
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    return res.json({
+
       success: true,
-      loans
+
+      loans: updatedLoans
+
     });
 
   } catch (error) {
 
-    res.status(500).json({
+    console.error(
+      "GET AGENT LOANS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+
       success: false,
-      message: error.message
+
+      message:
+        error.message
+
     });
-
   }
-
 };
 
 // ==========================================================
