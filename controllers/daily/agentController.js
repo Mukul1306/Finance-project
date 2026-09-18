@@ -1508,25 +1508,22 @@ exports.getAgentProfile = async (req, res) => {
 
     const collections = [
 
-      ...dailyCollections.map(item => ({
+   ...dailyCollections.map(item => ({
+    _id: item._id,
+    type: "DAILY",
 
-        _id: item._id,
+    // Actual date agent received money
+    collectionDate: item.collectionDate,
 
-        type: "DAILY",
+    // Date for which money was paid
+    paymentForDate: item.paymentForDate,
 
-        collectionDate: item.collectionDate,
-
-        member: item.member,
-
-        dailyAmount: item.dailyAmount,
-
-        penalty: item.penalty,
-
-        totalAmount: item.totalAmount,
-
-        paymentMethod: item.paymentMethod
-
-      })),
+    member: item.member,
+    dailyAmount: item.dailyAmount,
+    penalty: item.penalty,
+    totalAmount: item.totalAmount,
+    paymentMethod: item.paymentMethod
+})),
 
   ...loanCollections.map(item => ({
 
@@ -1641,11 +1638,14 @@ collections.forEach(item => {
         return;
     }
 
-    // Get collection date in IST
+    // --------------------------------------
+    // WHEN MONEY WAS ACTUALLY RECEIVED
+    // --------------------------------------
+
     const collectionDateKey =
         getISTDateKey(item.collectionDate);
 
-    // Only process money physically collected today
+    // Only transactions physically collected today
     if (collectionDateKey !== todayKey) {
         return;
     }
