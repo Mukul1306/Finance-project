@@ -1638,9 +1638,9 @@ collections.forEach(item => {
         return;
     }
 
-    // --------------------------------------
-    // WHEN MONEY WAS ACTUALLY RECEIVED
-    // --------------------------------------
+    // ======================================
+    // ACTUAL DATE MONEY WAS RECEIVED
+    // ======================================
 
     const collectionDateKey =
         getISTDateKey(item.collectionDate);
@@ -1653,32 +1653,35 @@ collections.forEach(item => {
     // ======================================
     // TODAY'S ACTUAL COLLECTION
     // ======================================
+    // Everything physically collected today
+    // including old pending payments.
+    // ======================================
 
     todayActualCollection +=
         Number(item.totalAmount || 0);
 
 
-// ======================================
-// TODAY'S COLLECTION
-// ======================================
-// Only count the amount that belongs to today.
-// Old pending payments collected today
-// will NOT be added here.
-// They are counted only in todayActualCollection.
-// ======================================
+    // ======================================
+    // TODAY'S COLLECTION
+    // ======================================
+    // Only money belonging to TODAY.
+    // ======================================
 
-if (item.paymentForDate) {
+    if (item.paymentForDate) {
 
-    const paymentForDateKey =
-        getISTDateKey(item.paymentForDate);
+        const paymentForDateKey =
+            getISTDateKey(item.paymentForDate);
 
-    if (paymentForDateKey === todayKey) {
+        if (paymentForDateKey === todayKey) {
 
-        todayCollection +=
-            Number(item.totalAmount || 0);
+            todayCollection +=
+                Number(item.totalAmount || 0);
 
+        }
     }
-}
+
+});
+
     // =========================
     // TOTAL
     // =========================
