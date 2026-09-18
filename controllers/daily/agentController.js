@@ -1658,38 +1658,27 @@ collections.forEach(item => {
         Number(item.totalAmount || 0);
 
 
-    // ======================================
-    // TODAY'S COLLECTION
-    // ======================================
+// ======================================
+// TODAY'S COLLECTION
+// ======================================
+// Only count the amount that belongs to today.
+// Old pending payments collected today
+// will NOT be added here.
+// They are counted only in todayActualCollection.
+// ======================================
 
-    // Daily saving collected today
-    if (item.type === "DAILY") {
+if (item.paymentForDate) {
+
+    const paymentForDateKey =
+        getISTDateKey(item.paymentForDate);
+
+    if (paymentForDateKey === todayKey) {
 
         todayCollection +=
             Number(item.totalAmount || 0);
+
     }
-
-    // Loan EMI collected today
-    // Only count it in Today's Collection
-    // when the EMI due date is today
-    else if (item.type === "LOAN EMI") {
-
-        if (item.paymentForDate) {
-
-            const dueDateKey =
-                getISTDateKey(item.paymentForDate);
-
-            if (dueDateKey === todayKey) {
-
-                todayCollection +=
-                    Number(item.totalAmount || 0);
-
-            }
-        }
-    }
-
-});
-
+}
     // =========================
     // TOTAL
     // =========================
