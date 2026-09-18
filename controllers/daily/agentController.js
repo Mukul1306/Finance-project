@@ -1441,37 +1441,6 @@ exports.getAgent = async (req, res) => {
   }
 
 };
-// ======================================
-// GET DATE KEY IN INDIA TIME (IST)
-// ======================================
-
-const getISTDateKey = (value) => {
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-
-  const result = {};
-
-  for (const part of parts) {
-
-    if (part.type !== "literal") {
-      result[part.type] = part.value;
-    }
-
-  }
-
-  return `${result.year}-${result.month}-${result.day}`;
-};
 
 exports.getAgentProfile = async (req, res) => {
 
@@ -1657,9 +1626,7 @@ const today = new Date(
   `${todayKey}T00:00:00+05:30`
 );
 
-// ======================================
-// TODAY COLLECTIONS
-// ======================================
+
 
 // ======================================
 // TODAY COLLECTIONS
