@@ -307,9 +307,6 @@ exports.getAgents = async (req, res) => {
       .sort({ createdAt: -1 });
 
 
-    // =====================================================
-    // TODAY
-    // =====================================================
 
 // =====================================================
 // TODAY
@@ -364,72 +361,73 @@ const today =
           collectorType: "AGENT"
 
         });
-
-
 // =====================================================
 // TODAY COLLECTIONS
 // =====================================================
 
-// Actual money physically collected today
+// Money physically collected today
 let todayActualCollection = 0;
 
-// Amount collected today that belongs to TODAY'S dues
+// Money collected today that belongs to today's due
 let todayDueCollection = 0;
 
 
+// =====================================================
+// DAILY SAVING COLLECTIONS
+// =====================================================
+
 savingTransactions.forEach(item => {
 
-    if (!item.collectionDate) {
-        return;
-    }
+  if (!item.collectionDate) {
+    return;
+  }
 
-    // ======================================
-    // ACTUAL COLLECTION DATE
-    // ======================================
+  // Actual date money was collected - IST
+  const collectionDateKey =
+    getISTDateKey(item.collectionDate);
 
-    const collectionDate = new Date(item.collectionDate);
-    collectionDate.setHours(0, 0, 0, 0);
+  // Only transactions collected physically today
+  if (collectionDateKey !== todayKey) {
+    return;
+  }
 
-    // ======================================
-    // MONEY ACTUALLY COLLECTED TODAY
-    // ======================================
+  // ==========================================
+  // TODAY'S ACTUAL COLLECTION
+  // ==========================================
+  // Includes:
+  // today's payment
+  // old pending payments collected today
+  // ==========================================
 
-    if (collectionDate.getTime() === today.getTime()) {
+  todayActualCollection +=
+    Number(item.totalAmount || 0);
 
-        todayActualCollection +=
-            Number(item.totalAmount || 0);
 
-        // ======================================
-        // TODAY'S DUE DATE
-        // ======================================
+  // ==========================================
+  // TODAY'S COLLECTION
+  // ==========================================
+  // Only payment belonging to TODAY
+  // ==========================================
 
-        if (item.paymentForDate) {
+  if (item.paymentForDate) {
 
-            const paymentForDate =
-                new Date(item.paymentForDate);
+    const paymentForDateKey =
+      getISTDateKey(item.paymentForDate);
 
-            paymentForDate.setHours(0, 0, 0, 0);
+    if (paymentForDateKey === todayKey) {
 
-            // Only count if payment belongs to today
-            if (
-                paymentForDate.getTime() ===
-                today.getTime()
-            ) {
-
-                todayDueCollection +=
-                    Number(item.totalAmount || 0);
-
-            }
-
-        }
+      todayDueCollection +=
+        Number(item.totalAmount || 0);
 
     }
+
+  }
 
 });
 
 
 // =====================================================
-// LOAN EMI
+// LOAN EMI COLLECTIONS
 // =====================================================
 
 loanTransactions.forEach(item => {
@@ -438,79 +436,46 @@ loanTransactions.forEach(item => {
     return;
   }
 
+  // Actual date money was collected - IST
+  const paymentDateKey =
+    getISTDateKey(item.paymentDate);
 
-  const paymentDate =
-    new Date(item.paymentDate);
+  // Only transactions collected physically today
+  if (paymentDateKey !== todayKey) {
+    return;
+  }
 
-  paymentDate.setHours(0, 0, 0, 0);
+  // ==========================================
+  // TODAY'S ACTUAL COLLECTION
+  // ==========================================
+  // Includes today's EMI + old pending EMI
+  // ==========================================
 
-
-  // -----------------------------------------------
-  // ACTUAL COLLECTION
-  // -----------------------------------------------
-  // Anything physically collected today
-  // is included here.
-  //
-  // Example:
-  // EMI due 11 Aug
-  // paid 13 Aug
-  // => included in actual collection
-  // -----------------------------------------------
-
-  if (
-    paymentDate.getTime() ===
-    today.getTime()
-  ) {
-
-    todayActualCollection +=
-      Number(item.totalAmount || 0);
+  todayActualCollection +=
+    Number(item.totalAmount || 0);
 
 
-    // ---------------------------------------------
-    // ONLY TODAY'S DUE
-    // ---------------------------------------------
-    //
-    // Check the EMI due date.
-    //
-    // Old EMI:
-    // dueDate = 11 Aug
-    // paymentDate = 13 Aug
-    //
-    // => Actual Collection YES
-    // => Today's Due Collection NO
-    //
-    // Today's EMI:
-    // dueDate = 13 Aug
-    // paymentDate = 13 Aug
-    //
-    // => Actual Collection YES
-    // => Today's Due Collection YES
-    // ---------------------------------------------
+  // ==========================================
+  // TODAY'S COLLECTION
+  // ==========================================
+  // Only EMI whose due date is TODAY
+  // ==========================================
 
-    if (item.dueDate) {
+  if (item.dueDate) {
 
-      const dueDate =
-        new Date(item.dueDate);
+    const dueDateKey =
+      getISTDateKey(item.dueDate);
 
-      dueDate.setHours(0, 0, 0, 0);
+    if (dueDateKey === todayKey) {
 
-
-      if (
-        dueDate.getTime() ===
-        today.getTime()
-      ) {
-
-        todayDueCollection +=
-          Number(item.totalAmount || 0);
-
-      }
+      todayDueCollection +=
+        Number(item.totalAmount || 0);
 
     }
 
   }
 
 });
-
       // =====================================================
       // TOTAL COLLECTION - ALL TIME
       // DAILY SAVING + ALL LOAN EMI
