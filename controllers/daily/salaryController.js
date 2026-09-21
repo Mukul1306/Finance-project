@@ -7,7 +7,7 @@ const LoanCollection = require("../../models/daily/LoanCollection");
 const DailyLoan = require("../../models/daily/DailyLoan");
 
 
-// =====================================================
+//=====================================================
 // ADD AGENT TO SALARY MANAGEMENT
 // =====================================================
 
@@ -119,7 +119,134 @@ exports.addAgentToSalary = async (req, res) => {
 
 };
 
+// =====================================================
+// UPDATE AGENT SALARY PROFILE
+// =====================================================
 
+exports.updateAgentSalary = async (req, res) => {
+    try {
+
+        const salaryId = req.params.id;
+
+        const {
+            salaryType,
+            commissionRate,
+            fixedSalary
+        } = req.body;
+
+
+        // FIND SALARY PROFILE
+        const salary =
+            await AgentSalary.findById(
+                salaryId
+            );
+
+
+        if (!salary) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Salary record not found"
+            });
+
+        }
+
+
+        // VALIDATE SALARY TYPE
+        if (
+            !["COMMISSION", "FIXED"]
+                .includes(salaryType)
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Invalid salary type"
+            });
+
+        }
+
+
+        // VALIDATE COMMISSION
+        if (
+            salaryType === "COMMISSION" &&
+            Number(commissionRate || 0) < 0
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Commission rate cannot be negative"
+            });
+
+        }
+
+
+        // VALIDATE FIXED SALARY
+        if (
+            salaryType === "FIXED" &&
+            Number(fixedSalary || 0) < 0
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Fixed salary cannot be negative"
+            });
+
+        }
+
+
+        // UPDATE
+        salary.salaryType =
+            salaryType;
+
+
+        salary.commissionRate =
+            salaryType === "COMMISSION"
+                ? Number(commissionRate || 0)
+                : 0;
+
+
+        salary.fixedSalary =
+            salaryType === "FIXED"
+                ? Number(fixedSalary || 0)
+                : 0;
+
+
+        await salary.save();
+
+
+        res.json({
+
+            success: true,
+
+            message:
+                "Agent salary profile updated successfully",
+
+            salary
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "UPDATE AGENT SALARY ERROR:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                error.message
+
+        });
+
+    }
+};
 // =====================================================
 // GET SALARY ENABLED AGENTS
 // =====================================================

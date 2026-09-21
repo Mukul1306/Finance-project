@@ -1,44 +1,26 @@
 const express = require("express");
-
 const router = express.Router();
-
 const {
-    addAgentToSalary,
-    getSalaryAgents,
-    getMonthlySalary,
-    paySalary
-} = require(
-    "../../controllers/daily/salaryController"
-);
-
+  addAgentToSalary,
+  getSalaryAgents,
+  getMonthlySalary,
+  paySalary,
+  updateAgentSalary // <-- Add this here
+} = require("../../controllers/daily/salaryController");
 
 // Add staff to salary management
-router.post(
-    "/add-agent",
-    addAgentToSalary
-);
-
+router.post("/add-agent", addAgentToSalary);
 
 // Salary enabled staff
-router.get(
-    "/agents",
-    getSalaryAgents
-);
+router.get("/agents", getSalaryAgents);
 
-
-// Monthly salary table
-// ?month=8&year=2026
-router.get(
-    "/monthly",
-    getMonthlySalary
-);
-
+// Monthly salary table (?month=8&year=2026)
+router.get("/monthly", getMonthlySalary);
 
 // Pay salary
-router.post(
-    "/pay",
-    paySalary
-);
+router.post("/pay", paySalary);
 
+// Update agent salary
+router.put("/update-agent/:id", updateAgentSalary); // <-- Updated reference
 
 module.exports = router;
