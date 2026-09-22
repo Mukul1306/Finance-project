@@ -1,6 +1,13 @@
 const DailyMember = require("../../models/daily/DailyMember");
 const DailyLoan = require("../../models/daily/DailyLoan");
 const DailyMemberRequest = require("../../models/daily/DailyMemberRequest");
+const AreaGroup = require("../../models/daily/AreaGroup");
+/*
+==================================
+CREATE MEMBER
+==================================
+*/
+
 /*
 ==================================
 CREATE MEMBER
@@ -8,13 +15,72 @@ CREATE MEMBER
 */
 
 exports.createMember = async (req, res) => {
-
   try {
+    const {
+      memberId,
+      memberName,
+      fatherName,
+      gender,
+      dob,
+      email,
+      mobile,
+      password,
+      confirmPassword,
+      alternateMobile,
+      residentialAddress,
+      city,
+      district,
+      state,
+      pincode,
+      status,
+      areaGroup
+    } = req.body;
+
+    // =========================
+    // REQUIRED FIELDS
+    // =========================
+
+    if (
+      !memberId ||
+      !memberName ||
+      !fatherName ||
+      !gender ||
+      !dob ||
+      !mobile ||
+      !password ||
+      !confirmPassword ||
+      !residentialAddress ||
+      !city ||
+      !district ||
+      !state ||
+      !pincode ||
+      !areaGroup
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please fill all required fields including Area"
+      });
+    }
+
+    // =========================
+    // PASSWORD CHECK
+    // =========================
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Password and Confirm Password do not match"
+      });
+    }
+
+    // =========================
+    // DUPLICATE CHECK
+    // =========================
 
     const exists = await DailyMember.findOne({
       $or: [
-        { memberId: req.body.memberId },
-        { mobile: req.body.mobile }
+        { memberId },
+        { mobile }
       ]
     });
 
@@ -25,75 +91,82 @@ exports.createMember = async (req, res) => {
       });
     }
 
-    if (req.body.password !== req.body.confirmPassword) {
-  return res.status(400).json({
-    success: false,
-    message: "Password and Confirm Password do not match"
-  });
-}
+    // =========================
+    // FIND AREA
+    // =========================
+
+    const area = await AreaGroup
+      .findById(areaGroup)
+      .populate("assignedAgent");
+
+    if (!area) {
+      return res.status(404).json({
+        success: false,
+        message: "Selected Area not found"
+      });
+    }
+
+    // =========================
+    // CHECK AREA AGENT
+    // =========================
+
+    if (!area.assignedAgent) {
+      return res.status(400).json({
+        success: false,
+        message: "Selected Area does not have an Agent assigned"
+      });
+    }
+
+    // =========================
+    // CREATE MEMBER
+    // =========================
 
     const member = await DailyMember.create({
+      memberId,
+      memberName,
+      fatherName,
+      gender,
+      dob,
+      email: email || "",
+      mobile,
+      password,
+      alternateMobile: alternateMobile || "",
+      residentialAddress,
+      city,
+      district,
+      state,
+      pincode,
+      status: status || "ACTIVE",
 
-      memberId: req.body.memberId,
+      // Area selected by Admin / Agent
+      areaGroup: area._id,
 
-      memberName: req.body.memberName,
-
-      fatherName: req.body.fatherName,
-
-      gender: req.body.gender,
-
-      dob: req.body.dob,
-
-      email: req.body.email,
-
-     mobile: req.body.mobile,
-
-password: req.body.password,
-
-alternateMobile: req.body.alternateMobile,
-
-      residentialAddress: req.body.residentialAddress,
-
-      city: req.body.city,
-
-      district: req.body.district,
-
-      state: req.body.state,
-
-      pincode: req.body.pincode,
-
-      status: req.body.status || "ACTIVE",
-          assignedAgent: agentId
-
-
+      // Automatically taken from Area
+      assignedAgent: area.assignedAgent._id
     });
 
-  const responseMember = member.toObject();
+    // =========================
+    // RESPONSE
+    // =========================
 
-delete responseMember.password;
+    const responseMember = member.toObject();
 
-res.status(201).json({
+    delete responseMember.password;
 
-  success: true,
-
-  message: "Member Registered Successfully",
-
-  member: responseMember
-
-});
+    return res.status(201).json({
+      success: true,
+      message: "Member Registered Successfully",
+      member: responseMember
+    });
 
   } catch (error) {
+    console.error("CREATE MEMBER ERROR:", error);
 
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
       message: error.message
-
     });
-
   }
-
 };
 
 /*
@@ -387,7 +460,8 @@ exports.createMemberRequest = async (req, res) => {
       city,
       district,
       state,
-      pincode
+      pincode,
+      areaGroup
     } = req.body;
 
     // =========================
@@ -406,8 +480,8 @@ exports.createMemberRequest = async (req, res) => {
       !residentialAddress ||
       !city ||
       !district ||
-      !state ||
-      !pincode
+       !pincode ||
+  !areaGroup
     ) {
       return res.status(400).json({
         success: false,
@@ -499,9 +573,11 @@ exports.createMemberRequest = async (req, res) => {
       state,
       pincode,
 
-      requestedBy: agentId,
+requestedBy: agentId,
 
-      status: "PENDING"
+areaGroup,
+
+status: "PENDING"
     });
 
     const responseRequest = request.toObject();
@@ -691,8 +767,11 @@ exports.approveMemberRequest = async (req, res) => {
       pincode: request.pincode,
 
       status: "ACTIVE",
-        // Agent who created/requested this member
-  assignedAgent: request.requestedBy
+  // Area selected during registration
+  areaGroup: area._id,
+
+  // Automatically assigned from Area
+  assignedAgent: area.assignedAgent._id
     });
 
     // =========================

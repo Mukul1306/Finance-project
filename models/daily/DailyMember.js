@@ -63,11 +63,17 @@ const dailyMemberSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  
+
+areaGroup: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "AreaGroup",
+  default: null,
+},
+
 assignedAgent: {
   type: mongoose.Schema.Types.ObjectId,
   ref: "DailyAgent",
-  default: null
+  default: null,
 },
   district: {
     type: String,

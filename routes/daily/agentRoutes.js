@@ -40,10 +40,12 @@ router.get(
   "/agent/:id",
   getAgent
 );
+
 router.get(
   "/members/agent/:agentId",
   getMembersByAgent
 );
+
 router.delete(
   "/agent/:id",
   deleteAgent
