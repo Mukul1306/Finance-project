@@ -120,190 +120,158 @@ CREATE DAILY SAVING ACCOUNT
 */
 
 exports.createDailySaving = async (req, res) => {
-
   try {
-
     const {
-
       member,
+      collectionType,
+      fixedAmount,
+      durationDays,
+      startDate,
+      graceDays,
+      penaltyType,
+      penaltyValue,
+      nomineeName,
+      nomineeMobile
+    } = req.body;
 
-      areaGroup,
+    // ==========================================
+    // CHECK MEMBER
+    // ==========================================
+
+    const memberData = await DailyMember.findById(member)
+      .populate("areaGroup", "areaName")
+      .populate("assignedAgent", "name mobile");
+
+    if (!memberData) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+    }
+
+    // ==========================================
+    // CHECK MEMBER STATUS
+    // ==========================================
+
+    if (memberData.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Only ACTIVE registered members can create a saving account"
+      });
+    }
+
+    // ==========================================
+    // AREA / AGENT COME FROM MEMBER
+    // ==========================================
+
+    if (!memberData.areaGroup) {
+      return res.status(400).json({
+        success: false,
+        message: "Member does not have an Area assigned"
+      });
+    }
+
+    if (!memberData.assignedAgent) {
+      return res.status(400).json({
+        success: false,
+        message: "Member does not have an Agent assigned"
+      });
+    }
+
+    // ==========================================
+    // CALCULATE END DATE
+    // ==========================================
+
+    const endDate = new Date(startDate);
+
+    endDate.setDate(
+      endDate.getDate() + Number(durationDays)
+    );
+
+    // ==========================================
+    // CREATE SAVING ACCOUNT
+    // ==========================================
+
+    const saving = await DailySaving.create({
+      member: memberData._id,
+
+      // Automatically taken from Member
+      areaGroup: memberData.areaGroup._id,
+
+      // Automatically taken from Member
+      assignedAgent: memberData.assignedAgent._id,
 
       collectionType,
 
-      fixedAmount,
+      fixedAmount:
+        collectionType === "FIXED"
+          ? Number(fixedAmount || 0)
+          : 0,
 
-      durationDays,
+      durationDays: Number(durationDays),
 
       startDate,
 
-      graceDays,
+      endDate,
+
+      graceDays: Number(graceDays || 0),
 
       penaltyType,
 
-      penaltyValue,
+      penaltyValue: Number(penaltyValue || 0),
 
-      nomineeName ,
+      status: "ACTIVE",
 
-nomineeMobile
-   
+      nomineeName: nomineeName || "",
 
-    } = req.body;
-
-    // Check Member
-
-    const memberData = await DailyMember.findById(member);
-
-    if (!memberData) {
-
-      return res.status(404).json({
-
-        success: false,
-
-        message: "Member Not Found"
-
-      });
-
-    }
-
-    // Check Area
-
-    const area = await AreaGroup
-      .findById(areaGroup)
-      .populate("assignedAgent");
-
-    if (!area) {
-
-      return res.status(404).json({
-
-        success: false,
-
-        message: "Area Group Not Found"
-
-      });
-
-    }
-
-    
-
-   
-    // Calculate End Date
-
-    const endDate =
-      new Date(startDate);
-
-    endDate.setDate(
-
-      endDate.getDate() +
-
-      Number(durationDays)
-
-    );
-
-    // Create Saving Account
-
-const saving = await DailySaving.create({
-
-    member,
-
-    areaGroup,
-
-    assignedAgent: area.assignedAgent._id,
-
-    collectionType,
-
-    fixedAmount:
-      collectionType === "FIXED"
-        ? fixedAmount
-        : 0,
-
-    durationDays,
-
-    startDate,
-
-    endDate,
-
-    graceDays,
-
-    penaltyType,
-
-    penaltyValue,
-
-    status: "ACTIVE",
-    nomineeName: req.body.nomineeName || "",
-
-nomineeMobile: req.body.nomineeMobile || ""
-
-});
-
-console.log("Saving Area:", saving.areaGroup);
-
-const updatedArea = await AreaGroup.findByIdAndUpdate(
-
-saving.areaGroup,
-
-{
-    $inc:{
-        totalMembers:1
-    }
-},
-
-{
-    new:true
-}
-
-);
-
-console.log("Updated Area:", updatedArea);
-
-
-
-console.log("Saving Agent:", saving.assignedAgent);
-
-const updatedAgent = await DailyAgent.findByIdAndUpdate(
-
-saving.assignedAgent,
-
-{
-    $inc:{
-        totalMembers:1
-    }
-},
-
-{
-    new:true
-}
-
-);
-
-console.log("Updated Agent:", updatedAgent);
-
-res.status(201).json({
-
-    success:true,
-
-    message:"Daily Saving Account Created Successfully",
-
-    saving
-
-});
-
-  }
-
-  catch (error) {
-
-    res.status(500).json({
-
-      success: false,
-
-      message: error.message
-
+      nomineeMobile: nomineeMobile || ""
     });
 
+    // ==========================================
+    // UPDATE AREA MEMBER COUNT
+    // ==========================================
+
+    await AreaGroup.findByIdAndUpdate(
+      memberData.areaGroup._id,
+      {
+        $inc: {
+          totalMembers: 1
+        }
+      }
+    );
+
+    // ==========================================
+    // UPDATE AGENT MEMBER COUNT
+    // ==========================================
+
+    await DailyAgent.findByIdAndUpdate(
+      memberData.assignedAgent._id,
+      {
+        $inc: {
+          totalMembers: 1
+        }
+      }
+    );
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    return res.status(201).json({
+      success: true,
+      message: "Daily Saving Account Created Successfully",
+      saving
+    });
+
+  } catch (error) {
+    console.error("CREATE DAILY SAVING ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
-
 };
-
 
 /*
 =========================================
@@ -975,7 +943,9 @@ GET MEMBER DETAILS FOR NEW SAVING
 
 exports.getSavingMemberDetails = async (req, res) => {
   try {
-    const member = await DailyMember.findById(req.params.memberId);
+   const member = await DailyMember.findById(req.params.memberId)
+  .populate("areaGroup", "areaName")
+  .populate("assignedAgent", "name mobile");
 
     if (!member) {
       return res.status(404).json({
