@@ -1012,12 +1012,18 @@ exports.getLoans = async (req, res) => {
 
         }
 
-        else if (loan.loanType === "FIXED") {
+  else if (loan.loanType === "FIXED") {
+    // Fixed loan = monthly interest penalty
+    // Keep checking every month until today
+    const loanDate = new Date(loan.loanDate);
+    const todayDate = new Date(today);
 
-          totalInstallments =
-            Number(loan.loanTenureMonths || 0);
+    const monthDiff =
+        (todayDate.getFullYear() - loanDate.getFullYear()) * 12 +
+        (todayDate.getMonth() - loanDate.getMonth());
 
-        }
+    totalInstallments = Math.max(0, monthDiff);
+}
 
 
         // ==========================================
@@ -1470,15 +1476,14 @@ exports.getLoans = async (req, res) => {
 
           }
 
-          else {
-
-            dueDate.setMonth(
-              dueDate.getMonth() +
-              i
-            );
-
-          }
-
+     else if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+) {
+    dueDate.setMonth(
+        dueDate.getMonth() + i
+    );
+}
 
           dueDate.setHours(
             0,
@@ -1522,86 +1527,71 @@ exports.getLoans = async (req, res) => {
         }
 
 
-        // ==========================================
-        // FINAL STATUS
-        // ==========================================
+      // ==========================================
+// FINAL STATUS
+// ==========================================
 
-        let currentStatus;
+// Count unpaid installments that are actually
+// due till today
+let duePendingCount = 0;
 
+for (let i = 1; i <= dueTillToday; i++) {
 
-        // FIXED
-        if (
-          loan.loanType === "FIXED"
-        ) {
+  if (!paidInstallments.has(i)) {
+    duePendingCount++;
+  }
 
+}
 
-          if (
-            Number(
-              loan.outstandingAmount || 0
-            ) <= 0
-          ) {
+// ==========================================
+// STATUS RULE
+//
+// CLOSED  = account explicitly closed
+// PAID    = all installments completed
+// DUE     = 1 or 2 installments due
+// OVERDUE = more than 2 installments due
+// ACTIVE  = no installment due yet
+// ==========================================
 
-            currentStatus =
-              "CLOSED";
+let currentStatus;
 
-          }
+// Account already closed
+if (loan.status === "CLOSED") {
 
-          else if (
-            hasOverduePending
-          ) {
+  currentStatus = "CLOSED";
 
-            currentStatus =
-              "OVERDUE";
+}
 
-          }
+// Completely paid
+else if (
+  Number(loan.outstandingAmount || 0) <= 0 ||
+  Number(loan.pendingInstallments || 0) === 0
+) {
 
-          else {
+  currentStatus = "PAID";
 
-            currentStatus =
-              "ACTIVE";
+}
 
-          }
+// More than 2 installments due
+else if (duePendingCount > 2) {
 
-        }
+  currentStatus = "OVERDUE";
 
+}
 
-        // DAILY / WEEKLY / MONTHLY
-        else {
+// 1 or 2 installments due
+else if (duePendingCount >= 1) {
 
+  currentStatus = "DUE";
 
-          if (
-            Number(
-              loan.pendingInstallments || 0
-            ) === 0 ||
+}
 
-            Number(
-              loan.outstandingAmount || 0
-            ) <= 0
-          ) {
+// No installment due yet
+else {
 
-            currentStatus =
-              "CLOSED";
+  currentStatus = "ACTIVE";
 
-          }
-
-          else if (
-            hasOverduePending
-          ) {
-
-            currentStatus =
-              "OVERDUE";
-
-          }
-
-          else {
-
-            currentStatus =
-              "ACTIVE";
-
-          }
-
-        }
-
+}
 
         // ==========================================
         // RETURN LOAN
@@ -3194,6 +3184,7 @@ status:"PAID"
 // ==========================================
 
 // Customer paid (EMI + Penalty)
+
 
 loan.totalPaid += principalAmount;
 
