@@ -1694,7 +1694,7 @@ exports.updateLoan = async (req, res) => {
   areaName,
   assignedAgent,
 
-  
+
       ...data
     } = req.body;
 
@@ -1890,9 +1890,19 @@ exports.searchLoanMembers = async (req, res) => {
 
       ]
 
-    });
+    })
 
-    res.json({
+      // IMPORTANT
+      // Get Area information
+      .populate("areaGroup", "areaName")
+
+      // IMPORTANT
+      // Get Agent information
+      .populate("assignedAgent", "name mobile email")
+
+      .limit(20);
+
+    return res.json({
 
       success: true,
 
@@ -1902,7 +1912,12 @@ exports.searchLoanMembers = async (req, res) => {
 
   } catch (error) {
 
-    res.status(500).json({
+    console.error(
+      "SEARCH LOAN MEMBERS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
 
       success: false,
 
