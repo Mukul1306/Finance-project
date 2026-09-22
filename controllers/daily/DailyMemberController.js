@@ -211,47 +211,32 @@ GET SINGLE MEMBER
 */
 
 exports.getMemberProfile = async (req, res) => {
-
   try {
-
-    const member = await DailyMember.findById(
-      req.params.id
-    );
+    const member = await DailyMember.findById(req.params.id)
+      .populate("areaGroup", "areaName")
+      .populate("assignedAgent", "name mobile");
 
     if (!member) {
-
       return res.status(404).json({
-
         success: false,
-
         message: "Member Not Found"
-
       });
-
     }
 
     res.status(200).json({
-
       success: true,
-
       member
-
     });
 
   } catch (error) {
+    console.error("GET MEMBER PROFILE ERROR:", error);
 
     res.status(500).json({
-
       success: false,
-
       message: error.message
-
     });
-
   }
-
 };
-
 /*
 ==================================
 UPDATE MEMBER
