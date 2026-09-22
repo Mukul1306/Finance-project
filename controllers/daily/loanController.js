@@ -296,8 +296,6 @@ try{
 const{
 
 member,
-areaName,
-    assignedAgent,
 
 loanAmount,
   loanTenureMonths,
@@ -446,20 +444,36 @@ guarantor2SecurityType,
 guarantor2SecurityDetails
 
 }=req.body;
+
+
 // ==========================================
 // MEMBER VALIDATION
 // ==========================================
 
-const memberData =
-    await DailyMember.findById(member);
+const memberData = await DailyMember.findById(member)
+    .populate("areaGroup", "areaName")
+    .populate("assignedAgent", "name mobile");
 
-if(!memberData){
+if (!memberData) {
     return res.status(404).json({
-        success:false,
-        message:"Member Not Found"
+        success: false,
+        message: "Member Not Found"
     });
 }
 
+if (!memberData.areaGroup) {
+    return res.status(400).json({
+        success: false,
+        message: "Member does not have an Area assigned"
+    });
+}
+
+if (!memberData.assignedAgent) {
+    return res.status(400).json({
+        success: false,
+        message: "Member does not have an Agent assigned"
+    });
+}
 
 // ==========================================
 // VALIDATION
@@ -632,8 +646,9 @@ state:memberData.state,
 
 pincode:memberData.pincode,
 
-areaName,
-assignedAgent,
+areaName: memberData.areaGroup.areaName,
+
+assignedAgent: memberData.assignedAgent._id,
 
 loanNumber,
 
@@ -1674,6 +1689,12 @@ exports.updateLoan = async (req, res) => {
       closedBy,
       createdAt,
       updatedAt,
+
+  // Area & Agent must never be changed manually
+  areaName,
+  assignedAgent,
+
+  
       ...data
     } = req.body;
 
@@ -1904,7 +1925,9 @@ exports.getLoanMemberDetails = async (req, res) => {
 
   try {
 
-    const member = await DailyMember.findById(req.params.memberId);
+    const member = await DailyMember.findById(req.params.memberId)
+      .populate("areaGroup", "areaName")
+      .populate("assignedAgent", "name mobile email");
 
     if (!member) {
 
@@ -1915,33 +1938,64 @@ exports.getLoanMemberDetails = async (req, res) => {
 
     }
 
-    res.json({
+    // ==========================================
+    // AREA VALIDATION
+    // ==========================================
+
+    if (!member.areaGroup) {
+
+      return res.status(400).json({
+        success: false,
+        message: "Member does not have an Area assigned"
+      });
+
+    }
+
+    // ==========================================
+    // AGENT VALIDATION
+    // ==========================================
+
+    if (!member.assignedAgent) {
+
+      return res.status(400).json({
+        success: false,
+        message: "Member does not have an Agent assigned"
+      });
+
+    }
+
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    return res.json({
 
       success: true,
 
       member,
 
-      areaGroup: null,
+      areaGroup: member.areaGroup,
 
-      assignedAgent: null
+      assignedAgent: member.assignedAgent
 
     });
 
   } catch (error) {
 
-    res.status(500).json({
+    console.error(
+      "GET LOAN MEMBER DETAILS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
 
       success: false,
 
       message: error.message
 
     });
-
   }
-
 };
-
-
 
 
 // ==========================================
@@ -2479,6 +2533,7 @@ message:error.message
 }
 
 };
+
 
 // ==========================================
 // COLLECT EMI
@@ -4980,11 +5035,7 @@ exports.getAgentLoans = async (req, res) => {
 };
 
 
-// ==========================================================
-// AGENT - CREATE LOAN REQUEST
-// Agent can REQUEST a loan.
-// Agent does NOT create the actual DailyLoan.
-// ==========================================================
+
 
 exports.createLoanRequest = async (req, res) => {
   try {
@@ -5069,26 +5120,10 @@ exports.createLoanRequest = async (req, res) => {
       guarantor2StampPaperSubmitted,
       guarantor2SecurityType,
       guarantor2SecurityDetails,
-
-      areaName,
       remarks
     } = req.body;
 
-    // ------------------------------------------
-    // AGENT ID
-    // ------------------------------------------
-
-    const agentId =
-      req.user?._id ||
-      req.user?.id ||
-      req.body.agentId;
-
-    if (!agentId) {
-      return res.status(400).json({
-        success: false,
-        message: "Agent ID is required"
-      });
-    }
+   
 
     // ------------------------------------------
     // BASIC VALIDATION
@@ -5126,7 +5161,9 @@ exports.createLoanRequest = async (req, res) => {
     // CHECK MEMBER
     // ------------------------------------------
 
-    const memberData = await DailyMember.findById(member);
+    const memberData = await DailyMember.findById(member)
+  .populate("areaGroup", "areaName")
+  .populate("assignedAgent", "name mobile");
 
     if (!memberData) {
       return res.status(404).json({
@@ -5142,18 +5179,23 @@ exports.createLoanRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
-    // CHECK AGENT
-    // ------------------------------------------
+// ------------------------------------------
+// CHECK AREA & ASSIGNED AGENT
+// ------------------------------------------
 
-    const agent = await Agent.findById(agentId);
+if (!memberData.areaGroup) {
+  return res.status(400).json({
+    success: false,
+    message: "Member does not have an Area assigned"
+  });
+}
 
-    if (!agent) {
-      return res.status(404).json({
-        success: false,
-        message: "Agent not found"
-      });
-    }
+if (!memberData.assignedAgent) {
+  return res.status(400).json({
+    success: false,
+    message: "Member does not have an Agent assigned"
+  });
+}
 
     // ------------------------------------------
     // VALIDATE DURATION
@@ -5315,9 +5357,8 @@ if (loanType === "FIXED") {
       state: memberData.state,
       pincode: memberData.pincode,
 
-      areaName: areaName || "",
-
-      assignedAgent: agentId,
+ areaName: memberData.areaGroup.areaName,
+assignedAgent: memberData.assignedAgent._id,
 
       loanAmount: amount,
       interestRate: rate,
@@ -5575,11 +5616,12 @@ exports.getLoanRequestsByAgent = async (req, res) => {
 
 exports.approveLoanRequest = async (req, res) => {
   try {
+    
     const { id } = req.params;
-
-    const request = await DailyLoanRequest.findById(id);
-
+    const request = await DailyLoanRequest.
+    findById(id);
     if (!request) {
+
       return res.status(404).json({
         success: false,
         message: "Loan request not found"
@@ -5597,9 +5639,11 @@ exports.approveLoanRequest = async (req, res) => {
     // MEMBER CHECK
     // ------------------------------------------
 
-    const member = await DailyMember.findById(
-      request.member
-    );
+   const member = await DailyMember.findById(
+  request.member
+)
+  .populate("areaGroup", "areaName")
+  .populate("assignedAgent", "name mobile email");
 
     if (!member) {
       return res.status(404).json({
@@ -5614,7 +5658,23 @@ exports.approveLoanRequest = async (req, res) => {
         message: "Member is not active"
       });
     }
+// ------------------------------------------
+// AREA & AGENT CHECK
+// ------------------------------------------
 
+if (!member.areaGroup) {
+  return res.status(400).json({
+    success: false,
+    message: "Member does not have an Area assigned"
+  });
+}
+
+if (!member.assignedAgent) {
+  return res.status(400).json({
+    success: false,
+    message: "Member does not have an Agent assigned"
+  });
+}
     // ------------------------------------------
     // GENERATE UNIQUE LOAN NUMBER
     // ------------------------------------------
@@ -5678,16 +5738,13 @@ exports.approveLoanRequest = async (req, res) => {
       state: member.state,
       pincode: member.pincode,
 
-      areaName: request.areaName || "",
+      areaName: member.areaGroup.areaName,
 
-     assignedAgent:
-  request.assignedAgent || null,
+assignedAgent: member.assignedAgent._id,
 
-loanNumber:
-  loanNumber,
+loanNumber: loanNumber,
 
-loanAmount:
-  request.loanAmount,
+loanAmount: request.loanAmount,
 
       interestRate:
         request.interestRate,
