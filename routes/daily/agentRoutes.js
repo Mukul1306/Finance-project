@@ -41,7 +41,7 @@ router.get(
   getAgent
 );
 router.get(
-  "/members",
+  "/members/agent/:agentId",
   getMembersByAgent
 );
 router.delete(
