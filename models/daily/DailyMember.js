@@ -63,7 +63,12 @@ const dailyMemberSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-
+  
+assignedAgent: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailyAgent",
+  default: null
+},
   district: {
     type: String,
     required: true

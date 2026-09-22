@@ -62,7 +62,9 @@ alternateMobile: req.body.alternateMobile,
 
       pincode: req.body.pincode,
 
-      status: req.body.status || "ACTIVE"
+      status: req.body.status || "ACTIVE",
+          assignedAgent: agentId
+
 
     });
 
@@ -688,7 +690,9 @@ exports.approveMemberRequest = async (req, res) => {
 
       pincode: request.pincode,
 
-      status: "ACTIVE"
+      status: "ACTIVE",
+        // Agent who created/requested this member
+  assignedAgent: request.requestedBy
     });
 
     // =========================

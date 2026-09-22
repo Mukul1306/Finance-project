@@ -12,7 +12,9 @@ const {
   deleteAgent,
   getAgentProfile,
   updateAgent,
-    getTaskAgents
+    getTaskAgents,
+  getMembersByAgent
+
 
 } = require("../../controllers/daily/agentController");
 
@@ -38,7 +40,10 @@ router.get(
   "/agent/:id",
   getAgent
 );
-
+router.get(
+  "/members",
+  getMembersByAgent
+);
 router.delete(
   "/agent/:id",
   deleteAgent

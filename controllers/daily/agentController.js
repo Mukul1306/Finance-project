@@ -2299,3 +2299,38 @@ exports.getTaskAgents = async (req, res) => {
     });
   }
 };
+
+
+exports.getMembersByAgent = async (req, res) => {
+  try {
+    const agentId =
+      req.user?._id ||
+      req.user?.id ||
+      req.params.agentId;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    const members = await DailyMember.find({
+      assignedAgent: agentId
+    }).sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: members.length,
+      members
+    });
+
+  } catch (error) {
+    console.error("GET MEMBERS BY AGENT ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
