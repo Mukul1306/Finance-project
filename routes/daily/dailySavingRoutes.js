@@ -30,7 +30,9 @@ const {
 
   approveSavingRequest,
 
-  rejectSavingRequest
+  rejectSavingRequest,
+   collectAdvancePayment
+
 
 } = require("../../controllers/daily/DailySavingController");
 
@@ -44,6 +46,14 @@ router.post(
   createDailySaving
 );
 
+// ==========================================
+// COLLECT ADVANCE SAVING PAYMENT
+// ==========================================
+
+router.post(
+  "/collect-advance",
+  collectAdvancePayment
+);
 
 // ==========================================
 // AGENT CREATE DAILY SAVING REQUEST

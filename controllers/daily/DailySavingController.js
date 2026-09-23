@@ -1691,3 +1691,450 @@ exports.rejectSavingRequest = async (
     });
   }
 };
+
+// =====================================================
+// COLLECT ADVANCE SAVING PAYMENT
+// =====================================================
+// Example:
+// Daily Saving = ₹500
+// Advance Days = 5
+// Total = ₹2500
+//
+// This creates one transaction for each future saving day.
+// =====================================================
+
+exports.collectAdvancePayment = async (req, res) => {
+  try {
+    const {
+      savingId,
+      numberOfDays,
+      collectorType = "AGENT",
+      collectorId,
+      paymentMethod
+    } = req.body;
+
+    // =====================================================
+    // VALIDATION
+    // =====================================================
+
+    if (!savingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Saving ID is required"
+      });
+    }
+
+    const advanceDays = Number(numberOfDays);
+
+    if (
+      !Number.isInteger(advanceDays) ||
+      advanceDays <= 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Number of advance days must be greater than 0"
+      });
+    }
+
+    if (advanceDays > 365) {
+      return res.status(400).json({
+        success: false,
+        message: "Maximum 365 advance days can be collected at once"
+      });
+    }
+
+    if (!paymentMethod) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment method is required"
+      });
+    }
+
+    // =====================================================
+    // GET SAVING
+    // =====================================================
+
+    const saving = await DailySaving.findById(savingId)
+      .populate("member")
+      .populate("assignedAgent")
+      .populate("areaGroup");
+
+    if (!saving) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving Account Not Found"
+      });
+    }
+
+    // =====================================================
+    // CHECK SAVING STATUS
+    // =====================================================
+
+    if (saving.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "This saving account is not active"
+      });
+    }
+
+    // =====================================================
+    // CHECK ASSIGNMENT
+    // =====================================================
+
+    if (!saving.member) {
+      return res.status(400).json({
+        success: false,
+        message: "Saving member not found"
+      });
+    }
+
+    if (!saving.areaGroup) {
+      return res.status(400).json({
+        success: false,
+        message: "Saving Area is not assigned"
+      });
+    }
+
+    if (!saving.assignedAgent) {
+      return res.status(400).json({
+        success: false,
+        message: "Saving Agent is not assigned"
+      });
+    }
+
+    // =====================================================
+    // DAILY AMOUNT
+    // =====================================================
+
+    let dailyAmount = 0;
+
+    if (saving.collectionType === "FIXED") {
+      dailyAmount = Number(
+        saving.fixedAmount || 0
+      );
+    } else {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Advance collection is currently supported only for FIXED savings"
+      });
+    }
+
+    if (!dailyAmount || dailyAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid saving daily amount"
+      });
+    }
+
+    // =====================================================
+    // TODAY
+    // =====================================================
+
+    const todayKey = getISTDateKey(new Date());
+
+    // =====================================================
+    // SAVING START / END
+    // =====================================================
+
+    const startKey = getISTDateKey(
+      saving.startDate
+    );
+
+    const endKey = getISTDateKey(
+      saving.endDate
+    );
+
+    if (!startKey || !endKey) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid saving start or end date"
+      });
+    }
+
+    // =====================================================
+    // GET ALL EXISTING PAYMENTS
+    // =====================================================
+
+    const transactions = await DailyTransaction.find({
+      savingAccount: saving._id
+    }).select(
+      "paymentForDate collectionDate"
+    );
+
+    // =====================================================
+    // CREATE PAID DATE SET
+    // =====================================================
+
+    const paidDates = new Set();
+
+    for (const transaction of transactions) {
+      const paidDate =
+        transaction.paymentForDate ||
+        transaction.collectionDate;
+
+      if (!paidDate) continue;
+
+      const dateKey =
+        getISTDateKey(paidDate);
+
+      if (dateKey) {
+        paidDates.add(dateKey);
+      }
+    }
+
+    // =====================================================
+    // FIND FUTURE UNPAID DAYS
+    // =====================================================
+    //
+    // Advance means FUTURE days.
+    //
+    // Example:
+    // Today = 23 Sep
+    //
+    // 24 Sep → Advance
+    // 25 Sep → Advance
+    // 26 Sep → Advance
+    //
+    // Current/pending days are NOT handled here.
+    // =====================================================
+
+    const futurePayments = [];
+
+    let currentKey = addDaysToDateKey(
+      todayKey,
+      1
+    );
+
+    while (
+      currentKey <= endKey &&
+      futurePayments.length < advanceDays
+    ) {
+      // -----------------------------------------------
+      // ALREADY PAID
+      // -----------------------------------------------
+
+      if (paidDates.has(currentKey)) {
+        currentKey =
+          addDaysToDateKey(
+            currentKey,
+            1
+          );
+
+        continue;
+      }
+
+      // -----------------------------------------------
+      // FUTURE PAYMENT
+      // -----------------------------------------------
+
+      const paymentDate =
+        istDateKeyToDate(currentKey);
+
+      const installmentNo =
+        Math.floor(
+          (
+            paymentDate -
+            istDateKeyToDate(startKey)
+          ) /
+            (1000 * 60 * 60 * 24)
+        ) + 1;
+
+      futurePayments.push({
+        installmentNo,
+        dateKey: currentKey,
+        paymentDate,
+        dailyAmount
+      });
+
+      currentKey =
+        addDaysToDateKey(
+          currentKey,
+          1
+        );
+    }
+
+    // =====================================================
+    // CHECK AVAILABLE FUTURE DAYS
+    // =====================================================
+
+    if (
+      futurePayments.length < advanceDays
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          `Only ${futurePayments.length} future saving days are available for advance payment`,
+        availableDays:
+          futurePayments.length
+      });
+    }
+
+    // =====================================================
+    // TOTAL AMOUNT
+    // =====================================================
+
+    const totalAmount =
+      futurePayments.reduce(
+        (sum, item) =>
+          sum +
+          item.dailyAmount,
+        0
+      );
+
+    // =====================================================
+    // CREATE TRANSACTIONS
+    // =====================================================
+
+    const transactionDocuments =
+      futurePayments.map((item) => ({
+        savingAccount:
+          saving._id,
+
+        member:
+          saving.member._id,
+
+        area:
+          saving.areaGroup._id,
+
+        collectorType,
+
+        collectorId:
+          collectorType === "ADMIN"
+            ? null
+            : collectorId,
+
+        // Actual date money was collected
+        collectionDate:
+          new Date(),
+
+        // Future saving day being paid
+        paymentForDate:
+          item.paymentDate,
+
+        dailyAmount:
+          item.dailyAmount,
+
+        penalty: 0,
+
+        totalAmount:
+          item.dailyAmount,
+
+        paymentMethod
+      }));
+
+    await DailyTransaction.insertMany(
+      transactionDocuments
+    );
+
+    // =====================================================
+    // UPDATE SAVING
+    // =====================================================
+
+    saving.totalSaved =
+      Number(
+        saving.totalSaved || 0
+      ) + totalAmount;
+
+    saving.totalDaysPaid =
+      Number(
+        saving.totalDaysPaid || 0
+      ) + futurePayments.length;
+
+    saving.completedDays =
+      saving.totalDaysPaid;
+
+    saving.lastCollectionDate =
+      new Date();
+
+    await saving.save();
+
+    // =====================================================
+    // UPDATE AGENT COLLECTION
+    // =====================================================
+
+    if (
+      saving.assignedAgent?._id
+    ) {
+      await DailyAgent.findByIdAndUpdate(
+        saving.assignedAgent._id,
+        {
+          $inc: {
+            todayCollection:
+              totalAmount,
+
+            totalCollection:
+              totalAmount
+          }
+        }
+      );
+    }
+
+    // =====================================================
+    // UPDATE AREA COLLECTION
+    // =====================================================
+
+    if (
+      saving.areaGroup?._id
+    ) {
+      await AreaGroup.findByIdAndUpdate(
+        saving.areaGroup._id,
+        {
+          $inc: {
+            totalCollection:
+              totalAmount
+          }
+        }
+      );
+    }
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        "Advance Payment Collected Successfully",
+
+      savingId:
+        saving._id,
+
+      numberOfDays:
+        futurePayments.length,
+
+      dailyAmount,
+
+      totalAmount,
+
+      paymentMethod,
+
+      payments:
+        futurePayments.map(
+          (item) => ({
+            installmentNo:
+              item.installmentNo,
+
+            paymentForDate:
+              item.paymentDate,
+
+            amount:
+              item.dailyAmount
+          })
+        )
+    });
+
+  } catch (error) {
+
+    console.error(
+      "COLLECT ADVANCE PAYMENT ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
