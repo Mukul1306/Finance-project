@@ -31,7 +31,8 @@ const {
   getLoanRequests,
   getLoanRequestsByAgent,
   approveLoanRequest,
-  rejectLoanRequest
+  rejectLoanRequest,
+  collectFixedInterestPrincipal,
 } = require("../../controllers/daily/loanController");
 
 const {
@@ -109,6 +110,11 @@ router.get(
 router.post(
     "/collect-advance-loan",
     collectAdvanceEmi
+);
+
+router.post(
+    "/collect-fixed-interest-principal",
+    collectFixedInterestPrincipal
 );
 
 router.post(

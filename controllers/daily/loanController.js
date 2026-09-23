@@ -2407,15 +2407,28 @@ if (delay > loan.gracePeriod) {
 
     let penaltyBase = loan.emiAmount;
 
-    // FIXED loan = monthly interest
-    if (loan.loanType === "FIXED") {
+   if (loan.loanType === "FIXED") {
 
-        penaltyBase = Math.round(
-            loan.totalInterest /
-            loan.loanTenureMonths
+    // FIXED penalty is calculated on
+    // CURRENT monthly interest
+
+    const currentPrincipal =
+        Number(
+            loan.outstandingAmount ??
+            loan.loanAmount ??
+            0
         );
 
-    }
+    const currentInterest =
+        Math.round(
+            (
+                currentPrincipal *
+                Number(loan.interestRate || 0)
+            ) / 100
+        );
+
+    penaltyBase = currentInterest;
+}
 
     // ==========================================
     // CALCULATE PENALTY
@@ -2439,10 +2452,19 @@ let displayEmi = loan.emiAmount;
 
 if (loan.loanType === "FIXED") {
 
-    displayEmi = Math.round(
-        loan.totalInterest / loan.loanTenureMonths
-    );
+    const currentPrincipal =
+        Number(
+            loan.outstandingAmount ??
+            loan.loanAmount ??
+            0
+        );
 
+    displayEmi = Math.round(
+        (
+            currentPrincipal *
+            Number(loan.interestRate || 0)
+        ) / 100
+    );
 }
 
 const totalAmount =
@@ -2494,11 +2516,21 @@ installments.push({
 let summaryEmi = loan.emiAmount;
 
 if (loan.loanType === "FIXED") {
+
+    const currentPrincipal =
+        Number(
+            loan.outstandingAmount ??
+            loan.loanAmount ??
+            0
+        );
+
     summaryEmi = Math.round(
-        loan.totalInterest / loan.loanTenureMonths
+        (
+            currentPrincipal *
+            Number(loan.interestRate || 0)
+        ) / 100
     );
 }
-
 // ==========================================
 // RESPONSE
 // ==========================================
@@ -2575,27 +2607,28 @@ const getLoanTotalInstallments = (loan) => {
 // GET EMI AMOUNT
 // ==========================================================
 
+// ==========================================================
+// GET CURRENT EMI / MONTHLY INTEREST
+// ==========================================================
+
 const getLoanEmiAmount = (loan) => {
 
     // FIXED LOAN
-    // Existing system treats FIXED EMI as monthly interest.
+    // FIXED EMI = current outstanding principal × interest rate
     if (loan.loanType === "FIXED") {
 
-        if (
-            Number(loan.loanTenureMonths || 0) > 0 &&
-            Number(loan.totalInterest || 0) > 0
-        ) {
-            return Math.round(
-                Number(loan.totalInterest) /
-                Number(loan.loanTenureMonths)
+        const currentPrincipal =
+            Number(
+                loan.outstandingAmount ??
+                loan.loanAmount ??
+                0
             );
-        }
+
+        const interestRate =
+            Number(loan.interestRate || 0);
 
         return Math.round(
-            (
-                Number(loan.loanAmount || 0) *
-                Number(loan.interestRate || 0)
-            ) / 100
+            (currentPrincipal * interestRate) / 100
         );
     }
 
@@ -4257,6 +4290,14 @@ case "FIXED":
 
     break;
 
+    // Fixed loan = monthly interest only
+    interestAmount = loan.emiAmount;
+
+    // Principal is NEVER collected through EMI
+    principalAmount = 0;
+
+    break;
+
 default:
 
 interestAmount = 0;
@@ -4339,10 +4380,7 @@ status:"PAID"
 
 });
 
-// ==========================================
-// NEXT PART STARTS HERE
-// UPDATE LOAN
-// ==========================================
+
 
 // ==========================================
 // UPDATE LOAN
@@ -4504,195 +4542,656 @@ return res.status(500).json({
 
 
 
-// ==========================================
-// COLLECT PRINCIPAL (FIXED LOAN)
-// ==========================================
+// ==========================================================
+// COLLECT PRINCIPAL - FIXED LOAN
+// ==========================================================
 
 exports.collectPrincipal = async (req, res) => {
 
-try{
+    try {
+
+        const {
+            loanId,
+            collectorType,
+            collectorId,
+            paymentMethod,
+            amount,
+            remarks
+        } = req.body;
+
+        // ------------------------------------------
+        // GET LOAN
+        // ------------------------------------------
 
-const{
+        const loan =
+            await DailyLoan.findById(loanId);
 
-loanId,
-collectorType,
-collectorId,
-paymentMethod,
-amount,
-remarks
+        if (!loan) {
 
-}=req.body;
+            return res.status(404).json({
+                success: false,
+                message: "Loan Not Found"
+            });
+        }
 
-const loan =
-await DailyLoan.findById(loanId);
+        // ------------------------------------------
+        // ONLY FIXED LOAN
+        // ------------------------------------------
 
-if(!loan){
+        if (loan.loanType !== "FIXED") {
 
-return res.status(404).json({
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Principal collection is only available for FIXED loans"
+            });
+        }
 
-success:false,
-message:"Loan Not Found"
+        // ------------------------------------------
+        // CURRENT PRINCIPAL
+        // ------------------------------------------
 
-});
+        const currentPrincipal =
+            Number(
+                loan.outstandingAmount ??
+                loan.loanAmount ??
+                0
+            );
 
-}
+        const principalAmount =
+            Number(amount);
 
-const principalAmount =
-Number(amount);
+        // ------------------------------------------
+        // VALIDATION
+        // ------------------------------------------
 
-if(principalAmount<=0){
+        if (
+            !Number.isFinite(principalAmount) ||
+            principalAmount <= 0
+        ) {
 
-return res.status(400).json({
+            return res.status(400).json({
+                success: false,
+                message: "Invalid Principal Amount"
+            });
+        }
 
-success:false,
-message:"Invalid Amount"
+        if (principalAmount > currentPrincipal) {
 
-});
+            return res.status(400).json({
+                success: false,
+                message:
+                    `Principal cannot exceed current principal ₹${currentPrincipal}`
+            });
+        }
 
-}
+        // ------------------------------------------
+        // CURRENT MONTHLY INTEREST
+        // ------------------------------------------
 
-if(principalAmount>loan.outstandingAmount){
+        const interestAmount =
+            Math.round(
+                (
+                    currentPrincipal *
+                    Number(loan.interestRate || 0)
+                ) / 100
+            );
 
-return res.status(400).json({
+        // ------------------------------------------
+        // RECEIPT
+        // ------------------------------------------
 
-success:false,
-message:"Amount exceeds Outstanding Amount"
+        const receiptNo =
+            "PRN-" + Date.now();
 
-});
+        // ------------------------------------------
+        // SAVE PRINCIPAL COLLECTION
+        // ------------------------------------------
 
-}
+        await LoanCollection.create({
 
-const receiptNo =
-"PRN-"+Date.now();
+            loan: loan._id,
 
-// ==========================================
-// SAVE COLLECTION
-// ==========================================
+            member: loan.member,
 
-await LoanCollection.create({
+            installmentNo: 0,
 
-loan:loan._id,
+            emiType: "PRINCIPAL",
 
-member:loan.member,
+            dueDate: new Date(),
 
-installmentNo:0,
+            paymentDate: new Date(),
 
-emiType:"PRINCIPAL",
+            delayDays: 0,
 
-dueDate:new Date(),
+            principalAmount,
 
-paymentDate:new Date(),
+            interestAmount: 0,
 
-delayDays:0,
+            penalty: 0,
 
-principalAmount,
+            totalAmount: principalAmount,
 
-interestAmount:0,
+            collectorType,
 
-penalty:0,
+            collectorId,
 
-totalAmount:principalAmount,
+            paymentMethod,
 
-collectorType,
+            receiptNo,
 
-collectorId,
+            remarks,
 
-paymentMethod,
+            status: "PAID"
+        });
 
-receiptNo,
+        // ------------------------------------------
+        // UPDATE PRINCIPAL
+        // ------------------------------------------
 
-remarks,
+        loan.outstandingAmount =
+            currentPrincipal - principalAmount;
 
-status:"PAID"
+        if (loan.outstandingAmount < 0) {
+            loan.outstandingAmount = 0;
+        }
 
-});
+        // ------------------------------------------
+        // TOTAL PAID
+        // ------------------------------------------
 
-// ==========================================
-// UPDATE LOAN
-// ==========================================
+        loan.totalPaid =
+            Number(loan.totalPaid || 0) +
+            principalAmount;
 
-// Customer paid (EMI + Penalty)
+        loan.lastPaymentDate =
+            new Date();
 
+        // ------------------------------------------
+        // CLOSE IF PRINCIPAL ZERO
+        // ------------------------------------------
 
-loan.totalPaid += principalAmount;
+        if (
+            loan.outstandingAmount <= 0
+        ) {
 
-loan.outstandingAmount -= principalAmount;
+            loan.outstandingAmount = 0;
 
-if (loan.outstandingAmount < 0) {
-    loan.outstandingAmount = 0;
-}
+            loan.status = "CLOSED";
 
-loan.lastPaymentDate =
-new Date();
+            loan.closedDate =
+                new Date();
 
-// ==========================================
-// CLOSE LOAN
-// ==========================================
+            loan.closedBy =
+                collectorType;
+        }
 
-if(loan.outstandingAmount===0){
+        // ------------------------------------------
+        // SAVE
+        // ------------------------------------------
 
-loan.status="CLOSED";
+        await loan.save();
 
-loan.closedDate=
-new Date();
+        // ------------------------------------------
+        // NEXT MONTH INTEREST
+        // ------------------------------------------
 
-loan.closedBy=
-collectorType;
+        const nextMonthlyInterest =
+            Math.round(
+                (
+                    Number(
+                        loan.outstandingAmount || 0
+                    ) *
+                    Number(
+                        loan.interestRate || 0
+                    )
+                ) / 100
+            );
 
-}
+        // ------------------------------------------
+        // RESPONSE
+        // ------------------------------------------
 
-await loan.save();
+        return res.status(201).json({
 
-// ==========================================
-// RESPONSE
-// ==========================================
+            success: true,
 
-return res.status(201).json({
+            message:
+                "Principal Collected Successfully",
 
-success:true,
+            receiptNo,
 
-message:"Principal Collected Successfully",
+            collection: {
 
-receiptNo,
+                principalAmount,
 
-collection:{
+                paymentDate: new Date()
+            },
 
-principalAmount,
+            loanSummary: {
 
-paymentDate:new Date()
+                previousPrincipal:
+                    currentPrincipal,
 
-},
+                principalPaid:
+                    principalAmount,
 
-loanSummary:{
+                currentPrincipal:
+                    loan.outstandingAmount,
 
-totalPaid:
-loan.totalPaid,
+                interestRate:
+                    loan.interestRate,
 
-outstandingAmount:
-loan.outstandingAmount,
+                nextMonthlyInterest,
 
-status:
-loan.status
+                totalPaid:
+                    loan.totalPaid,
 
-}
+                status:
+                    loan.status
+            }
+        });
 
-});
+    } catch (error) {
 
-}catch(error){
+        console.log(
+            "COLLECT PRINCIPAL ERROR:",
+            error
+        );
 
-console.log(error);
+        return res.status(500).json({
 
-return res.status(500).json({
+            success: false,
 
-success:false,
-
-message:error.message
-
-});
-
-}
-
+            message:
+                error.message
+        });
+    }
 };
+
+
+
+// ==========================================================
+// COLLECT FIXED INTEREST + PRINCIPAL
+// ==========================================================
+
+exports.collectFixedInterestPrincipal = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const {
+            loanId,
+            installmentNo,
+            principalAmount,
+            collectorType,
+            collectorId,
+            paymentMethod,
+            remarks
+        } = req.body;
+
+        // ------------------------------------------
+        // VALIDATION
+        // ------------------------------------------
+
+        if (!loanId) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Loan ID is required"
+            });
+        }
+
+        const loan =
+            await DailyLoan.findById(loanId);
+
+        if (!loan) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Loan Not Found"
+            });
+        }
+
+        if (loan.loanType !== "FIXED") {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "This API is only for FIXED loans"
+            });
+        }
+
+        if (loan.status === "CLOSED") {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "This loan is already closed"
+            });
+        }
+
+        // ------------------------------------------
+        // CURRENT PRINCIPAL
+        // ------------------------------------------
+
+        const currentPrincipal =
+            Number(
+                loan.outstandingAmount ??
+                loan.loanAmount ??
+                0
+            );
+
+        // ------------------------------------------
+        // PRINCIPAL PAYMENT
+        // ------------------------------------------
+
+        const principalPaid =
+            Number(principalAmount || 0);
+
+        if (
+            !Number.isFinite(principalPaid) ||
+            principalPaid < 0
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Invalid principal amount"
+            });
+        }
+
+        if (
+            principalPaid >
+            currentPrincipal
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    `Principal cannot exceed ₹${currentPrincipal}`
+            });
+        }
+
+        // ------------------------------------------
+        // CURRENT MONTHLY INTEREST
+        // ------------------------------------------
+
+        const interestAmount =
+            Math.round(
+                (
+                    currentPrincipal *
+                    Number(
+                        loan.interestRate || 0
+                    )
+                ) / 100
+            );
+
+        // ------------------------------------------
+        // TOTAL
+        // ------------------------------------------
+
+        const totalAmount =
+            interestAmount +
+            principalPaid;
+
+        if (totalAmount <= 0) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Nothing to collect"
+            });
+        }
+
+        // ------------------------------------------
+        // INSTALLMENT NUMBER
+        // ------------------------------------------
+
+        const currentInstallment =
+            Number(
+                installmentNo || 1
+            );
+
+        // ------------------------------------------
+        // CHECK DUPLICATE
+        // ------------------------------------------
+
+        const existing =
+            await LoanCollection.findOne({
+
+                loan: loan._id,
+
+                installmentNo:
+                    currentInstallment,
+
+                status: "PAID"
+            });
+
+        if (existing) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    `Installment ${currentInstallment} is already paid`
+            });
+        }
+
+        // ------------------------------------------
+        // DUE DATE
+        // ------------------------------------------
+
+        const dueDate =
+            getInstallmentDueDate(
+                loan,
+                currentInstallment
+            );
+
+        // ------------------------------------------
+        // RECEIPT
+        // ------------------------------------------
+
+        const receiptNo =
+            "FIX-" +
+            Date.now() +
+            "-" +
+            String(
+                currentInstallment
+            ).padStart(3, "0");
+
+        // ------------------------------------------
+        // SAVE COLLECTION
+        // ------------------------------------------
+
+        await LoanCollection.create({
+
+            loan: loan._id,
+
+            member: loan.member,
+
+            installmentNo:
+                currentInstallment,
+
+            emiType:
+                "FIXED_INTEREST",
+
+            dueDate,
+
+            paymentDate:
+                new Date(),
+
+            delayDays: 0,
+
+            principalAmount:
+                principalPaid,
+
+            interestAmount:
+                interestAmount,
+
+            penalty: 0,
+
+            totalAmount:
+                totalAmount,
+
+            collectorType,
+
+            collectorId,
+
+            paymentMethod,
+
+            receiptNo,
+
+            remarks,
+
+            status: "PAID"
+        });
+
+        // ------------------------------------------
+        // REDUCE PRINCIPAL
+        // ------------------------------------------
+
+        loan.outstandingAmount =
+            currentPrincipal -
+            principalPaid;
+
+        if (
+            loan.outstandingAmount < 0
+        ) {
+            loan.outstandingAmount = 0;
+        }
+
+        // ------------------------------------------
+        // TOTAL PAID
+        // ------------------------------------------
+
+        loan.totalPaid =
+            Number(
+                loan.totalPaid || 0
+            ) +
+            totalAmount;
+
+        loan.lastPaymentDate =
+            new Date();
+
+        loan.lastInstallmentNo =
+            currentInstallment;
+
+        // ------------------------------------------
+        // NEW MONTHLY INTEREST
+        // ------------------------------------------
+
+        const nextMonthlyInterest =
+            Math.round(
+                (
+                    Number(
+                        loan.outstandingAmount || 0
+                    ) *
+                    Number(
+                        loan.interestRate || 0
+                    )
+                ) / 100
+            );
+
+        // ------------------------------------------
+        // STATUS
+        // ------------------------------------------
+
+        if (
+            loan.outstandingAmount <= 0
+        ) {
+
+            loan.status =
+                "CLOSED";
+
+            loan.closedDate =
+                new Date();
+
+            loan.closedBy =
+                collectorType;
+
+        } else {
+
+            loan.status =
+                "ACTIVE";
+        }
+
+        // ------------------------------------------
+        // SAVE
+        // ------------------------------------------
+
+        await loan.save();
+
+        // ------------------------------------------
+        // RESPONSE
+        // ------------------------------------------
+
+        return res.status(201).json({
+
+            success: true,
+
+            message:
+                "Fixed Interest + Principal Collected Successfully",
+
+            receiptNo,
+
+            collection: {
+
+                installmentNo:
+                    currentInstallment,
+
+                previousPrincipal:
+                    currentPrincipal,
+
+                principalPaid,
+
+                interestAmount,
+
+                totalAmount,
+
+                nextPrincipal:
+                    loan.outstandingAmount,
+
+                nextMonthlyInterest
+            },
+
+            loanSummary: {
+
+                totalPaid:
+                    loan.totalPaid,
+
+                outstandingAmount:
+                    loan.outstandingAmount,
+
+                currentPrincipal:
+                    loan.outstandingAmount,
+
+                nextMonthlyInterest,
+
+                status:
+                    loan.status
+            }
+        });
+
+    } catch (error) {
+
+        console.error(
+            "FIXED INTEREST + PRINCIPAL ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                error.message
+        });
+    }
+};
+
+
 // ==========================================
 // GET LOAN DETAILS
 // ==========================================
