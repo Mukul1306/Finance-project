@@ -103,12 +103,12 @@ collectEmi
 
 router.get(
     "/loan/:loanId/advance-preview",
-    loanController.advanceEmiPreview
+    advanceEmiPreview
 );
 
 router.post(
     "/collect-advance-loan",
-    loanController.collectAdvanceEmi
+    collectAdvanceEmi
 );
 
 router.post(
