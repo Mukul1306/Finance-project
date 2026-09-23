@@ -31,7 +31,8 @@ const {
   approveSavingRequest,
 
   rejectSavingRequest,
-   collectAdvancePayment
+   collectAdvancePayment,
+   createTerminationRequest,
 
 
 } = require("../../controllers/daily/DailySavingController");
@@ -107,6 +108,10 @@ router.put(
   rejectSavingRequest
 );
 
+router.post(
+  "/saving-termination-request",
+  createTerminationRequest
+);
 
 // ==========================================
 // GET ALL ACTIVE / EXISTING SAVINGS

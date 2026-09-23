@@ -2,18 +2,46 @@ const mongoose = require("mongoose");
 
 const dailySavingRequestSchema = new mongoose.Schema(
   {
-    // =========================
+    // =====================================================
+    // REQUEST TYPE
+    // =====================================================
+    // CREATE       = New saving account request
+    // TERMINATION  = Agent wants to terminate saving account
+    // =====================================================
+
+    requestType: {
+      type: String,
+      enum: ["CREATE", "TERMINATION"],
+      default: "CREATE",
+      index: true
+    },
+
+    // =====================================================
     // MEMBER
-    // =========================
+    // =====================================================
+
     member: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "DailyMember",
       required: true
     },
 
-    // =========================
+    // =====================================================
+    // SAVING ACCOUNT
+    // =====================================================
+    // Required only for TERMINATION requests
+    // =====================================================
+
+    savingAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DailySaving",
+      default: null
+    },
+
+    // =====================================================
     // NOMINEE
-    // =========================
+    // =====================================================
+
     nomineeName: {
       type: String,
       default: ""
@@ -24,31 +52,45 @@ const dailySavingRequestSchema = new mongoose.Schema(
       default: ""
     },
 
-    // =========================
+    // =====================================================
     // AREA
-    // =========================
+    // =====================================================
+
     areaGroup: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "AreaGroup",
       required: true
     },
 
-    // =========================
-    // AGENT
-    // =========================
+    // =====================================================
+    // AGENT WHO CREATED REQUEST
+    // =====================================================
+
     requestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "DailyAgent",
       required: true
     },
 
-    // =========================
-    // SAVING DETAILS
-    // =========================
+    // =====================================================
+    // TERMINATION REASON
+    // =====================================================
+
+    terminationReason: {
+      type: String,
+      default: ""
+    },
+
+    // =====================================================
+    // SAVING PLAN DETAILS
+    // =====================================================
+
     collectionType: {
       type: String,
       enum: ["FIXED", "FLEXIBLE"],
-      required: true
+      required: function () {
+        return this.requestType === "CREATE";
+      }
     },
 
     fixedAmount: {
@@ -58,17 +100,23 @@ const dailySavingRequestSchema = new mongoose.Schema(
 
     durationDays: {
       type: Number,
-      required: true
+      required: function () {
+        return this.requestType === "CREATE";
+      }
     },
 
     startDate: {
       type: Date,
-      required: true
+      required: function () {
+        return this.requestType === "CREATE";
+      }
     },
 
     endDate: {
       type: Date,
-      required: true
+      required: function () {
+        return this.requestType === "CREATE";
+      }
     },
 
     graceDays: {
@@ -87,18 +135,21 @@ const dailySavingRequestSchema = new mongoose.Schema(
       default: 0
     },
 
-    // =========================
-    // APPROVAL STATUS
-    // =========================
+    // =====================================================
+    // REQUEST STATUS
+    // =====================================================
+
     status: {
       type: String,
       enum: ["PENDING", "APPROVED", "REJECTED"],
-      default: "PENDING"
+      default: "PENDING",
+      index: true
     },
 
-    // =========================
-    // ADMIN APPROVAL
-    // =========================
+    // =====================================================
+    // APPROVAL
+    // =====================================================
+
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
       default: null
@@ -109,9 +160,10 @@ const dailySavingRequestSchema = new mongoose.Schema(
       default: null
     },
 
-    // =========================
-    // ADMIN REJECTION
-    // =========================
+    // =====================================================
+    // REJECTION
+    // =====================================================
+
     rejectedBy: {
       type: mongoose.Schema.Types.ObjectId,
       default: null
@@ -132,12 +184,17 @@ const dailySavingRequestSchema = new mongoose.Schema(
   }
 );
 
-
-// =========================
+// =====================================================
 // INDEXES
-// =========================
+// =====================================================
 
 dailySavingRequestSchema.index({
+  status: 1,
+  createdAt: -1
+});
+
+dailySavingRequestSchema.index({
+  requestType: 1,
   status: 1,
   createdAt: -1
 });
@@ -153,6 +210,10 @@ dailySavingRequestSchema.index({
   status: 1
 });
 
+dailySavingRequestSchema.index({
+  savingAccount: 1,
+  status: 1
+});
 
 module.exports = mongoose.model(
   "DailySavingRequest",

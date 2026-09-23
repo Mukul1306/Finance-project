@@ -380,6 +380,184 @@ exports.getDailySaving = async (req, res) => {
 
 };
 
+/*
+=====================================================
+AGENT REQUEST DAILY SAVING TERMINATION
+=====================================================
+*/
+
+exports.createTerminationRequest = async (req, res) => {
+  try {
+    const { savingId, reason } = req.body;
+
+    // =====================================================
+    // GET AGENT ID
+    // =====================================================
+
+    const agentId =
+      req.user?._id ||
+      req.user?.id ||
+      req.body.agentId;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required"
+      });
+    }
+
+    // =====================================================
+    // VALIDATE AGENT ID
+    // =====================================================
+
+    if (!mongoose.Types.ObjectId.isValid(agentId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Agent ID"
+      });
+    }
+
+    // =====================================================
+    // CHECK AGENT
+    // =====================================================
+
+    const agent = await DailyAgent.findById(agentId);
+
+    if (!agent) {
+      return res.status(404).json({
+        success: false,
+        message: "Agent not found"
+      });
+    }
+
+    // =====================================================
+    // VALIDATE SAVING ID
+    // =====================================================
+
+    if (!savingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Saving Account ID is required"
+      });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(savingId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Saving Account ID"
+      });
+    }
+
+    // =====================================================
+    // FIND SAVING ACCOUNT
+    // =====================================================
+
+    const saving = await DailySaving.findById(savingId);
+
+    if (!saving) {
+      return res.status(404).json({
+        success: false,
+        message: "Saving Account Not Found"
+      });
+    }
+
+    // =====================================================
+    // ONLY ACTIVE ACCOUNT CAN BE TERMINATION REQUESTED
+    // =====================================================
+
+    if (saving.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only ACTIVE saving accounts can be requested for termination"
+      });
+    }
+
+    // =====================================================
+    // CHECK AGENT OWNERSHIP
+    // =====================================================
+    // Agent can only request termination of his own account.
+    // =====================================================
+
+    if (
+      saving.assignedAgent &&
+      saving.assignedAgent.toString() !== agent._id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You are not authorized to terminate this saving account"
+      });
+    }
+
+    // =====================================================
+    // CHECK EXISTING PENDING REQUEST
+    // =====================================================
+
+    const existingRequest =
+      await DailySavingRequest.findOne({
+        requestType: "TERMINATION",
+        savingAccount: saving._id,
+        status: "PENDING"
+      });
+
+    if (existingRequest) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Termination request for this saving account is already pending"
+      });
+    }
+
+    // =====================================================
+    // CREATE TERMINATION REQUEST
+    // =====================================================
+
+    const request =
+      await DailySavingRequest.create({
+        requestType: "TERMINATION",
+
+        member: saving.member,
+
+        savingAccount: saving._id,
+
+        areaGroup: saving.areaGroup,
+
+        requestedBy: agent._id,
+
+        terminationReason:
+          reason?.trim() ||
+          "Termination requested by Agent",
+
+        status: "PENDING"
+      });
+
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
+    return res.status(201).json({
+      success: true,
+      message:
+        "Termination request submitted successfully. Waiting for Admin approval.",
+      request
+    });
+
+  } catch (error) {
+
+    console.error(
+      "CREATE TERMINATION REQUEST ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message:
+        error.message ||
+        "Failed to create termination request"
+    });
+  }
+};
 // =====================================================
 // GET COMPLETE SAVING / MEMBER DETAILS
 // =====================================================
@@ -1347,6 +1525,8 @@ exports.createSavingRequest = async (req, res) => {
     });
   }
 };
+
+
 /*
 =====================================================
 ADMIN GET ALL PENDING SAVING REQUESTS
@@ -1371,6 +1551,10 @@ exports.getSavingRequests = async (req, res) => {
         .populate(
           "requestedBy",
           "name mobile"
+        )
+        .populate(
+          "savingAccount",
+          "accountNumber status fixedAmount collectionType totalCollected pendingAmount startDate endDate"
         )
         .sort({
           createdAt: -1
@@ -1461,11 +1645,18 @@ ADMIN APPROVE SAVING REQUEST
 =====================================================
 */
 
-exports.approveSavingRequest = async (
-  req,
-  res
-) => {
+/*
+=====================================================
+ADMIN APPROVE SAVING REQUEST
+=====================================================
+*/
+
+exports.approveSavingRequest = async (req, res) => {
   try {
+
+    // =====================================================
+    // FIND REQUEST
+    // =====================================================
 
     const request =
       await DailySavingRequest.findById(
@@ -1479,6 +1670,10 @@ exports.approveSavingRequest = async (
       });
     }
 
+    // =====================================================
+    // CHECK REQUEST STATUS
+    // =====================================================
+
     if (request.status !== "PENDING") {
       return res.status(400).json({
         success: false,
@@ -1487,9 +1682,127 @@ exports.approveSavingRequest = async (
       });
     }
 
-    // ==========================================
-    // RECHECK MEMBER
-    // ==========================================
+    // =====================================================
+    // TERMINATION REQUEST
+    // =====================================================
+
+    if (request.requestType === "TERMINATION") {
+
+      // ---------------------------------------------------
+      // FIND SAVING ACCOUNT
+      // ---------------------------------------------------
+
+      const saving =
+        await DailySaving.findById(
+          request.savingAccount
+        );
+
+      if (!saving) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Saving Account associated with this request was not found"
+        });
+      }
+
+      // ---------------------------------------------------
+      // CHECK ACTIVE
+      // ---------------------------------------------------
+
+      if (saving.status !== "ACTIVE") {
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Only ACTIVE saving accounts can be terminated"
+        });
+
+      }
+
+      // ---------------------------------------------------
+      // TERMINATE SAVING
+      // ---------------------------------------------------
+
+      saving.status = "TERMINATED";
+
+      saving.terminationDate = new Date();
+
+      saving.terminationReason =
+        request.terminationReason ||
+        "Account terminated by Admin";
+
+      saving.terminatedBy = "ADMIN";
+
+      // Stop future collection
+      saving.nextCollectionDate = null;
+
+      await saving.save();
+
+      // ---------------------------------------------------
+      // UPDATE AREA COUNT
+      // ---------------------------------------------------
+
+      if (saving.areaGroup) {
+
+        await AreaGroup.findByIdAndUpdate(
+          saving.areaGroup,
+          {
+            $inc: {
+              totalMembers: -1
+            }
+          }
+        );
+
+      }
+
+      // ---------------------------------------------------
+      // UPDATE AGENT COUNT
+      // ---------------------------------------------------
+
+      if (saving.assignedAgent) {
+
+        await DailyAgent.findByIdAndUpdate(
+          saving.assignedAgent,
+          {
+            $inc: {
+              totalMembers: -1
+            }
+          }
+        );
+
+      }
+
+      // ---------------------------------------------------
+      // UPDATE REQUEST
+      // ---------------------------------------------------
+
+      request.status = "APPROVED";
+
+      request.approvedBy =
+        req.user?._id ||
+        req.user?.id ||
+        null;
+
+      request.approvedAt = new Date();
+
+      await request.save();
+
+      // ---------------------------------------------------
+      // RESPONSE
+      // ---------------------------------------------------
+
+      return res.status(200).json({
+        success: true,
+        message:
+          "Daily Saving Termination Approved Successfully",
+        saving,
+        request
+      });
+    }
+
+    // =====================================================
+    // CREATE SAVING REQUEST
+    // =====================================================
 
     const member =
       await DailyMember.findById(
@@ -1502,21 +1815,26 @@ exports.approveSavingRequest = async (
         message: "Member Not Found"
       });
     }
-if (member.status !== "ACTIVE") {
-  return res.status(400).json({
-    success: false,
-    message: "Only ACTIVE registered members can have a saving account approved"
-  });
-}
 
-    // ==========================================
+    if (member.status !== "ACTIVE") {
+
+      return res.status(400).json({
+        success: false,
+        message:
+          "Only ACTIVE registered members can have a saving account approved"
+      });
+
+    }
+
+    // =====================================================
     // CREATE REAL SAVING ACCOUNT
-    // ==========================================
+    // =====================================================
 
     const saving =
       await DailySaving.create({
 
-        member: request.member,
+        member:
+          request.member,
 
         nomineeName:
           request.nomineeName || "",
@@ -1527,8 +1845,7 @@ if (member.status !== "ACTIVE") {
         areaGroup:
           request.areaGroup,
 
-        // IMPORTANT:
-        // Agent who submitted the request
+        // Agent who submitted request
         assignedAgent:
           request.requestedBy,
 
@@ -1553,7 +1870,8 @@ if (member.status !== "ACTIVE") {
           Number(request.graceDays || 0),
 
         penaltyType:
-          request.penaltyType || "PERCENTAGE",
+          request.penaltyType ||
+          "PERCENTAGE",
 
         penaltyValue:
           Number(request.penaltyValue || 0),
@@ -1561,9 +1879,9 @@ if (member.status !== "ACTIVE") {
         status: "ACTIVE"
       });
 
-    // ==========================================
+    // =====================================================
     // UPDATE AREA COUNT
-    // ==========================================
+    // =====================================================
 
     await AreaGroup.findByIdAndUpdate(
       request.areaGroup,
@@ -1574,9 +1892,9 @@ if (member.status !== "ACTIVE") {
       }
     );
 
-    // ==========================================
+    // =====================================================
     // UPDATE AGENT COUNT
-    // ==========================================
+    // =====================================================
 
     await DailyAgent.findByIdAndUpdate(
       request.requestedBy,
@@ -1587,9 +1905,9 @@ if (member.status !== "ACTIVE") {
       }
     );
 
-    // ==========================================
+    // =====================================================
     // UPDATE REQUEST
-    // ==========================================
+    // =====================================================
 
     request.status = "APPROVED";
 
@@ -1602,11 +1920,16 @@ if (member.status !== "ACTIVE") {
 
     await request.save();
 
+    // =====================================================
+    // RESPONSE
+    // =====================================================
+
     res.status(200).json({
       success: true,
       message:
         "Daily Saving Request Approved Successfully",
-      saving
+      saving,
+      request
     });
 
   } catch (error) {
@@ -1620,6 +1943,7 @@ if (member.status !== "ACTIVE") {
       success: false,
       message: error.message
     });
+
   }
 };
 
