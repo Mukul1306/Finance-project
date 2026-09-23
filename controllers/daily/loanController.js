@@ -4960,10 +4960,19 @@ exports.collectFixedInterestPrincipal = async (
         // INSTALLMENT NUMBER
         // ------------------------------------------
 
-        const currentInstallment =
-            Number(
-                installmentNo || 1
-            );
+       if (
+  installmentNo === undefined ||
+  installmentNo === null ||
+  !Number.isInteger(Number(installmentNo)) ||
+  Number(installmentNo) < 1
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Valid installmentNo is required",
+  });
+}
+
+const currentInstallment = Number(installmentNo);
 
         // ------------------------------------------
         // CHECK DUPLICATE
