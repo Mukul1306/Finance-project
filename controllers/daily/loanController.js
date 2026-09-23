@@ -896,17 +896,11 @@ exports.getLoans = async (req, res) => {
     // 1. GET ALL LOANS
     // ==========================================
 
-const page = Math.max(Number(req.query.page) || 1, 1);
-const limit = Math.min(Number(req.query.limit) || 25, 100);
-const skip = (page - 1) * limit;
-
 const [loans, totalLoans] = await Promise.all([
   DailyLoan.find()
     .populate("member", "memberId memberName mobile")
     .populate("assignedAgent", "name mobile")
     .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
     .lean(),
 
   DailyLoan.countDocuments()
@@ -916,15 +910,10 @@ const [loans, totalLoans] = await Promise.all([
     // No loans
     if (!loans.length) {
 
-     res.json({
+  return res.json({
   success: true,
   loans: updatedLoans,
-  pagination: {
-    page,
-    limit,
-    total: totalLoans,
-    totalPages: Math.ceil(totalLoans / limit)
-  }
+  total: totalLoans
 });
 
     }
