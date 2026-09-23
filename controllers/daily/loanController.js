@@ -1929,9 +1929,6 @@ exports.searchLoanMembers = async (req, res) => {
 
 };
 
-
-
-
 // ==========================================
 // GET MEMBER DETAILS
 // ==========================================
@@ -2549,6 +2546,1364 @@ message:error.message
 
 };
 
+// ==========================================================
+// ADVANCE EMI HELPERS
+// ==========================================================
+
+const getLoanTotalInstallments = (loan) => {
+    if (loan.loanType === "DAILY") {
+        return Number(loan.durationDays || 0);
+    }
+
+    if (loan.loanType === "WEEKLY") {
+        return Number(loan.durationWeeks || 0);
+    }
+
+    if (loan.loanType === "MONTHLY") {
+        return Number(loan.durationMonths || 0);
+    }
+
+    if (loan.loanType === "FIXED") {
+        return Number(loan.loanTenureMonths || 0);
+    }
+
+    return 0;
+};
+
+
+// ==========================================================
+// GET EMI AMOUNT
+// ==========================================================
+
+const getLoanEmiAmount = (loan) => {
+
+    // FIXED LOAN
+    // Existing system treats FIXED EMI as monthly interest.
+    if (loan.loanType === "FIXED") {
+
+        if (
+            Number(loan.loanTenureMonths || 0) > 0 &&
+            Number(loan.totalInterest || 0) > 0
+        ) {
+            return Math.round(
+                Number(loan.totalInterest) /
+                Number(loan.loanTenureMonths)
+            );
+        }
+
+        return Math.round(
+            (
+                Number(loan.loanAmount || 0) *
+                Number(loan.interestRate || 0)
+            ) / 100
+        );
+    }
+
+    return Number(loan.emiAmount || 0);
+};
+
+
+// ==========================================================
+// GET INSTALLMENT DUE DATE
+// ==========================================================
+
+const getInstallmentDueDate = (
+    loan,
+    installmentNo
+) => {
+
+    const dueDate = new Date(loan.loanDate);
+
+    if (Number.isNaN(dueDate.getTime())) {
+        return null;
+    }
+
+    // IMPORTANT:
+    // Loan date itself is NOT installment #1.
+    //
+    // DAILY:
+    // loanDate + 1 day
+    //
+    // WEEKLY:
+    // loanDate + 7 days
+    //
+    // MONTHLY:
+    // loanDate + 1 month
+    //
+    // FIXED:
+    // loanDate + 1 month
+
+    if (loan.loanType === "DAILY") {
+
+        dueDate.setDate(
+            dueDate.getDate() +
+            Number(installmentNo)
+        );
+
+    } else if (loan.loanType === "WEEKLY") {
+
+        dueDate.setDate(
+            dueDate.getDate() +
+            (
+                Number(installmentNo) * 7
+            )
+        );
+
+    } else if (
+        loan.loanType === "MONTHLY" ||
+        loan.loanType === "FIXED"
+    ) {
+
+        // Safe month calculation
+        const originalDay = dueDate.getDate();
+
+        dueDate.setDate(1);
+
+        dueDate.setMonth(
+            dueDate.getMonth() +
+            Number(installmentNo)
+        );
+
+        const lastDay =
+            new Date(
+                dueDate.getFullYear(),
+                dueDate.getMonth() + 1,
+                0
+            ).getDate();
+
+        dueDate.setDate(
+            Math.min(
+                originalDay,
+                lastDay
+            )
+        );
+    }
+
+    dueDate.setHours(0, 0, 0, 0);
+
+    return dueDate;
+};
+
+
+// ==========================================================
+// GET ALREADY PAID INSTALLMENTS
+// ==========================================================
+
+const getPaidInstallmentNumbers = async (loanId) => {
+
+    const collections =
+        await LoanCollection.find({
+            loan: loanId,
+            installmentNo: {
+                $gt: 0
+            },
+            status: "PAID"
+        })
+        .select("installmentNo")
+        .lean();
+
+    return new Set(
+        collections
+            .map(item =>
+                Number(item.installmentNo)
+            )
+            .filter(
+                number =>
+                    Number.isInteger(number) &&
+                    number > 0
+            )
+    );
+};
+
+
+// ==========================================================
+// GET NEXT UNPAID INSTALLMENTS
+// ==========================================================
+
+const getNextUnpaidInstallments = async (
+    loan,
+    advanceCount
+) => {
+
+    const totalInstallments =
+        getLoanTotalInstallments(loan);
+
+    const paidInstallments =
+        await getPaidInstallmentNumbers(
+            loan._id
+        );
+
+    const result = [];
+
+    for (
+        let installmentNo = 1;
+        installmentNo <= totalInstallments;
+        installmentNo++
+    ) {
+
+        if (
+            paidInstallments.has(
+                installmentNo
+            )
+        ) {
+            continue;
+        }
+
+        result.push(
+            installmentNo
+        );
+
+        if (
+            result.length >=
+            advanceCount
+        ) {
+            break;
+        }
+    }
+
+    return result;
+};
+
+
+// ==========================================================
+// ADVANCE EMI PREVIEW
+//
+// GET:
+// /loan/:loanId/advance-preview?count=5
+// ==========================================================
+
+exports.advanceEmiPreview = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const {
+            loanId
+        } = req.params;
+
+        const count =
+            Number(req.query.count);
+
+        // ------------------------------------------
+        // VALIDATION
+        // ------------------------------------------
+
+        if (!loanId) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Loan ID is required"
+            });
+
+        }
+
+        if (
+            !Number.isInteger(count) ||
+            count <= 0
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Advance EMI count must be a positive integer"
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // GET LOAN
+        // ------------------------------------------
+
+        const loan =
+            await DailyLoan.findById(
+                loanId
+            );
+
+        if (!loan) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Loan Not Found"
+            });
+
+        }
+
+
+        if (
+            loan.status === "CLOSED"
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "This loan is already closed"
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // TOTAL INSTALLMENTS
+        // ------------------------------------------
+
+        const totalInstallments =
+            getLoanTotalInstallments(
+                loan
+            );
+
+        if (
+            totalInstallments <= 0
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "This loan does not have valid installments"
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // NEXT UNPAID INSTALLMENTS
+        // ------------------------------------------
+
+        const installmentNumbers =
+            await getNextUnpaidInstallments(
+                loan,
+                count
+            );
+
+
+        if (
+            installmentNumbers.length === 0
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "No unpaid installments available"
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // CHECK REQUESTED COUNT
+        // ------------------------------------------
+
+        if (
+            installmentNumbers.length <
+            count
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    `Only ${installmentNumbers.length} unpaid installment(s) are available`
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // EMI
+        // ------------------------------------------
+
+        const emiAmount =
+            getLoanEmiAmount(
+                loan
+            );
+
+
+        // ------------------------------------------
+        // BUILD PREVIEW
+        // ------------------------------------------
+
+        const installments =
+            installmentNumbers.map(
+                installmentNo => {
+
+                    const dueDate =
+                        getInstallmentDueDate(
+                            loan,
+                            installmentNo
+                        );
+
+                    return {
+
+                        installmentNo,
+
+                        dueDate,
+
+                        emiAmount,
+
+                        penalty: 0,
+
+                        totalAmount:
+                            emiAmount
+
+                    };
+
+                }
+            );
+
+
+        const totalAmount =
+            installments.reduce(
+                (
+                    total,
+                    item
+                ) =>
+                    total +
+                    Number(
+                        item.totalAmount || 0
+                    ),
+                0
+            );
+
+
+        // ------------------------------------------
+        // RESPONSE
+        // ------------------------------------------
+
+        return res.json({
+
+            success: true,
+
+            message:
+                "Advance EMI preview generated",
+
+            loanId: loan._id,
+
+            loanNumber:
+                loan.loanNumber,
+
+            loanType:
+                loan.loanType,
+
+            totalInstallments,
+
+            availableAdvanceInstallments:
+                installmentNumbers.length,
+
+            advanceCount:
+                installmentNumbers.length,
+
+            emiAmount,
+
+            penalty: 0,
+
+            totalAmount,
+
+            installments
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ADVANCE EMI PREVIEW ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                error.message
+
+        });
+
+    }
+
+};
+
+
+// ==========================================================
+// COLLECT ADVANCE EMI
+//
+// POST:
+// /collect-advance-loan
+// ==========================================================
+
+exports.collectAdvanceEmi = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const {
+
+            loanId,
+
+            advanceCount,
+
+            collectorType,
+
+            collectorId,
+
+            paymentMethod
+
+        } = req.body;
+
+
+        // ------------------------------------------
+        // VALIDATION
+        // ------------------------------------------
+
+        if (
+            !loanId ||
+            !advanceCount ||
+            !collectorType ||
+            !paymentMethod
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "loanId, advanceCount, collectorType and paymentMethod are required"
+
+            });
+
+        }
+
+
+        const count =
+            Number(advanceCount);
+
+
+        if (
+            !Number.isInteger(count) ||
+            count <= 0
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Advance count must be a positive integer"
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // VALIDATE COLLECTOR TYPE
+        // ------------------------------------------
+
+        const allowedCollectorTypes = [
+            "ADMIN",
+            "AGENT"
+        ];
+
+
+        if (
+            !allowedCollectorTypes.includes(
+                String(
+                    collectorType
+                ).toUpperCase()
+            )
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "collectorType must be ADMIN or AGENT"
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // GET LOAN
+        // ------------------------------------------
+
+        const loan =
+            await DailyLoan.findById(
+                loanId
+            );
+
+
+        if (!loan) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Loan Not Found"
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // CLOSED LOAN
+        // ------------------------------------------
+
+        if (
+            loan.status === "CLOSED"
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "This loan is already closed"
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // TOTAL INSTALLMENTS
+        // ------------------------------------------
+
+        const totalInstallments =
+            getLoanTotalInstallments(
+                loan
+            );
+
+
+        if (
+            totalInstallments <= 0
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Invalid total installment count"
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // GET PAID INSTALLMENTS
+        // ------------------------------------------
+
+        const paidInstallments =
+            await getPaidInstallmentNumbers(
+                loan._id
+            );
+
+
+        // ------------------------------------------
+        // FIND NEXT UNPAID INSTALLMENTS
+        // ------------------------------------------
+
+        const installmentNumbers = [];
+
+
+        for (
+            let installmentNo = 1;
+
+            installmentNo <=
+            totalInstallments;
+
+            installmentNo++
+        ) {
+
+            if (
+                paidInstallments.has(
+                    installmentNo
+                )
+            ) {
+                continue;
+            }
+
+
+            installmentNumbers.push(
+                installmentNo
+            );
+
+
+            if (
+                installmentNumbers.length >=
+                count
+            ) {
+                break;
+            }
+
+        }
+
+
+        // ------------------------------------------
+        // NOT ENOUGH INSTALLMENTS
+        // ------------------------------------------
+
+        if (
+            installmentNumbers.length <
+            count
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    `Only ${installmentNumbers.length} unpaid installment(s) are available`
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // EMI AMOUNT
+        // ------------------------------------------
+
+        const emiAmount =
+            getLoanEmiAmount(
+                loan
+            );
+
+
+        if (
+            !Number.isFinite(
+                emiAmount
+            ) ||
+            emiAmount <= 0
+        ) {
+
+            return res.status(400).json({
+
+                success: false,
+
+                message:
+                    "Invalid EMI amount"
+
+            });
+
+        }
+
+
+        // ------------------------------------------
+        // PAYMENT DATE
+        // ------------------------------------------
+
+        const paymentDate =
+            new Date();
+
+
+        // ------------------------------------------
+        // BATCH RECEIPT
+        // ------------------------------------------
+
+        const batchReceiptNo =
+            "ADV-" +
+            Date.now();
+
+
+        // ------------------------------------------
+        // CREATE COLLECTIONS
+        //
+        // ONE DOCUMENT PER INSTALLMENT
+        // ------------------------------------------
+
+        const collections = [];
+
+
+        for (
+            const installmentNo
+            of installmentNumbers
+        ) {
+
+            const dueDate =
+                getInstallmentDueDate(
+                    loan,
+                    installmentNo
+                );
+
+
+            if (!dueDate) {
+
+                throw new Error(
+                    `Invalid due date for installment ${installmentNo}`
+                );
+
+            }
+
+
+            // --------------------------------------
+            // PRINCIPAL / INTEREST
+            // --------------------------------------
+
+            let principalAmount = 0;
+
+            let interestAmount = 0;
+
+
+            if (
+                loan.loanType ===
+                "DAILY"
+            ) {
+
+                interestAmount =
+                    Number(
+                        (
+                            Number(
+                                loan.totalInterest || 0
+                            ) /
+                            Number(
+                                loan.durationDays || 1
+                            )
+                        ).toFixed(2)
+                    );
+
+
+                principalAmount =
+                    Number(
+                        (
+                            emiAmount -
+                            interestAmount
+                        ).toFixed(2)
+                    );
+
+            }
+
+
+            else if (
+                loan.loanType ===
+                "WEEKLY"
+            ) {
+
+                interestAmount =
+                    Number(
+                        (
+                            Number(
+                                loan.totalInterest || 0
+                            ) /
+                            Number(
+                                loan.durationWeeks || 1
+                            )
+                        ).toFixed(2)
+                    );
+
+
+                principalAmount =
+                    Number(
+                        (
+                            emiAmount -
+                            interestAmount
+                        ).toFixed(2)
+                    );
+
+            }
+
+
+            else if (
+                loan.loanType ===
+                "MONTHLY"
+            ) {
+
+                interestAmount =
+                    Math.round(
+                        Number(
+                            loan.totalInterest || 0
+                        ) /
+                        Number(
+                            loan.durationMonths || 1
+                        )
+                    );
+
+
+                principalAmount =
+                    emiAmount -
+                    interestAmount;
+
+            }
+
+
+            else if (
+                loan.loanType ===
+                "FIXED"
+            ) {
+
+                // FIXED = interest only
+
+                interestAmount =
+                    emiAmount;
+
+                principalAmount =
+                    0;
+
+            }
+
+
+            if (
+                principalAmount < 0
+            ) {
+
+                principalAmount = 0;
+
+            }
+
+
+            // --------------------------------------
+            // ADVANCE EMI HAS ZERO PENALTY
+            // --------------------------------------
+
+            const penalty = 0;
+
+
+            const totalAmount =
+                emiAmount;
+
+
+            // --------------------------------------
+            // UNIQUE RECEIPT
+            // --------------------------------------
+
+            const receiptNo =
+                batchReceiptNo +
+                "-" +
+                String(
+                    installmentNo
+                ).padStart(
+                    3,
+                    "0"
+                );
+
+
+            // --------------------------------------
+            // CREATE COLLECTION
+            // --------------------------------------
+
+            const collection =
+                await LoanCollection.create({
+
+                    loan:
+                        loan._id,
+
+                    member:
+                        loan.member,
+
+                    installmentNo:
+                        installmentNo,
+
+                    emiType:
+                        loan.loanType ===
+                        "FIXED"
+
+                            ? "FIXED_INTEREST"
+
+                            : loan.loanType,
+
+                    dueDate:
+
+                        dueDate,
+
+                    paymentDate:
+
+                        paymentDate,
+
+                    // Advance payment:
+                    // No delay and no penalty.
+
+                    delayDays:
+                        0,
+
+                    principalAmount:
+
+                        principalAmount,
+
+                    interestAmount:
+
+                        interestAmount,
+
+                    penalty:
+
+                        0,
+
+                    totalAmount:
+
+                        totalAmount,
+
+                    collectorType:
+
+                        String(
+                            collectorType
+                        ).toUpperCase(),
+
+                    collectorId:
+
+                        collectorId || null,
+
+                    paymentMethod:
+
+                        paymentMethod,
+
+                    receiptNo:
+
+                        receiptNo,
+
+                    status:
+
+                        "PAID"
+
+                });
+
+
+            collections.push(
+                collection
+            );
+
+
+            // --------------------------------------
+            // UPDATE LOAN FINANCIAL DATA
+            // --------------------------------------
+
+            if (
+                loan.loanType ===
+                "FIXED"
+            ) {
+
+                // Existing FIXED behavior:
+                // EMI is interest only.
+
+                loan.totalPaid =
+                    Number(
+                        loan.totalPaid || 0
+                    ) +
+                    totalAmount;
+
+            }
+
+            else {
+
+                const loanRecovery =
+                    principalAmount +
+                    interestAmount;
+
+
+                loan.outstandingAmount =
+                    Number(
+                        loan.outstandingAmount || 0
+                    ) -
+                    loanRecovery;
+
+
+                loan.totalPaid =
+                    Number(
+                        loan.totalPaid || 0
+                    ) +
+                    totalAmount;
+
+            }
+
+        }
+
+
+        // ------------------------------------------
+        // PROTECT OUTSTANDING
+        // ------------------------------------------
+
+        if (
+            Number(
+                loan.outstandingAmount
+            ) < 0
+        ) {
+
+            loan.outstandingAmount = 0;
+
+        }
+
+
+        // ------------------------------------------
+        // LAST PAYMENT
+        // ------------------------------------------
+
+        loan.lastPaymentDate =
+            paymentDate;
+
+
+        loan.lastInstallmentNo =
+            Math.max(
+                ...installmentNumbers
+            );
+
+
+        // ------------------------------------------
+        // RECALCULATE COMPLETED INSTALLMENTS
+        //
+        // IMPORTANT:
+        // installmentNo = 0 is principal
+        // and must NOT be counted.
+        // ------------------------------------------
+
+        const paidInstallmentRecords =
+            await LoanCollection.find({
+
+                loan:
+                    loan._id,
+
+                installmentNo:
+                    {
+                        $gt: 0
+                    },
+
+                status:
+                    "PAID"
+
+            })
+            .select(
+                "installmentNo"
+            )
+            .lean();
+
+
+        const uniquePaidInstallments =
+            new Set(
+                paidInstallmentRecords
+                    .map(
+                        item =>
+                            Number(
+                                item.installmentNo
+                            )
+                    )
+                    .filter(
+                        number =>
+                            number > 0
+                    )
+            );
+
+
+        loan.completedInstallments =
+            uniquePaidInstallments.size;
+
+
+        loan.pendingInstallments =
+            Math.max(
+
+                0,
+
+                totalInstallments -
+                loan.completedInstallments
+
+            );
+
+
+        // ------------------------------------------
+        // UPDATE STATUS
+        // ------------------------------------------
+
+        if (
+            loan.loanType ===
+            "FIXED"
+        ) {
+
+            // FIXED principal is separate.
+            // Therefore advance interest does not
+            // close the loan.
+
+            if (
+                Number(
+                    loan.outstandingAmount || 0
+                ) <= 0
+            ) {
+
+                loan.status =
+                    "CLOSED";
+
+                loan.closedDate =
+                    new Date();
+
+                loan.closedBy =
+                    String(
+                        collectorType
+                    ).toUpperCase();
+
+            }
+
+            else {
+
+                loan.status =
+                    "ACTIVE";
+
+            }
+
+        }
+
+        else {
+
+            if (
+
+                loan.outstandingAmount <= 0 &&
+
+                loan.pendingInstallments === 0
+
+            ) {
+
+                loan.status =
+                    "CLOSED";
+
+                loan.closedDate =
+                    new Date();
+
+                loan.closedBy =
+                    String(
+                        collectorType
+                    ).toUpperCase();
+
+            }
+
+            else {
+
+                loan.status =
+                    "ACTIVE";
+
+            }
+
+        }
+
+
+        // ------------------------------------------
+        // SAVE LOAN
+        // ------------------------------------------
+
+        await loan.save();
+
+
+        // ------------------------------------------
+        // TOTAL ADVANCE AMOUNT
+        // ------------------------------------------
+
+        const totalAdvanceAmount =
+            collections.reduce(
+
+                (
+                    total,
+                    item
+                ) =>
+                    total +
+                    Number(
+                        item.totalAmount || 0
+                    ),
+
+                0
+
+            );
+
+
+        // ------------------------------------------
+        // RESPONSE
+        // ------------------------------------------
+
+        return res.status(201).json({
+
+            success: true,
+
+            message:
+                `${collections.length} Advance EMI(s) collected successfully`,
+
+            batchReceiptNo,
+
+            advanceCount:
+                collections.length,
+
+            totalAmount:
+                totalAdvanceAmount,
+
+            emiAmount,
+
+            penalty:
+                0,
+
+            installments:
+                collections.map(
+                    item => ({
+
+                        installmentNo:
+                            item.installmentNo,
+
+                        dueDate:
+                            item.dueDate,
+
+                        paymentDate:
+                            item.paymentDate,
+
+                        principalAmount:
+                            item.principalAmount,
+
+                        interestAmount:
+                            item.interestAmount,
+
+                        penalty:
+                            0,
+
+                        totalAmount:
+                            item.totalAmount,
+
+                        receiptNo:
+                            item.receiptNo
+
+                    })
+                ),
+
+            loanSummary: {
+
+                totalPaid:
+                    loan.totalPaid,
+
+                outstandingAmount:
+                    loan.outstandingAmount,
+
+                completedInstallments:
+                    loan.completedInstallments,
+
+                pendingInstallments:
+                    loan.pendingInstallments,
+
+                lastInstallmentNo:
+                    loan.lastInstallmentNo,
+
+                status:
+                    loan.status
+
+            }
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "COLLECT ADVANCE EMI ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+
+            success: false,
+
+            message:
+                error.message
+
+        });
+
+    }
+
+};
+
 
 // ==========================================
 // COLLECT EMI
@@ -3144,6 +4499,9 @@ return res.status(500).json({
 }
 
 };
+
+
+
 
 
 // ==========================================

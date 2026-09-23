@@ -9,6 +9,8 @@ const {
   getLoan,
   getLoanDetails,
   collectEmi,
+   advanceEmiPreview,
+    collectAdvanceEmi,
   collectPrincipal,
   getAreas,
   getMembersByArea,
@@ -95,6 +97,20 @@ router.post(
 "/collect-emi",
 collectEmi
 );
+// ==========================================================
+// ADVANCE EMI
+// ==========================================================
+
+router.get(
+    "/loan/:loanId/advance-preview",
+    loanController.advanceEmiPreview
+);
+
+router.post(
+    "/collect-advance-loan",
+    loanController.collectAdvanceEmi
+);
+
 router.post(
 "/collect-principal",
 collectPrincipal
