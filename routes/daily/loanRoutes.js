@@ -9,8 +9,8 @@ const {
   getLoan,
   getLoanDetails,
   collectEmi,
-   advanceEmiPreview,
-    collectAdvanceEmi,
+  advanceEmiPreview,
+  collectAdvanceEmi,
   collectPrincipal,
   getAreas,
   getMembersByArea,
@@ -26,13 +26,17 @@ const {
   getAgentLoans,
   getAgentsByArea,
 
+  // FIXED LOAN
+  collectFixedInterestPrincipal,
+  giveMoreLoan,
+
   // Loan Request
   createLoanRequest,
   getLoanRequests,
   getLoanRequestsByAgent,
   approveLoanRequest,
   rejectLoanRequest,
-  collectFixedInterestPrincipal,
+
 } = require("../../controllers/daily/loanController");
 
 const {
@@ -79,6 +83,7 @@ router.get(
 "/loan-history/:loanId",
 getLoanHistory
 );
+router.post("/give-more-loan", giveMoreLoan);
 
 router.get(
 "/loan-dashboard",

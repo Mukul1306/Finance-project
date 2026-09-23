@@ -7971,3 +7971,91 @@ exports.rejectLoanRequest = async (req, res) => {
     });
   }
 };
+
+
+exports.giveMoreLoan = async (req, res) => {
+  try {
+    const {
+      loanId,
+      additionalAmount,
+      collectorType,
+      collectorId
+    } = req.body;
+
+    if (!loanId) {
+      return res.status(400).json({
+        success: false,
+        message: "Loan ID is required"
+      });
+    }
+
+    const amount = Number(additionalAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid additional loan amount"
+      });
+    }
+
+    const loan = await DailyLoan.findById(loanId);
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found"
+      });
+    }
+
+    if (loan.loanType !== "FIXED") {
+      return res.status(400).json({
+        success: false,
+        message: "Additional loan is allowed only for FIXED loans"
+      });
+    }
+
+    // Current outstanding principal
+    const currentPrincipal = Number(
+      loan.outstandingAmount ?? loan.loanAmount ?? 0
+    );
+
+    // Add new loan amount
+    const newPrincipal = currentPrincipal + amount;
+
+    loan.outstandingAmount = newPrincipal;
+
+    // Recalculate monthly interest
+    const interestRate = Number(loan.interestRate || 0);
+
+    const newMonthlyInterest = Math.round(
+      (newPrincipal * interestRate) / 100
+    );
+
+    // For FIXED loan, emiAmount represents monthly interest
+    loan.emiAmount = newMonthlyInterest;
+
+    // IMPORTANT:
+    // Do NOT increase totalPaid.
+    // Additional loan is money given, not money collected.
+
+    await loan.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Additional Loan Given Successfully",
+      loan,
+      additionalAmount: amount,
+      previousPrincipal: currentPrincipal,
+      newPrincipal,
+      monthlyInterest: newMonthlyInterest
+    });
+
+  } catch (error) {
+    console.error("GIVE MORE LOAN ERROR:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
