@@ -536,82 +536,59 @@ exports.updateMember = async (req, res) => {
 };
 
 exports.deleteMember = async (req, res) => {
-
   try {
+    const memberId = req.params.id;
 
-    const paymentCount = await Payment.countDocuments({
-
-      memberId: req.params.id
-
-    });
-
-    if (paymentCount > 0) {
-
-      return res.status(400).json({
-
-        success: false,
-
-        message: "Member has payment history. Cannot delete."
-
-      });
-
-    }
-
-    const member = await Member.findById(req.params.id);
+    // 1. Find member first
+    const member = await Member.findById(memberId);
 
     if (!member) {
-
       return res.status(404).json({
-
         success: false,
-
-        message: "Member Not Found"
-
+        message: "Member Not Found",
       });
-
     }
 
-    await Member.findByIdAndDelete(req.params.id);
+    // Save society ID before deleting member
+    const societyId = member.societyId;
 
-    await Society.findByIdAndUpdate(
+    // 2. Delete all payment records belonging to this member
+    await Payment.deleteMany({
+      memberId: memberId,
+    });
 
-      member.societyId,
+    // 3. Delete the member
+    await Member.findByIdAndDelete(memberId);
 
-      {
-
-        $inc: {
-
-          currentMembers: -1
-
+    // 4. Decrease society current member count
+    if (societyId) {
+      await Society.findByIdAndUpdate(
+        societyId,
+        {
+          $inc: {
+            currentMembers: -1,
+          },
         }
+      );
+    }
 
-      }
-
-    );
-
-    res.json({
-
+    // 5. Success response
+    return res.status(200).json({
       success: true,
-
-      message: "Member Deleted Successfully"
-
+      message: "Member and all related records deleted successfully",
     });
 
-  }
+  } catch (error) {
+    console.error("Delete Member Error:", error);
 
-  catch (error) {
-
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
-      message: error.message
-
+      message: error.message || "Failed to delete member",
     });
-
   }
-
 };
+
+
 exports.getMemberPaymentHistory = async (req, res) => {
 
   try {
