@@ -70,6 +70,21 @@ fixedSalary: {
     timestamps: true
   }
 );
+agentSalarySchema.index({
+  status: 1,
+  agent: 1
+});
+
+monthlySalarySchema.index(
+  {
+    agent: 1,
+    month: 1,
+    year: 1
+  },
+  {
+    unique: true
+  }
+);
 
 module.exports = mongoose.model(
   "AgentSalary",

@@ -74,7 +74,8 @@ timestamps:true
 
 dailyTransactionSchema.index({
   collectorId: 1,
-  collectorType: 1
+  collectorType: 1,
+   collectionDate: 1
 });
 dailyTransactionSchema.index({
   savingAccount: 1,

@@ -146,7 +146,9 @@ loanCollectionSchema.index({
 });
 loanCollectionSchema.index({
   collectorId: 1,
-  collectorType: 1
+  collectorType: 1,
+  status: 1,
+  paymentDate: 1
 });
 
 

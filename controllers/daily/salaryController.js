@@ -623,280 +623,745 @@ calculatedSalary
 
 
 // =====================================================
-// GET MONTHLY SALARY TABLE
+// ULTRA FAST: GET MONTHLY SALARY TABLE
 // =====================================================
 
 exports.getMonthlySalary = async (req, res) => {
+  try {
+    const month = Number(req.query.month);
+    const year = Number(req.query.year);
 
-    try {
+    if (
+      !month ||
+      !year ||
+      month < 1 ||
+      month > 12
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid month and year are required"
+      });
+    }
 
-        const month =
-            Number(req.query.month);
+    // =================================================
+    // DATE RANGE
+    // =================================================
 
-        const year =
-            Number(req.query.year);
+    const startDate = new Date(year, month - 1, 1);
+    const endDate = new Date(year, month, 1);
 
+    // =================================================
+    // 1. GET ALL ACTIVE SALARY PROFILES
+    // =================================================
 
-        if (
-            !month ||
-            !year ||
-            month < 1 ||
-            month > 12
-        ) {
+    const salaryProfiles = await AgentSalary.find({
+      status: "ACTIVE"
+    })
+      .populate(
+        "agent",
+        "name mobile operationalArea status"
+      )
+      .sort({
+        createdAt: -1
+      })
+      .lean();
 
-            return res.status(400).json({
+    if (!salaryProfiles.length) {
+      return res.json({
+        success: true,
+        month,
+        year,
+        summary: {
+          totalStaff: 0,
+          totalSalary: 0,
+          totalPaid: 0,
+          totalPending: 0
+        },
+        salaries: []
+      });
+    }
 
-                success: false,
+    // =================================================
+    // AGENT IDS
+    // =================================================
 
-                message:
-                    "Valid month and year are required"
+    const agentIds = salaryProfiles
+      .map((profile) => profile.agent?._id)
+      .filter(Boolean);
 
-            });
+    // =================================================
+    // 2 + 3. FETCH COLLECTION DATA IN PARALLEL
+    // =================================================
 
-        }
+    const [
+      dailyCollectionData,
+      loanCollectionData,
+      existingMonthlySalaries
+    ] = await Promise.all([
 
+      // ===============================================
+      // DAILY SAVING COLLECTION
+      // ===============================================
 
-        const salaryProfiles =
-            await AgentSalary.find({
-                status: "ACTIVE"
-            })
-            .populate(
-                "agent",
-                "name mobile operationalArea status"
-            );
+      DailyTransaction.aggregate([
+        {
+          $match: {
+            collectorId: {
+              $in: agentIds
+            },
 
+            collectorType: "AGENT",
 
-        const salaries = [];
-
-
-        for (
-            const profile of salaryProfiles
-        ) {
-
-            const calculation =
-                await calculateAgentSalary(
-                    profile.agent._id,
-                    month,
-                    year
-                );
-
-
-            let monthlySalary =
-                await MonthlySalary.findOne({
-
-                    agent: profile.agent._id,
-
-                    month,
-
-                    year
-
-                });
-
-
-            if (!monthlySalary) {
-
-                monthlySalary =
-                    await MonthlySalary.create({
-
-                        agent:
-                            profile.agent._id,
-
-                        month,
-
-                        year,
-
-                        ...calculation,
-
-                        paidAmount: 0,
-
-                        pendingAmount:
-                            calculation.calculatedSalary,
-
-                        status: "PENDING"
-
-                    });
-
-            } else {
-
-                // Update calculation
-                // but preserve payment
-
-                monthlySalary.dailySavingCollection =
-                    calculation.dailySavingCollection;
-
-                monthlySalary.dailyLoanCollection =
-                    calculation.dailyLoanCollection;
-
-                monthlySalary.weeklyLoanCollection =
-                    calculation.weeklyLoanCollection;
-
-                monthlySalary.penaltyCollection =
-                    calculation.penaltyCollection;
-
-                monthlySalary.monthlyLoanCollection =
-                    calculation.monthlyLoanCollection;
-
-                monthlySalary.fixedLoanCollection =
-                    calculation.fixedLoanCollection;
-
-                monthlySalary.eligibleCollection =
-                    calculation.eligibleCollection;
-
-             monthlySalary.salaryType =
-    calculation.salaryType;
-
-monthlySalary.fixedSalary =
-    calculation.fixedSalary;
-
-monthlySalary.commissionRate =
-    calculation.commissionRate;
-
-monthlySalary.calculatedSalary =
-    calculation.calculatedSalary;
-
-
-                monthlySalary.pendingAmount =
-                    Math.max(
-                        0,
-                        calculation.calculatedSalary -
-                        Number(
-                            monthlySalary.paidAmount || 0
-                        )
-                    );
-
-
-                if (
-                    monthlySalary.paidAmount >=
-                    calculation.calculatedSalary
-                ) {
-
-                    monthlySalary.status =
-                        "PAID";
-
-                } else if (
-                    monthlySalary.paidAmount > 0
-                ) {
-
-                    monthlySalary.status =
-                        "PARTIAL";
-
-                } else {
-
-                    monthlySalary.status =
-                        "PENDING";
-
-                }
-
-
-                await monthlySalary.save();
-
+            collectionDate: {
+              $gte: startDate,
+              $lt: endDate
             }
+          }
+        },
 
+        {
+          $group: {
+            _id: "$collectorId",
 
-            salaries.push({
+            dailySavingCollection: {
+              $sum: {
+                $convert: {
+                  input: "$dailyAmount",
+                  to: "double",
+                  onError: 0,
+                  onNull: 0
+                }
+              }
+            },
 
-                agent: profile.agent,
-salaryProfile: {
-
-    salaryType:
-        profile.salaryType,
-
-    commissionRate:
-        profile.commissionRate,
-
-    fixedSalary:
-        profile.fixedSalary
-
-},
-
-                salary: monthlySalary
-
-            });
-
+            penaltyCollection: {
+              $sum: {
+                $convert: {
+                  input: "$penalty",
+                  to: "double",
+                  onError: 0,
+                  onNull: 0
+                }
+              }
+            }
+          }
         }
+      ]),
 
+      // ===============================================
+      // LOAN COLLECTION
+      // ===============================================
 
-        // =================================================
-        // SUMMARY
-        // =================================================
+      LoanCollection.aggregate([
+        {
+          $match: {
+            collectorId: {
+              $in: agentIds
+            },
 
-        const totalSalary =
-            salaries.reduce(
-                (sum, item) =>
-                    sum +
-                    Number(
-                        item.salary.calculatedSalary || 0
-                    ),
-                0
-            );
+            collectorType: "AGENT",
 
+            status: "PAID",
 
-        const totalPaid =
-            salaries.reduce(
-                (sum, item) =>
-                    sum +
-                    Number(
-                        item.salary.paidAmount || 0
-                    ),
-                0
-            );
+            paymentDate: {
+              $gte: startDate,
+              $lt: endDate
+            }
+          }
+        },
 
+        // Get loan type
+        {
+          $lookup: {
+            from: "dailyloans",
+            localField: "loan",
+            foreignField: "_id",
+            as: "loanData"
+          }
+        },
 
-        const totalPending =
-            salaries.reduce(
-                (sum, item) =>
-                    sum +
-                    Number(
-                        item.salary.pendingAmount || 0
-                    ),
-                0
-            );
+        {
+          $unwind: {
+            path: "$loanData",
+            preserveNullAndEmptyArrays: true
+          }
+        },
 
+        {
+          $group: {
+            _id: {
+              agent: "$collectorId",
+              loanType: "$loanData.loanType"
+            },
 
-        res.json({
+            collection: {
+              $sum: {
+                $add: [
+                  {
+                    $convert: {
+                      input: "$principalAmount",
+                      to: "double",
+                      onError: 0,
+                      onNull: 0
+                    }
+                  },
+                  {
+                    $convert: {
+                      input: "$interestAmount",
+                      to: "double",
+                      onError: 0,
+                      onNull: 0
+                    }
+                  }
+                ]
+              }
+            },
 
-            success: true,
+            penalty: {
+              $sum: {
+                $convert: {
+                  input: "$penalty",
+                  to: "double",
+                  onError: 0,
+                  onNull: 0
+                }
+              }
+            }
+          }
+        }
+      ]),
+
+      // ===============================================
+      // EXISTING MONTHLY SALARIES
+      // ===============================================
+
+      MonthlySalary.find({
+        agent: {
+          $in: agentIds
+        },
+
+        month,
+
+        year
+      }).lean()
+    ]);
+
+    // =================================================
+    // 4. CREATE FAST LOOKUP MAPS
+    // =================================================
+
+    const dailyMap = new Map();
+
+    for (const item of dailyCollectionData) {
+      dailyMap.set(
+        String(item._id),
+        {
+          dailySavingCollection:
+            Number(item.dailySavingCollection || 0),
+
+          penaltyCollection:
+            Number(item.penaltyCollection || 0)
+        }
+      );
+    }
+
+    // =================================================
+
+    const loanMap = new Map();
+
+    for (const item of loanCollectionData) {
+      const agentId = String(item._id.agent);
+
+      if (!loanMap.has(agentId)) {
+        loanMap.set(agentId, {
+          dailyLoanCollection: 0,
+          weeklyLoanCollection: 0,
+          monthlyLoanCollection: 0,
+          fixedLoanCollection: 0,
+          penaltyCollection: 0
+        });
+      }
+
+      const data = loanMap.get(agentId);
+
+      const type = item._id.loanType;
+
+      if (type === "DAILY") {
+        data.dailyLoanCollection +=
+          Number(item.collection || 0);
+      }
+
+      else if (type === "WEEKLY") {
+        data.weeklyLoanCollection +=
+          Number(item.collection || 0);
+      }
+
+      else if (type === "MONTHLY") {
+        data.monthlyLoanCollection +=
+          Number(item.collection || 0);
+      }
+
+      else if (type === "FIXED") {
+        data.fixedLoanCollection +=
+          Number(item.collection || 0);
+      }
+
+      data.penaltyCollection +=
+        Number(item.penalty || 0);
+    }
+
+    // =================================================
+    // EXISTING SALARY MAP
+    // =================================================
+
+    const salaryMap = new Map();
+
+    for (const salary of existingMonthlySalaries) {
+      salaryMap.set(
+        String(salary.agent),
+        salary
+      );
+    }
+
+    // =================================================
+    // 5. BUILD SALARIES IN MEMORY
+    // =================================================
+
+    const salaries = [];
+
+    const bulkOperations = [];
+
+    for (const profile of salaryProfiles) {
+
+      if (!profile.agent?._id) {
+        continue;
+      }
+
+      const agentId = String(
+        profile.agent._id
+      );
+
+      const daily =
+        dailyMap.get(agentId) || {
+          dailySavingCollection: 0,
+          penaltyCollection: 0
+        };
+
+      const loans =
+        loanMap.get(agentId) || {
+          dailyLoanCollection: 0,
+          weeklyLoanCollection: 0,
+          monthlyLoanCollection: 0,
+          fixedLoanCollection: 0,
+          penaltyCollection: 0
+        };
+
+      // =================================================
+      // COLLECTIONS
+      // =================================================
+
+      const dailySavingCollection =
+        Number(
+          daily.dailySavingCollection || 0
+        );
+
+      const dailyLoanCollection =
+        Number(
+          loans.dailyLoanCollection || 0
+        );
+
+      const weeklyLoanCollection =
+        Number(
+          loans.weeklyLoanCollection || 0
+        );
+
+      const monthlyLoanCollection =
+        Number(
+          loans.monthlyLoanCollection || 0
+        );
+
+      const fixedLoanCollection =
+        Number(
+          loans.fixedLoanCollection || 0
+        );
+
+      const penaltyCollection =
+        Number(
+          daily.penaltyCollection || 0
+        ) +
+        Number(
+          loans.penaltyCollection || 0
+        );
+
+      // =================================================
+      // ELIGIBLE COLLECTION
+      // =================================================
+
+      let eligibleCollection = 0;
+
+      if (profile.includeDailySaving) {
+        eligibleCollection +=
+          dailySavingCollection;
+      }
+
+      if (profile.includeDailyLoan) {
+        eligibleCollection +=
+          dailyLoanCollection;
+      }
+
+      if (profile.includeWeeklyLoan) {
+        eligibleCollection +=
+          weeklyLoanCollection;
+      }
+
+      if (profile.includeMonthlyLoan) {
+        eligibleCollection +=
+          monthlyLoanCollection;
+      }
+
+      if (profile.includeFixedLoan) {
+        eligibleCollection +=
+          fixedLoanCollection;
+      }
+
+      // =================================================
+      // SALARY
+      // =================================================
+
+      const commissionRate =
+        Number(
+          profile.commissionRate || 0
+        );
+
+      const fixedSalary =
+        Number(
+          profile.fixedSalary || 0
+        );
+
+      let calculatedSalary = 0;
+
+      if (
+        profile.salaryType === "FIXED"
+      ) {
+
+        calculatedSalary =
+          fixedSalary;
+
+      } else {
+
+        calculatedSalary =
+          Number(
+            (
+              eligibleCollection *
+              commissionRate /
+              100
+            ).toFixed(2)
+          );
+      }
+
+      // =================================================
+      // EXISTING PAYMENT
+      // =================================================
+
+      const existingSalary =
+        salaryMap.get(agentId);
+
+      const paidAmount =
+        Number(
+          existingSalary?.paidAmount || 0
+        );
+
+      const pendingAmount =
+        Math.max(
+          0,
+          calculatedSalary -
+          paidAmount
+        );
+
+      let status = "PENDING";
+
+      if (
+        paidAmount >=
+        calculatedSalary
+      ) {
+        status = "PAID";
+      }
+
+      else if (
+        paidAmount > 0
+      ) {
+        status = "PARTIAL";
+      }
+
+      // =================================================
+      // SALARY DATA
+      // =================================================
+
+      const salaryData = {
+
+        agent: profile.agent,
+
+        salaryProfile: {
+          salaryType:
+            profile.salaryType,
+
+          commissionRate,
+
+          fixedSalary
+        },
+
+        salary: {
+          ...(existingSalary || {}),
+
+          agent:
+            profile.agent._id,
+
+          month,
+
+          year,
+
+          dailySavingCollection:
+            Number(
+              dailySavingCollection.toFixed(2)
+            ),
+
+          dailyLoanCollection:
+            Number(
+              dailyLoanCollection.toFixed(2)
+            ),
+
+          weeklyLoanCollection:
+            Number(
+              weeklyLoanCollection.toFixed(2)
+            ),
+
+          monthlyLoanCollection:
+            Number(
+              monthlyLoanCollection.toFixed(2)
+            ),
+
+          fixedLoanCollection:
+            Number(
+              fixedLoanCollection.toFixed(2)
+            ),
+
+          penaltyCollection:
+            Number(
+              penaltyCollection.toFixed(2)
+            ),
+
+          eligibleCollection:
+            Number(
+              eligibleCollection.toFixed(2)
+            ),
+
+          salaryType:
+            profile.salaryType,
+
+          commissionRate,
+
+          fixedSalary,
+
+          calculatedSalary,
+
+          paidAmount,
+
+          pendingAmount,
+
+          status
+        }
+      };
+
+      salaries.push(
+        salaryData
+      );
+
+      // =================================================
+      // BULK DATABASE UPDATE
+      // =================================================
+
+      bulkOperations.push({
+        updateOne: {
+
+          filter: {
+            agent:
+              profile.agent._id,
 
             month,
 
-            year,
+            year
+          },
 
-            summary: {
+          update: {
+            $set: {
 
-                totalStaff:
-                    salaries.length,
+              dailySavingCollection:
+                Number(
+                  dailySavingCollection.toFixed(2)
+                ),
 
-                totalSalary:
-                    Number(totalSalary.toFixed(2)),
+              dailyLoanCollection:
+                Number(
+                  dailyLoanCollection.toFixed(2)
+                ),
 
-                totalPaid:
-                    Number(totalPaid.toFixed(2)),
+              weeklyLoanCollection:
+                Number(
+                  weeklyLoanCollection.toFixed(2)
+                ),
 
-                totalPending:
-                    Number(totalPending.toFixed(2))
+              monthlyLoanCollection:
+                Number(
+                  monthlyLoanCollection.toFixed(2)
+                ),
 
+              fixedLoanCollection:
+                Number(
+                  fixedLoanCollection.toFixed(2)
+                ),
+
+              penaltyCollection:
+                Number(
+                  penaltyCollection.toFixed(2)
+                ),
+
+              eligibleCollection:
+                Number(
+                  eligibleCollection.toFixed(2)
+                ),
+
+              salaryType:
+                profile.salaryType,
+
+              commissionRate,
+
+              fixedSalary,
+
+              calculatedSalary,
+
+              pendingAmount,
+
+              status
             },
 
-            salaries
+            $setOnInsert: {
 
-        });
+              agent:
+                profile.agent._id,
 
-    } catch (error) {
+              month,
 
-        console.log(error);
+              year,
 
-        res.status(500).json({
+              paidAmount: 0,
 
-            success: false,
+              paidDate: null,
 
-            message: error.message
+              paymentMode: "BANK",
 
-        });
+              paymentReference: "",
 
+              remarks: ""
+            }
+          },
+
+          upsert: true
+        }
+      });
     }
 
-};
+    // =================================================
+    // 6. ONE BULK WRITE
+    // =================================================
 
+    if (bulkOperations.length) {
+
+      await MonthlySalary.bulkWrite(
+        bulkOperations,
+        {
+          ordered: false
+        }
+      );
+    }
+
+    // =================================================
+    // 7. SUMMARY
+    // =================================================
+
+    let totalSalary = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+
+    for (const item of salaries) {
+
+      totalSalary +=
+        Number(
+          item.salary.calculatedSalary || 0
+        );
+
+      totalPaid +=
+        Number(
+          item.salary.paidAmount || 0
+        );
+
+      totalPending +=
+        Number(
+          item.salary.pendingAmount || 0
+        );
+    }
+
+    // =================================================
+    // RESPONSE
+    // =================================================
+
+    return res.json({
+
+      success: true,
+
+      month,
+
+      year,
+
+      summary: {
+
+        totalStaff:
+          salaries.length,
+
+        totalSalary:
+          Number(
+            totalSalary.toFixed(2)
+          ),
+
+        totalPaid:
+          Number(
+            totalPaid.toFixed(2)
+          ),
+
+        totalPending:
+          Number(
+            totalPending.toFixed(2)
+          )
+      },
+
+      salaries
+    });
+
+  } catch (error) {
+
+    console.error(
+      "ULTRA FAST GET MONTHLY SALARY ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+
+      success: false,
+
+      message:
+        error.message
+    });
+  }
+};
 
 // =====================================================
 // PAY SALARY
