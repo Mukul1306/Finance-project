@@ -180,7 +180,9 @@ exports.login = async (req, res) => {
 const societyMember =
   await Member.findOne({
     mobile: mobile.trim()
-  }).populate(
+  })
+  .select("+password")
+  .populate(
     "societyId",
     "societyName durationMonths startDate maxMembers currentMembers status"
   );
