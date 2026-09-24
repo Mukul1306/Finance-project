@@ -6,7 +6,6 @@ const DailyLoan = require("../../models/daily/DailyLoan");
 const LoanCollection = require("../../models/daily/LoanCollection");
 const Expense = require("../../models/daily/Expense");
 
-
 // =====================================================
 // CONSTANTS
 // =====================================================
@@ -14,259 +13,165 @@ const Expense = require("../../models/daily/Expense");
 const DAY_MS = 24 * 60 * 60 * 1000;
 const IST_TIMEZONE = "Asia/Kolkata";
 
-
 // =====================================================
 // IST DATE KEY
-// Example:
-// 2026-09-20
 // =====================================================
 
 function getISTDateKey(dateValue = new Date()) {
-
-  const parts =
-    new Intl.DateTimeFormat(
-      "en-IN",
-      {
-        timeZone: IST_TIMEZONE,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit"
-      }
-    ).formatToParts(
-      new Date(dateValue)
-    );
+  const parts = new Intl.DateTimeFormat("en-IN", {
+    timeZone: IST_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(dateValue));
 
   const values = {};
 
   for (const part of parts) {
-
     if (part.type !== "literal") {
       values[part.type] = part.value;
     }
-
   }
 
-  return (
-    `${values.year}-${values.month}-${values.day}`
-  );
+  return `${values.year}-${values.month}-${values.day}`;
 }
-
 
 // =====================================================
 // IST DATE KEY -> REAL DATE
 // =====================================================
 
 function istKeyToDate(dateKey) {
-
-  return new Date(
-    `${dateKey}T00:00:00+05:30`
-  );
-
+  return new Date(`${dateKey}T00:00:00+05:30`);
 }
-
 
 // =====================================================
 // ADD DAYS TO DATE KEY
 // =====================================================
 
-function addDaysToKey(
-  dateKey,
-  days
-) {
+function addDaysToKey(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number);
 
-  const [
-    year,
-    month,
-    day
-  ] =
-    dateKey
-      .split("-")
-      .map(Number);
-
-  const date =
-    new Date(
-      Date.UTC(
-        year,
-        month - 1,
-        day
-      )
-    );
+  const date = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day
+    )
+  );
 
   date.setUTCDate(
     date.getUTCDate() + Number(days)
   );
 
-  return date
-    .toISOString()
-    .slice(0, 10);
-
+  return date.toISOString().slice(0, 10);
 }
-
 
 // =====================================================
 // ADD MONTHS TO DATE KEY
-// This follows JavaScript's setMonth behavior,
-// matching your existing loan controller logic.
+// Same behavior as existing controller
 // =====================================================
 
-function addMonthsToKey(
-  dateKey,
-  months
-) {
+function addMonthsToKey(dateKey, months) {
+  const [year, month, day] = dateKey.split("-").map(Number);
 
-  const [
-    year,
-    month,
-    day
-  ] =
-    dateKey
-      .split("-")
-      .map(Number);
-
-  const date =
-    new Date(
-      Date.UTC(
-        year,
-        month - 1,
-        day
-      )
-    );
-
-  date.setUTCMonth(
-    date.getUTCMonth() +
-    Number(months)
+  const date = new Date(
+    Date.UTC(
+      year,
+      month - 1,
+      day
+    )
   );
 
-  return date
-    .toISOString()
-    .slice(0, 10);
+  date.setUTCMonth(
+    date.getUTCMonth() + Number(months)
+  );
 
+  return date.toISOString().slice(0, 10);
 }
-
 
 // =====================================================
 // DATE DIFFERENCE
 // =====================================================
 
-function diffDays(
-  startKey,
-  endKey
-) {
+function diffDays(startKey, endKey) {
+  const start = Date.UTC(
+    ...startKey
+      .split("-")
+      .map((v, i) =>
+        i === 1 ? Number(v) - 1 : Number(v)
+      )
+  );
 
-  const start =
-    Date.UTC(
-      ...startKey
-        .split("-")
-        .map((v, i) => i === 1 ? Number(v) - 1 : Number(v))
-    );
-
-  const end =
-    Date.UTC(
-      ...endKey
-        .split("-")
-        .map((v, i) => i === 1 ? Number(v) - 1 : Number(v))
-    );
+  const end = Date.UTC(
+    ...endKey
+      .split("-")
+      .map((v, i) =>
+        i === 1 ? Number(v) - 1 : Number(v)
+      )
+  );
 
   return Math.floor(
     (end - start) / DAY_MS
   );
-
 }
-
 
 // =====================================================
 // MONTH DIFFERENCE
 // =====================================================
 
-function diffMonths(
-  startKey,
-  endKey
-) {
-
+function diffMonths(startKey, endKey) {
   const [
     startYear,
-    startMonth
-  ] =
-    startKey
-      .split("-")
-      .map(Number);
+    startMonth,
+  ] = startKey.split("-").map(Number);
 
   const [
     endYear,
-    endMonth
-  ] =
-    endKey
-      .split("-")
-      .map(Number);
+    endMonth,
+  ] = endKey.split("-").map(Number);
 
   return (
     (endYear - startYear) * 12 +
     (endMonth - startMonth)
   );
-
 }
-
 
 // =====================================================
 // LOAN TOTAL INSTALLMENTS
 // =====================================================
 
-function getLoanTotalInstallments(
-  loan
-) {
-
-  if (
-    loan.loanType === "DAILY"
-  ) {
-
+function getLoanTotalInstallments(loan) {
+  if (loan.loanType === "DAILY") {
     return Number(
       loan.durationDays || 0
     );
-
   }
 
-  if (
-    loan.loanType === "MONTHLY"
-  ) {
-
+  if (loan.loanType === "MONTHLY") {
     return Number(
       loan.durationMonths || 0
     );
-
   }
 
-  if (
-    loan.loanType === "FIXED"
-  ) {
-
+  if (loan.loanType === "FIXED") {
     return Number(
       loan.loanTenureMonths || 0
     );
-
   }
 
   return 0;
-
 }
-
 
 // =====================================================
 // LOAN DISPLAY EMI
 // FIXED = MONTHLY INTEREST
 // =====================================================
 
-function getLoanEMI(
-  loan
-) {
-
-  if (
-    loan.loanType === "FIXED"
-  ) {
-
-    const tenure =
-      Number(
-        loan.loanTenureMonths || 0
-      );
+function getLoanEMI(loan) {
+  if (loan.loanType === "FIXED") {
+    const tenure = Number(
+      loan.loanTenureMonths || 0
+    );
 
     if (tenure <= 0) {
       return 0;
@@ -277,31 +182,25 @@ function getLoanEMI(
         loan.totalInterest || 0
       ) / tenure
     );
-
   }
 
   return Number(
     loan.emiAmount || 0
   );
-
 }
 
-
 // =====================================================
-// GET TODAY'S DASHBOARD DATE RANGE
+// DASHBOARD DATE DATA
+// Calculate ONCE per request
 // =====================================================
 
 function getDashboardDateData() {
-
-  const todayKey =
-    getISTDateKey(
-      new Date()
-    );
+  const todayKey = getISTDateKey(
+    new Date()
+  );
 
   const todayStart =
-    istKeyToDate(
-      todayKey
-    );
+    istKeyToDate(todayKey);
 
   const tomorrowKey =
     addDaysToKey(
@@ -316,11 +215,10 @@ function getDashboardDateData() {
 
   const [
     year,
-    month
-  ] =
-    todayKey
-      .split("-")
-      .map(Number);
+    month,
+  ] = todayKey
+    .split("-")
+    .map(Number);
 
   const monthKey =
     `${year}-${String(month).padStart(2, "0")}`;
@@ -351,11 +249,256 @@ function getDashboardDateData() {
     tomorrowStart,
     monthKey,
     monthStart,
-    nextMonthStart
+    nextMonthStart,
   };
-
 }
 
+// =====================================================
+// GET TODAY INSTALLMENT NUMBER
+// OPTIMIZED
+//
+// Instead of looping through every installment,
+// directly calculate today's installment.
+// =====================================================
+
+function getTodayInstallmentNumber(
+  loan,
+  todayKey
+) {
+  const baseDate =
+    loan.loanDate ||
+    loan.startDate;
+
+  if (!baseDate) {
+    return 0;
+  }
+
+  const loanDateKey =
+    getISTDateKey(baseDate);
+
+  if (loan.loanType === "DAILY") {
+    const days =
+      diffDays(
+        loanDateKey,
+        todayKey
+      );
+
+    if (days < 0) {
+      return 0;
+    }
+
+    return days + 1;
+  }
+
+  if (
+    loan.loanType === "MONTHLY" ||
+    loan.loanType === "FIXED"
+  ) {
+    const months =
+      diffMonths(
+        loanDateKey,
+        todayKey
+      );
+
+    if (months < 1) {
+      return 0;
+    }
+
+    return months;
+  }
+
+  return 0;
+}
+
+// =====================================================
+// GET LOAN PENALTY PER EVENT
+// =====================================================
+
+function getLoanPenaltyPerEvent(loan) {
+  let penaltyBase =
+    Number(
+      loan.emiAmount || 0
+    );
+
+  if (loan.loanType === "FIXED") {
+    const tenure =
+      Number(
+        loan.loanTenureMonths || 0
+      );
+
+    penaltyBase =
+      tenure > 0
+        ? Math.round(
+            Number(
+              loan.totalInterest || 0
+            ) / tenure
+          )
+        : 0;
+  }
+
+  const penaltyValue =
+    Number(
+      loan.penaltyValue || 0
+    );
+
+  if (
+    loan.penaltyType ===
+    "PERCENTAGE"
+  ) {
+    return Math.round(
+      (
+        penaltyBase *
+        penaltyValue
+      ) / 100
+    );
+  }
+
+  return penaltyValue;
+}
+
+// =====================================================
+// GET LOAN PENALTY EVENTS
+//
+// Optimized mathematical calculation.
+// No loop through every installment.
+// =====================================================
+
+function getLoanPenaltyEvents(
+  loan,
+  todayKey
+) {
+  const baseDate =
+    loan.loanDate ||
+    loan.startDate;
+
+  if (!baseDate) {
+    return 0;
+  }
+
+  const loanDateKey =
+    getISTDateKey(baseDate);
+
+  const totalInstallments =
+    getLoanTotalInstallments(
+      loan
+    );
+
+  if (
+    totalInstallments <= 0
+  ) {
+    return 0;
+  }
+
+  const grace =
+    Number(
+      loan.gracePeriod || 0
+    );
+
+  const penaltyPerEvent =
+    getLoanPenaltyPerEvent(
+      loan
+    );
+
+  if (
+    penaltyPerEvent <= 0
+  ) {
+    return 0;
+  }
+
+  const currentInstallment =
+    getTodayInstallmentNumber(
+      loan,
+      todayKey
+    );
+
+  if (
+    currentInstallment <= 0
+  ) {
+    return 0;
+  }
+
+  const dueInstallments =
+    Math.min(
+      currentInstallment,
+      totalInstallments
+    );
+
+  // ===============================================
+  // DAILY
+  // One penalty per overdue installment
+  // ===============================================
+
+  if (
+    loan.loanType === "DAILY"
+  ) {
+    let events = 0;
+
+    const penaltyStartOffset =
+      grace + 1;
+
+    if (
+      dueInstallments >=
+      penaltyStartOffset
+    ) {
+      events =
+        dueInstallments -
+        penaltyStartOffset +
+        1;
+    }
+
+    return Math.max(
+      0,
+      events
+    );
+  }
+
+  // ===============================================
+  // MONTHLY / FIXED
+  // One penalty per overdue month
+  // ===============================================
+
+  let events = 0;
+
+  for (
+    let installmentNo = 1;
+    installmentNo <= dueInstallments;
+    installmentNo++
+  ) {
+    const dueKey =
+      addMonthsToKey(
+        loanDateKey,
+        installmentNo
+      );
+
+    const penaltyStartKey =
+      addDaysToKey(
+        dueKey,
+        grace + 1
+      );
+
+    if (
+      penaltyStartKey >
+      todayKey
+    ) {
+      continue;
+    }
+
+    const penaltyMonths =
+      diffMonths(
+        penaltyStartKey,
+        todayKey
+      ) + 1;
+
+    if (
+      penaltyMonths > 0
+    ) {
+      events +=
+        penaltyMonths;
+    }
+  }
+
+  return events;
+}
 
 // =====================================================
 // DASHBOARD
@@ -367,31 +510,34 @@ async (
   res
 ) => {
 
+  const requestStarted =
+    Date.now();
+
   try {
 
     // =================================================
     // DATE DATA
+    // CALCULATE ONLY ONCE
     // =================================================
 
     const {
       todayKey,
+      todayStart,
       tomorrowStart,
       monthKey,
       monthStart,
-      nextMonthStart
+      nextMonthStart,
     } =
       getDashboardDateData();
 
-
     // =================================================
     // BASIC COUNTS
-    // KEEP EXISTING BEHAVIOR
     // =================================================
 
     const [
       totalAgents,
       totalMembers,
-      activeLoans
+      activeLoans,
     ] =
       await Promise.all([
 
@@ -400,19 +546,18 @@ async (
         DailyMember.countDocuments(),
 
         DailyLoan.countDocuments({
-          status: "ACTIVE"
-        })
+          status: "ACTIVE",
+        }),
 
       ]);
 
-
     // =================================================
-    // ALL-TIME DAILY SAVING COLLECTION
+    // START SIMPLE DATABASE QUERIES
+    // ALL RUN IN PARALLEL
     // =================================================
 
     const dailyCollectionPromise =
       DailyTransaction.aggregate([
-
         {
           $group: {
             _id: null,
@@ -421,23 +566,16 @@ async (
               $sum: {
                 $ifNull: [
                   "$totalAmount",
-                  0
-                ]
-              }
-            }
-          }
-        }
-
+                  0,
+                ],
+              },
+            },
+          },
+        },
       ]);
-
-
-    // =================================================
-    // ALL-TIME LOAN COLLECTION
-    // =================================================
 
     const loanCollectionPromise =
       LoanCollection.aggregate([
-
         {
           $group: {
             _id: null,
@@ -446,24 +584,16 @@ async (
               $sum: {
                 $ifNull: [
                   "$totalAmount",
-                  0
-                ]
-              }
-            }
-          }
-        }
-
+                  0,
+                ],
+              },
+            },
+          },
+        },
       ]);
-
-
-    // =================================================
-    // ALL-TIME EXPENSE
-    // KEEP EXISTING NET PROFIT BEHAVIOR
-    // =================================================
 
     const totalExpensePromise =
       Expense.aggregate([
-
         {
           $group: {
             _id: null,
@@ -472,23 +602,16 @@ async (
               $sum: {
                 $ifNull: [
                   "$amount",
-                  0
-                ]
-              }
-            }
-          }
-        }
-
+                  0,
+                ],
+              },
+            },
+          },
+        },
       ]);
-
-
-    // =================================================
-    // ALL-TIME LOAN GIVEN
-    // =================================================
 
     const loanGivenPromise =
       DailyLoan.aggregate([
-
         {
           $group: {
             _id: null,
@@ -497,105 +620,74 @@ async (
               $sum: {
                 $ifNull: [
                   "$loanAmount",
-                  0
-                ]
-              }
-            }
-          }
-        }
-
+                  0,
+                ],
+              },
+            },
+          },
+        },
       ]);
-
-
-    // =================================================
-    // TODAY ACTUAL AGENT COLLECTION
-    //
-    // Daily:
-    // collectionDate = actual collection date
-    //
-    // Loan:
-    // paymentDate = actual collection date
-    // =================================================
 
     const todayDailyAgentCollectionPromise =
       DailyTransaction.aggregate([
-
         {
           $match: {
-
             collectorType: "AGENT",
 
             collectionDate: {
-              $gte: getDashboardDateData().todayStart,
-              $lt: tomorrowStart
-            }
-
-          }
+              $gte: todayStart,
+              $lt: tomorrowStart,
+            },
+          },
         },
 
         {
           $group: {
-
             _id: null,
 
             total: {
               $sum: {
                 $ifNull: [
                   "$totalAmount",
-                  0
-                ]
-              }
-            }
-
-          }
-        }
-
+                  0,
+                ],
+              },
+            },
+          },
+        },
       ]);
-
 
     const todayLoanAgentCollectionPromise =
       LoanCollection.aggregate([
-
         {
           $match: {
-
             collectorType: "AGENT",
 
             paymentDate: {
-              $gte: getDashboardDateData().todayStart,
-              $lt: tomorrowStart
-            }
-
-          }
+              $gte: todayStart,
+              $lt: tomorrowStart,
+            },
+          },
         },
 
         {
           $group: {
-
             _id: null,
 
             total: {
               $sum: {
                 $ifNull: [
                   "$totalAmount",
-                  0
-                ]
-              }
-            }
-
-          }
-        }
-
+                  0,
+                ],
+              },
+            },
+          },
+        },
       ]);
-
 
     // =================================================
     // DAILY SAVING TARGET
-    //
-    // Only:
-    // ACTIVE
-    // FIXED savings
-    // active on today's date
     // =================================================
 
     const dailySavingTargetPromise =
@@ -605,1429 +697,282 @@ async (
           $match: {
             status: "ACTIVE",
 
-            collectionType: "FIXED",
+            collectionType:
+              "FIXED",
 
             startDate: {
-              $exists: true
+              $exists: true,
             },
 
             endDate: {
-              $exists: true
-            }
-          }
+              $exists: true,
+            },
+          },
         },
 
         {
           $match: {
-
             $expr: {
-
               $and: [
 
                 {
                   $lte: [
                     {
                       $dateToString: {
-                        date: "$startDate",
-                        format: "%Y-%m-%d",
-                        timezone: IST_TIMEZONE
-                      }
+                        date:
+                          "$startDate",
+
+                        format:
+                          "%Y-%m-%d",
+
+                        timezone:
+                          IST_TIMEZONE,
+                      },
                     },
 
-                    todayKey
-                  ]
+                    todayKey,
+                  ],
                 },
 
                 {
                   $gte: [
                     {
                       $dateToString: {
-                        date: "$endDate",
-                        format: "%Y-%m-%d",
-                        timezone: IST_TIMEZONE
-                      }
+                        date:
+                          "$endDate",
+
+                        format:
+                          "%Y-%m-%d",
+
+                        timezone:
+                          IST_TIMEZONE,
+                      },
                     },
 
-                    todayKey
-                  ]
-                }
+                    todayKey,
+                  ],
+                },
 
-              ]
-
-            }
-
-          }
-
+              ],
+            },
+          },
         },
 
         {
           $group: {
-
             _id: null,
 
             total: {
-
               $sum: {
                 $ifNull: [
                   "$fixedAmount",
-                  0
-                ]
-              }
-
-            }
-
-          }
-        }
+                  0,
+                ],
+              },
+            },
+          },
+        },
 
       ]);
 
-
     // =================================================
-    // LOAD ACTIVE SAVINGS
-    // ONLY SMALL ACCOUNT METADATA
-    //
-    // Used for exact pending penalty calculation.
+    // CURRENT MONTH EXPENSE
     // =================================================
 
-    const savingsForPenalty =
-      await DailySaving.find({
+    const currentMonthExpensePromise =
+      Expense.aggregate([
 
-        status: "ACTIVE",
+        {
+          $match: {
+            $or: [
 
-        startDate: {
-          $exists: true
-        }
+              {
+                expenseDate: {
+                  $gte: monthStart,
+                  $lt: nextMonthStart,
+                },
+              },
 
-      })
-      .select(
-        [
-          "startDate",
-          "endDate",
-          "fixedAmount",
-          "collectionType",
-          "graceDays",
-          "penaltyType",
-          "penaltyValue"
-        ].join(" ")
-      )
-      .lean();
+              {
+                expenseDate: {
+                  $exists: false,
+                },
 
+                createdAt: {
+                  $gte: monthStart,
+                  $lt: nextMonthStart,
+                },
+              },
 
-    // =================================================
-    // DAILY SAVING PENALTY
-    //
-    // MongoDB calculates paid overdue saving days
-    // without bringing the whole transaction history
-    // into Node memory.
-    // =================================================
-
-    let totalSavingPendingPenalty = 0;
-
-
-
-    // =================================================
-    // IMPORTANT:
-    // Exact saving penalty calculation is done below
-    // with one targeted aggregation per ACTIVE saving,
-    // not with find() of all transactions.
-    //
-    // We use COUNT documents before the penalty window.
-    // =================================================
-
-    if (
-      savingsForPenalty.length > 0
-    ) {
-
-      const savingPenaltyRows =
-        await DailySaving.aggregate([
-
-          {
-            $match: {
-
-              status: "ACTIVE",
-
-              startDate: {
-                $exists: true
-              }
-
-            }
+            ],
           },
+        },
 
-          {
-            $set: {
+        {
+          $group: {
+            _id: null,
 
-              graceValue: {
+            total: {
+              $sum: {
                 $ifNull: [
-                  "$graceDays",
-                  0
-                ]
-              },
-
-              penaltyStartDate: {
-
-                $dateAdd: {
-
-                  startDate:
-                    "$startDate",
-
-                  unit: "day",
-
-                  amount: {
-                    $add: [
-                      {
-                        $ifNull: [
-                          "$graceDays",
-                          0
-                        ]
-                      },
-                      1
-                    ]
-                  },
-
-                  timezone:
-                    IST_TIMEZONE
-
-                }
-
-              },
-
-              endExclusiveDate: {
-
-                $cond: [
-
-                  {
-                    $ne: [
-                      "$endDate",
-                      null
-                    ]
-                  },
-
-                  {
-                    $dateAdd: {
-
-                      startDate:
-                        "$endDate",
-
-                      unit: "day",
-
-                      amount: 1,
-
-                      timezone:
-                        IST_TIMEZONE
-
-                    }
-
-                  },
-
-                  tomorrowStart
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $set: {
-
-              effectiveEndDate: {
-
-                $cond: [
-
-                  {
-                    $lt: [
-                      "$endExclusiveDate",
-                      tomorrowStart
-                    ]
-                  },
-
-                  "$endExclusiveDate",
-
-                  tomorrowStart
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $match: {
-
-              $expr: {
-
-                $and: [
-
-                  {
-                    $lt: [
-                      "$startDate",
-                      tomorrowStart
-                    ]
-                  },
-
-                  {
-                    $lt: [
-                      "$penaltyStartDate",
-                      "$effectiveEndDate"
-                    ]
-                  }
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $lookup: {
-
-              from: "dailytransactions",
-
-              let: {
-
-                savingId: "$_id",
-
-                penaltyStart:
-                  "$penaltyStartDate",
-
-                effectiveEnd:
-                  "$effectiveEndDate"
-
-              },
-
-              pipeline: [
-
-                {
-                  $match: {
-
-                    $expr: {
-
-                      $eq: [
-                        "$savingAccount",
-                        "$$savingId"
-                      ]
-
-                    }
-
-                  }
-
-                },
-
-                {
-                  $project: {
-
-                    paidDate: {
-                      $ifNull: [
-                        "$paymentForDate",
-                        "$collectionDate"
-                      ]
-                    }
-
-                  }
-
-                },
-
-                {
-                  $match: {
-
-                    $expr: {
-
-                      $and: [
-
-                        {
-                          $ne: [
-                            "$paidDate",
-                            null
-                          ]
-                        },
-
-                        {
-                          $gte: [
-                            "$paidDate",
-                            "$$penaltyStart"
-                          ]
-                        },
-
-                        {
-                          $lt: [
-                            "$paidDate",
-                            "$$effectiveEnd"
-                          ]
-                        }
-
-                      ]
-
-                    }
-
-                  }
-
-                },
-
-                {
-                  $count: "paidCount"
-                }
-
-              ],
-
-              as: "paidOverdue"
-            }
-
-          },
-
-          {
-            $set: {
-
-              candidateDays: {
-
-                $dateDiff: {
-
-                  startDate:
-                    "$penaltyStartDate",
-
-                  endDate:
-                    "$effectiveEndDate",
-
-                  unit: "day",
-
-                  timezone:
-                    IST_TIMEZONE
-
-                }
-
-              },
-
-              paidDays: {
-
-                $ifNull: [
-
-                  {
-                    $arrayElemAt: [
-                      "$paidOverdue.paidCount",
-                      0
-                    ]
-                  },
-
-                  0
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $set: {
-
-              unpaidDays: {
-
-                $max: [
-
+                  "$amount",
                   0,
-
-                  {
-                    $subtract: [
-                      "$candidateDays",
-                      "$paidDays"
-                    ]
-                  }
-
-                ]
-
+                ],
               },
-
-              penaltyPerDay: {
-
-                $cond: [
-
-                  {
-                    $eq: [
-                      "$penaltyType",
-                      "FIXED"
-                    ]
-                  },
-
-                  {
-                    $ifNull: [
-                      "$penaltyValue",
-                      0
-                    ]
-                  },
-
-                  {
-
-                    $round: [
-
-                      {
-                        $divide: [
-
-                          {
-                            $multiply: [
-
-                              {
-                                $ifNull: [
-                                  "$fixedAmount",
-                                  0
-                                ]
-                              },
-
-                              {
-                                $ifNull: [
-                                  "$penaltyValue",
-                                  0
-                                ]
-                              }
-
-                            ]
-
-                          },
-
-                          100
-
-                        ]
-
-                      },
-
-                      0
-
-                    ]
-
-                  }
-
-                ]
-
-              }
-
-            }
-
+            },
           },
+        },
 
-          {
-            $group: {
-
-              _id: null,
-
-              total: {
-
-                $sum: {
-
-                  $multiply: [
-
-                    "$unpaidDays",
-
-                    "$penaltyPerDay"
-
-                  ]
-
-                }
-
-              }
-
-            }
-
-          }
-
-        ]);
-
-
-      totalSavingPendingPenalty =
-        Number(
-          savingPenaltyRows[0]?.total || 0
-        );
-
-    }
-
+      ]);
 
     // =================================================
-    // ACTIVE LOANS FOR TARGET + PENALTY
+    // ACTIVE LOANS
+    // SMALL FIELD SELECTION ONLY
     // =================================================
 
-    const activeLoanRows =
-      await DailyLoan.find({
-
+    const activeLoanRowsPromise =
+      DailyLoan.find({
         status: {
           $in: [
             "ACTIVE",
             "DUE",
-            "OVERDUE"
-          ]
-        }
-
+            "OVERDUE",
+          ],
+        },
       })
-      .select(
-        [
-          "loanType",
-          "loanDate",
-          "startDate",
-          "durationDays",
-          "durationMonths",
-          "loanTenureMonths",
-          "emiAmount",
-          "totalInterest",
-          "gracePeriod",
-          "penaltyType",
-          "penaltyValue",
-          "status"
-        ].join(" ")
-      )
-      .lean();
-
-
-    // =================================================
-    // TODAY'S LOAN TARGET
-    // =================================================
-
-    let loanTarget = 0;
-
-
-    for (
-      const loan
-      of activeLoanRows
-    ) {
-
-      const baseDate =
-        loan.loanDate ||
-        loan.startDate;
-
-      if (!baseDate) {
-        continue;
-      }
-
-      const loanDateKey =
-        getISTDateKey(
-          baseDate
-        );
-
-      const totalInstallments =
-        getLoanTotalInstallments(
-          loan
-        );
-
-      const emi =
-        getLoanEMI(
-          loan
-        );
-
-      if (
-        totalInstallments <= 0 ||
-        emi <= 0
-      ) {
-        continue;
-      }
-
-
-      for (
-        let i = 1;
-        i <= totalInstallments;
-        i++
-      ) {
-
-        let dueKey;
-
-
-        if (
-          loan.loanType === "DAILY"
-        ) {
-
-          dueKey =
-            addDaysToKey(
-              loanDateKey,
-              i - 1
-            );
-
-        }
-
-        else {
-
-          dueKey =
-            addMonthsToKey(
-              loanDateKey,
-              i
-            );
-
-        }
-
-
-        if (
-          dueKey > todayKey
-        ) {
-
-          break;
-
-        }
-
-
-        if (
-          dueKey === todayKey
-        ) {
-
-          loanTarget +=
-            Number(emi);
-
-          break;
-
-        }
-
-      }
-
-    }
-
-
-    // =================================================
-    // LOAN PENDING PENALTY
-    //
-    // We calculate theoretical penalty using loan
-    // schedules, then subtract penalty contribution
-    // from already-paid installments.
-    // =================================================
-
-    let theoreticalLoanPenalty = 0;
-
-
-    for (
-      const loan
-      of activeLoanRows
-    ) {
-
-      const baseDate =
-        loan.loanDate ||
-        loan.startDate;
-
-      if (!baseDate) {
-        continue;
-      }
-
-
-      const loanDateKey =
-        getISTDateKey(
-          baseDate
-        );
-
-      const totalInstallments =
-        getLoanTotalInstallments(
-          loan
-        );
-
-      if (
-        totalInstallments <= 0
-      ) {
-        continue;
-      }
-
-
-      const grace =
-        Number(
-          loan.gracePeriod || 0
-        );
-
-
-      const loanType =
-        loan.loanType;
-
-
-      const penaltyValue =
-        Number(
-          loan.penaltyValue || 0
-        );
-
-
-      let penaltyBase =
-        Number(
-          loan.emiAmount || 0
-        );
-
-
-      if (
-        loanType === "FIXED"
-      ) {
-
-        const tenure =
-          Number(
-            loan.loanTenureMonths || 0
-          );
-
-        penaltyBase =
-          tenure > 0
-            ? Math.round(
-                Number(
-                  loan.totalInterest || 0
-                ) / tenure
-              )
-            : 0;
-
-      }
-
-
-      let penaltyPerEvent = 0;
-
-
-      if (
-        loanType === "DAILY"
-      ) {
-
-        penaltyPerEvent =
-          loan.penaltyType === "PERCENTAGE"
-
-            ? Math.round(
-                (
-                  penaltyBase *
-                  penaltyValue
-                ) / 100
-              )
-
-            : penaltyValue;
-
-      }
-
-      else if (
-        loanType === "MONTHLY" ||
-        loanType === "FIXED"
-      ) {
-
-        penaltyPerEvent =
-          loan.penaltyType === "PERCENTAGE"
-
-            ? Math.round(
-                (
-                  penaltyBase *
-                  penaltyValue
-                ) / 100
-              )
-
-            : penaltyValue;
-
-      }
-
-
-      if (
-        penaltyPerEvent <= 0
-      ) {
-        continue;
-      }
-
-
-      for (
-        let i = 1;
-        i <= totalInstallments;
-        i++
-      ) {
-
-        let dueKey;
-
-
-        if (
-          loanType === "DAILY"
-        ) {
-
-          dueKey =
-            addDaysToKey(
-              loanDateKey,
-              i - 1
-            );
-
-        }
-
-        else {
-
-          dueKey =
-            addMonthsToKey(
-              loanDateKey,
-              i
-            );
-
-        }
-
-
-        if (
-          dueKey > todayKey
-        ) {
-
-          break;
-
-        }
-
-
-        const penaltyStartKey =
-          addDaysToKey(
-            dueKey,
-            grace + 1
-          );
-
-
-        if (
-          penaltyStartKey > todayKey
-        ) {
-
-          continue;
-
-        }
-
-
-        // =========================================
-        // DAILY
-        // ONE PENALTY PER UNPAID DUE INSTALLMENT
-        // =========================================
-
-        if (
-          loanType === "DAILY"
-        ) {
-
-          theoreticalLoanPenalty +=
-            penaltyPerEvent;
-
-          continue;
-
-        }
-
-
-        // =========================================
-        // MONTHLY / FIXED
-        // ONE PENALTY PER OVERDUE MONTH
-        // =========================================
-
-        const penaltyMonths =
-          diffMonths(
-            penaltyStartKey,
-            todayKey
-          ) + 1;
-
-
-        if (
-          penaltyMonths > 0
-        ) {
-
-          theoreticalLoanPenalty +=
-            penaltyPerEvent *
-            penaltyMonths;
-
-        }
-
-      }
-
-    }
-
-
-    // =================================================
-    // PAID LOAN PENALTY CONTRIBUTION
-    //
-    // Database calculates only the contribution of
-    // already-paid eligible installments.
-    // =================================================
-
-    let paidLoanPenaltyContribution = 0;
-
-
-    if (
-      activeLoanRows.length > 0
-    ) {
-
-      const activeLoanIds =
-        activeLoanRows.map(
-          loan => loan._id
-        );
-
-
-      const paidPenaltyRows =
-        await LoanCollection.aggregate([
-
-          {
-            $match: {
-
-              loan: {
-                $in: activeLoanIds
-              },
-
-              dueDate: {
-                $exists: true,
-                $ne: null
-              }
-
-            }
-
-          },
-
-          {
-            $lookup: {
-
-              from: "dailyloans",
-
-              localField: "loan",
-
-              foreignField: "_id",
-
-              as: "loanInfo"
-
-            }
-
-          },
-
-          {
-            $unwind:
-              "$loanInfo"
-
-          },
-
-          {
-            $set: {
-
-              graceValue: {
-
-                $ifNull: [
-                  "$loanInfo.gracePeriod",
-                  0
-                ]
-
-              },
-
-              penaltyStartDate: {
-
-                $dateAdd: {
-
-                  startDate:
-                    "$dueDate",
-
-                  unit: "day",
-
-                  amount: {
-
-                    $add: [
-
-                      {
-                        $ifNull: [
-                          "$loanInfo.gracePeriod",
-                          0
-                        ]
-                      },
-
-                      1
-
-                    ]
-
-                  },
-
-                  timezone:
-                    IST_TIMEZONE
-
-                }
-
-              }
-
-            }
-
-          },
-
-          {
-            $match: {
-
-              $expr: {
-
-                $lte: [
-
-                  "$penaltyStartDate",
-
-                  getDashboardDateData().todayStart
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $set: {
-
-              penaltyMonths: {
-
-                $add: [
-
-                  {
-
-                    $dateDiff: {
-
-                      startDate:
-                        "$penaltyStartDate",
-
-                      endDate:
-                        getDashboardDateData().todayStart,
-
-                      unit: "month",
-
-                      timezone:
-                        IST_TIMEZONE
-
-                    }
-
-                  },
-
-                  1
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $set: {
-
-              contribution: {
-
-                $cond: [
-
-                  {
-                    $eq: [
-                      "$loanInfo.loanType",
-                      "DAILY"
-                    ]
-                  },
-
-                  1,
-
-                  "$penaltyMonths"
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $group: {
-
-              _id: null,
-
-              totalContribution: {
-
-                $sum:
-                  "$contribution"
-
-              }
-
-            }
-
-          }
-
-        ]);
-
-
-      // ===============================================
-      // We still need the penalty amount for each loan
-      // because penalty settings are loan-specific.
-      //
-      // Build a tiny map from the active loan metadata.
-      // ===============================================
-
-      const paidPenaltyContributionByLoan =
-        await LoanCollection.aggregate([
-
-          {
-            $match: {
-
-              loan: {
-                $in: activeLoanIds
-              },
-
-              dueDate: {
-                $exists: true,
-                $ne: null
-              }
-
-            }
-
-          },
-
-          {
-            $lookup: {
-
-              from: "dailyloans",
-
-              localField: "loan",
-
-              foreignField: "_id",
-
-              as: "loanInfo"
-
-            }
-
-          },
-
-          {
-            $unwind:
-              "$loanInfo"
-
-          },
-
-          {
-            $set: {
-
-              penaltyStartDate: {
-
-                $dateAdd: {
-
-                  startDate:
-                    "$dueDate",
-
-                  unit: "day",
-
-                  amount: {
-
-                    $add: [
-
-                      {
-                        $ifNull: [
-                          "$loanInfo.gracePeriod",
-                          0
-                        ]
-                      },
-
-                      1
-
-                    ]
-
-                  },
-
-                  timezone:
-                    IST_TIMEZONE
-
-                }
-
-              }
-
-            }
-
-          },
-
-          {
-            $match: {
-
-              $expr: {
-
-                $lte: [
-
-                  "$penaltyStartDate",
-
-                  getDashboardDateData().todayStart
-
-                ]
-
-              }
-
-            }
-
-          },
-
-          {
-            $set: {
-
-              penaltyCount:
-
-                {
-
-                  $cond: [
-
-                    {
-                      $eq: [
-                        "$loanInfo.loanType",
-                        "DAILY"
-                      ]
-                    },
-
-                    1,
-
-                    {
-
-                      $add: [
-
-                        {
-
-                          $dateDiff: {
-
-                            startDate:
-                              "$penaltyStartDate",
-
-                            endDate:
-                              getDashboardDateData().todayStart,
-
-                            unit: "month",
-
-                            timezone:
-                              IST_TIMEZONE
-
-                          }
-
-                        },
-
-                        1
-
-                      ]
-
-                    }
-
-                  ]
-
-                }
-
-            }
-
-          },
-
-          {
-            $group: {
-
-              _id: "$loan",
-
-              penaltyCount: {
-
-                $sum:
-                  "$penaltyCount"
-
-              }
-
-            }
-
-          }
-
-        ]);
-
-
-      const paidContributionMap =
-        new Map();
-
-
-      for (
-        const row
-        of paidPenaltyContributionByLoan
-      ) {
-
-        paidContributionMap.set(
-          String(row._id),
-          Number(
-            row.penaltyCount || 0
-          )
-        );
-
-      }
-
-
-      // ===============================================
-      // SUBTRACT PAID PENALTY CONTRIBUTION
-      // using each loan's own penalty amount
-      // ===============================================
-
-      for (
-        const loan
-        of activeLoanRows
-      ) {
-
-        const contribution =
-          Number(
-            paidContributionMap.get(
-              String(loan._id)
-            ) || 0
-          );
-
-
-        if (
-          contribution <= 0
-        ) {
-          continue;
-        }
-
-
-        let penaltyBase =
-          Number(
-            loan.emiAmount || 0
-          );
-
-
-        if (
-          loan.loanType === "FIXED"
-        ) {
-
-          const tenure =
-            Number(
-              loan.loanTenureMonths || 0
-            );
-
-          penaltyBase =
-            tenure > 0
-
-              ? Math.round(
-                  Number(
-                    loan.totalInterest || 0
-                  ) / tenure
-                )
-
-              : 0;
-
-        }
-
-
-        const singlePenalty =
-          loan.penaltyType === "PERCENTAGE"
-
-            ? Math.round(
-                (
-                  penaltyBase *
-                  Number(
-                    loan.penaltyValue || 0
-                  )
-                ) / 100
-              )
-
-            : Number(
-                loan.penaltyValue || 0
-              );
-
-
-        paidLoanPenaltyContribution +=
-          contribution *
-          singlePenalty;
-
-      }
-
-    }
-
-
-    const totalLoanPendingPenalty =
-      Math.max(
-        0,
-        theoreticalLoanPenalty -
-        paidLoanPenaltyContribution
-      );
-
-
-    // =================================================
-    // TOTAL PENDING PENALTY
-    // =================================================
-
-    const totalPendingPenalty =
-      Math.max(
-        0,
-        Number(
-          totalSavingPendingPenalty
-        ) +
-        Number(
-          totalLoanPendingPenalty
+        .select(
+          [
+            "loanType",
+            "loanDate",
+            "startDate",
+            "durationDays",
+            "durationMonths",
+            "loanTenureMonths",
+            "emiAmount",
+            "totalInterest",
+            "gracePeriod",
+            "penaltyType",
+            "penaltyValue",
+            "status",
+          ].join(" ")
         )
-      );
-
+        .lean();
 
     // =================================================
-    // WAIT FOR THE SIMPLE AGGREGATIONS
+    // ACTIVE SAVINGS
+    // SMALL FIELD SELECTION ONLY
+    // =================================================
+
+    const savingsForPenaltyPromise =
+      DailySaving.find({
+        status: "ACTIVE",
+
+        startDate: {
+          $exists: true,
+        },
+      })
+        .select(
+          [
+            "startDate",
+            "endDate",
+            "fixedAmount",
+            "collectionType",
+            "graceDays",
+            "penaltyType",
+            "penaltyValue",
+          ].join(" ")
+        )
+        .lean();
+
+    // =================================================
+    // RECENT COLLECTIONS
+    // =================================================
+
+    const recentCollectionsPromise =
+      DailyTransaction.find()
+        .sort({
+          createdAt: -1,
+        })
+        .limit(10)
+        .populate(
+          "member",
+          "memberName memberId"
+        )
+        .lean();
+
+    // =================================================
+    // TOP AGENTS
+    // =================================================
+
+    const topAgentsPromise =
+      DailyTransaction.aggregate([
+
+        {
+          $match: {
+            collectorType:
+              "AGENT",
+          },
+        },
+
+        {
+          $group: {
+            _id:
+              "$collectorId",
+
+            totalCollection: {
+              $sum: {
+                $ifNull: [
+                  "$totalAmount",
+                  0,
+                ],
+              },
+            },
+          },
+        },
+
+        {
+          $sort: {
+            totalCollection: -1,
+          },
+        },
+
+        {
+          $limit: 5,
+        },
+
+        {
+          $lookup: {
+            from:
+              "dailyagents",
+
+            localField:
+              "_id",
+
+            foreignField:
+              "_id",
+
+            as:
+              "agent",
+          },
+        },
+
+        {
+          $project: {
+            _id: 1,
+
+            totalCollection: 1,
+
+            agent: {
+              _id: 1,
+              name: 1,
+            },
+          },
+        },
+
+      ]);
+
+    // =================================================
+    // WAIT FOR PARALLEL QUERIES
     // =================================================
 
     const [
@@ -2037,7 +982,12 @@ async (
       loanGivenResult,
       todayDailyAgentResult,
       todayLoanAgentResult,
-      dailySavingTargetResult
+      dailySavingTargetResult,
+      currentMonthExpenseResult,
+      activeLoanRows,
+      savingsForPenalty,
+      recentCollections,
+      topAgents,
     ] =
       await Promise.all([
 
@@ -2053,368 +1003,968 @@ async (
 
         todayLoanAgentCollectionPromise,
 
-        dailySavingTargetPromise
+        dailySavingTargetPromise,
+
+        currentMonthExpensePromise,
+
+        activeLoanRowsPromise,
+
+        savingsForPenaltyPromise,
+
+        recentCollectionsPromise,
+
+        topAgentsPromise,
 
       ]);
 
-
     // =================================================
-    // EXISTING TOTAL VALUES
+    // BASIC VALUES
     // =================================================
 
     const totalDailyCollection =
       Number(
-        dailyCollectionResult[0]?.total || 0
+        dailyCollectionResult[0]
+          ?.total || 0
       );
-
 
     const totalLoanCollection =
       Number(
-        loanCollectionResult[0]?.total || 0
+        loanCollectionResult[0]
+          ?.total || 0
       );
-
 
     const totalExpenses =
       Number(
-        expenseResult[0]?.total || 0
+        expenseResult[0]
+          ?.total || 0
       );
-
 
     const totalLoanGiven =
       Number(
-        loanGivenResult[0]?.total || 0
+        loanGivenResult[0]
+          ?.total || 0
       );
-
-
-    // =================================================
-    // CURRENT MONTH EXPENSE
-    //
-    // Uses expenseDate when available.
-    // Falls back to createdAt for older records.
-    // =================================================
-
-    const currentMonthExpenseResult =
-      await Expense.aggregate([
-
-        {
-          $match: {
-
-            $expr: {
-
-              $and: [
-
-                {
-                  $gte: [
-
-                    {
-                      $ifNull: [
-                        "$expenseDate",
-                        "$createdAt"
-                      ]
-                    },
-
-                    monthStart
-
-                  ]
-                },
-
-                {
-                  $lt: [
-
-                    {
-                      $ifNull: [
-                        "$expenseDate",
-                        "$createdAt"
-                      ]
-                    },
-
-                    nextMonthStart
-
-                  ]
-                }
-
-              ]
-
-            }
-
-          }
-
-        },
-
-        {
-          $group: {
-
-            _id: null,
-
-            total: {
-
-              $sum: {
-
-                $ifNull: [
-                  "$amount",
-                  0
-                ]
-
-              }
-
-            }
-
-          }
-
-        }
-
-      ]);
-
-
-    const thisMonthExpense =
-      Number(
-        currentMonthExpenseResult[0]?.total || 0
-      );
-
-
-    // =================================================
-    // TODAY ACTUAL AGENT COLLECTION
-    // =================================================
 
     const todayDailyAgentCollection =
       Number(
-        todayDailyAgentResult[0]?.total || 0
+        todayDailyAgentResult[0]
+          ?.total || 0
       );
-
 
     const todayLoanAgentCollection =
       Number(
-        todayLoanAgentResult[0]?.total || 0
+        todayLoanAgentResult[0]
+          ?.total || 0
       );
-
 
     const todayActualAgentCollection =
       todayDailyAgentCollection +
       todayLoanAgentCollection;
 
-
-    // =================================================
-    // TARGETS
-    // =================================================
-
     const dailySavingTarget =
       Number(
-        dailySavingTargetResult[0]?.total || 0
+        dailySavingTargetResult[0]
+          ?.total || 0
       );
 
-
-    const totalTarget =
-      dailySavingTarget +
-      loanTarget;
-
+    const thisMonthExpense =
+      Number(
+        currentMonthExpenseResult[0]
+          ?.total || 0
+      );
 
     // =================================================
     // FINANCIAL CALCULATION
-    // KEEP EXISTING RESULT
     // =================================================
 
     const totalIncome =
       totalDailyCollection +
       totalLoanCollection;
 
-
     const netProfit =
       totalIncome -
       totalExpenses -
       totalLoanGiven;
 
+    
+      // =====================================================
+// LOAN TARGET
+// OPTIMIZED
+// =====================================================
 
-    // =================================================
-    // RECENT COLLECTIONS
-    // ONLY 10
-    // =================================================
+let loanTarget = 0;
 
-    const recentCollections =
-      await DailyTransaction.find()
+for (const loan of activeLoanRows) {
+  const installmentNo =
+    getTodayInstallmentNumber(
+      loan,
+      todayKey
+    );
 
-        .sort({
-          createdAt: -1
-        })
+  const totalInstallments =
+    getLoanTotalInstallments(
+      loan
+    );
 
-        .limit(10)
+  const emi =
+    getLoanEMI(
+      loan
+    );
 
-        .populate(
-          "member",
-          "memberName memberId"
-        )
+  if (
+    installmentNo <= 0 ||
+    totalInstallments <= 0 ||
+    emi <= 0
+  ) {
+    continue;
+  }
 
-        .lean();
+  if (
+    installmentNo <=
+    totalInstallments
+  ) {
+    loanTarget += Number(emi);
+  }
+}
 
+// =====================================================
+// DAILY SAVING PENDING PENALTY
+//
+// MongoDB calculates this in one aggregation.
+// We do NOT load all DailyTransaction records
+// into Node.js.
+// =====================================================
 
-    // =================================================
-    // TOP AGENTS
-    // =================================================
+let totalSavingPendingPenalty = 0;
 
-    const topAgents =
-      await DailyTransaction.aggregate([
+if (
+  savingsForPenalty.length > 0
+) {
 
-        {
-          $match: {
+  const savingPenaltyRows =
+    await DailySaving.aggregate([
 
-            collectorType:
-              "AGENT"
+      // -----------------------------------------------
+      // ACTIVE SAVINGS ONLY
+      // -----------------------------------------------
 
-          }
+      {
+        $match: {
+          status: "ACTIVE",
+
+          startDate: {
+            $exists: true,
+          },
+        },
+      },
+
+      // -----------------------------------------------
+      // CALCULATE PENALTY DATES
+      // -----------------------------------------------
+
+      {
+        $set: {
+
+          graceValue: {
+            $ifNull: [
+              "$graceDays",
+              0,
+            ],
+          },
+
+          penaltyStartDate: {
+            $dateAdd: {
+              startDate:
+                "$startDate",
+
+              unit: "day",
+
+              amount: {
+                $add: [
+                  {
+                    $ifNull: [
+                      "$graceDays",
+                      0,
+                    ],
+                  },
+                  1,
+                ],
+              },
+
+              timezone:
+                IST_TIMEZONE,
+            },
+          },
+
+          endExclusiveDate: {
+            $cond: [
+
+              {
+                $ne: [
+                  "$endDate",
+                  null,
+                ],
+              },
+
+              {
+                $dateAdd: {
+                  startDate:
+                    "$endDate",
+
+                  unit: "day",
+
+                  amount: 1,
+
+                  timezone:
+                    IST_TIMEZONE,
+                },
+              },
+
+              tomorrowStart,
+            ],
+          },
 
         },
+      },
 
-        {
-          $group: {
+      // -----------------------------------------------
+      // EFFECTIVE END DATE
+      // -----------------------------------------------
 
-            _id:
-              "$collectorId",
+      {
+        $set: {
 
-            totalCollection: {
+          effectiveEndDate: {
+            $cond: [
 
-              $sum: {
+              {
+                $lt: [
+                  "$endExclusiveDate",
+                  tomorrowStart,
+                ],
+              },
 
+              "$endExclusiveDate",
+
+              tomorrowStart,
+            ],
+          },
+
+        },
+      },
+
+      // -----------------------------------------------
+      // ONLY SAVINGS THAT CAN HAVE PENALTY
+      // -----------------------------------------------
+
+      {
+        $match: {
+
+          $expr: {
+            $and: [
+
+              {
+                $lt: [
+                  "$startDate",
+                  tomorrowStart,
+                ],
+              },
+
+              {
+                $lt: [
+                  "$penaltyStartDate",
+                  "$effectiveEndDate",
+                ],
+              },
+
+            ],
+          },
+
+        },
+      },
+
+      // -----------------------------------------------
+      // FIND PAID OVERDUE DAYS
+      //
+      // IMPORTANT:
+      // savingAccount index is used here.
+      // -----------------------------------------------
+
+      {
+        $lookup: {
+
+          from:
+            "dailytransactions",
+
+          let: {
+            savingId:
+              "$_id",
+
+            penaltyStart:
+              "$penaltyStartDate",
+
+            effectiveEnd:
+              "$effectiveEndDate",
+          },
+
+          pipeline: [
+
+            {
+              $match: {
+
+                $expr: {
+                  $eq: [
+                    "$savingAccount",
+                    "$$savingId",
+                  ],
+                },
+
+              },
+            },
+
+            {
+              $project: {
+
+                paidDate: {
+                  $ifNull: [
+                    "$paymentForDate",
+                    "$collectionDate",
+                  ],
+                },
+
+              },
+            },
+
+            {
+              $match: {
+
+                $expr: {
+                  $and: [
+
+                    {
+                      $ne: [
+                        "$paidDate",
+                        null,
+                      ],
+                    },
+
+                    {
+                      $gte: [
+                        "$paidDate",
+                        "$$penaltyStart",
+                      ],
+                    },
+
+                    {
+                      $lt: [
+                        "$paidDate",
+                        "$$effectiveEnd",
+                      ],
+                    },
+
+                  ],
+                },
+
+              },
+            },
+
+            {
+              $count:
+                "paidCount",
+            },
+
+          ],
+
+          as:
+            "paidOverdue",
+        },
+      },
+
+      // -----------------------------------------------
+      // CANDIDATE DAYS + PAID DAYS
+      // -----------------------------------------------
+
+      {
+        $set: {
+
+          candidateDays: {
+            $dateDiff: {
+
+              startDate:
+                "$penaltyStartDate",
+
+              endDate:
+                "$effectiveEndDate",
+
+              unit:
+                "day",
+
+              timezone:
+                IST_TIMEZONE,
+            },
+          },
+
+          paidDays: {
+            $ifNull: [
+
+              {
+                $arrayElemAt: [
+                  "$paidOverdue.paidCount",
+                  0,
+                ],
+              },
+
+              0,
+            ],
+          },
+
+        },
+      },
+
+      // -----------------------------------------------
+      // UNPAID DAYS
+      // -----------------------------------------------
+
+      {
+        $set: {
+
+          unpaidDays: {
+            $max: [
+
+              0,
+
+              {
+                $subtract: [
+                  "$candidateDays",
+                  "$paidDays",
+                ],
+              },
+
+            ],
+          },
+
+          penaltyPerDay: {
+            $cond: [
+
+              {
+                $eq: [
+                  "$penaltyType",
+                  "FIXED",
+                ],
+              },
+
+              {
                 $ifNull: [
+                  "$penaltyValue",
+                  0,
+                ],
+              },
 
-                  "$totalAmount",
+              {
+                $round: [
 
-                  0
+                  {
+                    $divide: [
 
-                ]
+                      {
+                        $multiply: [
 
-              }
+                          {
+                            $ifNull: [
+                              "$fixedAmount",
+                              0,
+                            ],
+                          },
 
-            }
+                          {
+                            $ifNull: [
+                              "$penaltyValue",
+                              0,
+                            ],
+                          },
 
-          }
+                        ],
+                      },
 
-        },
+                      100,
+                    ],
+                  },
 
-        {
-          $sort: {
+                  0,
+                ],
+              },
 
-            totalCollection:
-              -1
-
-          }
-
-        },
-
-        {
-          $limit: 5
-
-        },
-
-        {
-          $lookup: {
-
-            from:
-              "dailyagents",
-
-            localField:
-              "_id",
-
-            foreignField:
-              "_id",
-
-            as:
-              "agent"
-
-          }
+            ],
+          },
 
         },
-
-        {
-          $project: {
-
-            _id: 1,
-
-            totalCollection: 1,
-
-            agent: {
-
-              _id: 1,
-
-              name: 1
-
-            }
-
-          }
-
-        }
-
-      ]);
-
-
-    // =================================================
-    // FINAL RESPONSE
-    // =================================================
-
-    res.json({
-
-      success: true,
+      },
 
       // -----------------------------------------------
-      // EXISTING DASHBOARD VALUES
+      // TOTAL PENALTY
       // -----------------------------------------------
 
-      totalAgents,
+      {
+        $group: {
 
-      totalMembers,
+          _id: null,
 
-      activeLoans,
+          total: {
+            $sum: {
 
-      totalDailyCollection,
+              $multiply: [
+                "$unpaidDays",
+                "$penaltyPerDay",
+              ],
 
-      totalAgentCollection:
-        totalDailyCollection,
+            },
+          },
 
-      totalLoanCollection,
+        },
+      },
 
-      totalExpenses,
+    ]);
 
-      totalLoanGiven,
+  totalSavingPendingPenalty =
+    Number(
+      savingPenaltyRows[0]
+        ?.total || 0
+    );
+}
 
-      totalIncome,
+// =====================================================
+// LOAN PENDING PENALTY
+//
+// Calculate theoretical penalty mathematically.
+// No database query for every installment.
+// =====================================================
 
-      netProfit,
+let theoreticalLoanPenalty = 0;
 
-      recentCollections,
+for (const loan of activeLoanRows) {
 
-      topAgents,
+  const penaltyEvents =
+    getLoanPenaltyEvents(
+      loan,
+      todayKey
+    );
 
+  const penaltyPerEvent =
+    getLoanPenaltyPerEvent(
+      loan
+    );
+
+  if (
+    penaltyEvents <= 0 ||
+    penaltyPerEvent <= 0
+  ) {
+    continue;
+  }
+
+  theoreticalLoanPenalty +=
+    penaltyEvents *
+    penaltyPerEvent;
+}
+
+// =====================================================
+// PAID LOAN PENALTY CONTRIBUTION
+//
+// ONE aggregation instead of TWO separate
+// LoanCollection aggregations.
+//
+// We calculate contribution PER LOAN.
+// =====================================================
+
+let paidLoanPenaltyContribution = 0;
+
+if (
+  activeLoanRows.length > 0
+) {
+
+  const activeLoanIds =
+    activeLoanRows.map(
+      loan => loan._id
+    );
+
+  const paidPenaltyByLoan =
+    await LoanCollection.aggregate([
 
       // -----------------------------------------------
-      // NEW DASHBOARD VALUES
+      // ONLY ACTIVE LOAN COLLECTIONS
       // -----------------------------------------------
 
-      dailySavingTarget,
+      {
+        $match: {
 
-      loanTarget,
+          loan: {
+            $in:
+              activeLoanIds,
+          },
 
-      totalTarget,
+          dueDate: {
+            $exists: true,
 
-      todayActualAgentCollection,
+            $ne:
+              null,
+          },
 
-      totalPendingPenalty,
-
-      thisMonthExpense,
-
+        },
+      },
 
       // -----------------------------------------------
-      // OPTIONAL DEBUG/REPORT VALUES
+      // GET LOAN INFORMATION
       // -----------------------------------------------
 
-      todayKey,
+      {
+        $lookup: {
 
-      currentMonth:
-        monthKey
+          from:
+            "dailyloans",
 
-    });
+          localField:
+            "loan",
+
+          foreignField:
+            "_id",
+
+          as:
+            "loanInfo",
+        },
+      },
+
+      {
+        $unwind:
+          "$loanInfo",
+      },
+
+      // -----------------------------------------------
+      // PENALTY START DATE
+      // -----------------------------------------------
+
+      {
+        $set: {
+
+          penaltyStartDate: {
+            $dateAdd: {
+
+              startDate:
+                "$dueDate",
+
+              unit:
+                "day",
+
+              amount: {
+                $add: [
+
+                  {
+                    $ifNull: [
+                      "$loanInfo.gracePeriod",
+                      0,
+                    ],
+                  },
+
+                  1,
+
+                ],
+              },
+
+              timezone:
+                IST_TIMEZONE,
+            },
+          },
+
+        },
+      },
+
+      // -----------------------------------------------
+      // ONLY PENALTIES THAT HAVE STARTED
+      // -----------------------------------------------
+
+      {
+        $match: {
+
+          $expr: {
+            $lte: [
+              "$penaltyStartDate",
+              todayStart,
+            ],
+          },
+
+        },
+      },
+
+      // -----------------------------------------------
+      // NUMBER OF PENALTY EVENTS
+      // -----------------------------------------------
+
+      {
+        $set: {
+
+          penaltyCount: {
+
+            $cond: [
+
+              // DAILY = ONE PENALTY
+              {
+                $eq: [
+                  "$loanInfo.loanType",
+                  "DAILY",
+                ],
+              },
+
+              1,
+
+              // MONTHLY / FIXED
+              {
+                $add: [
+
+                  {
+                    $dateDiff: {
+
+                      startDate:
+                        "$penaltyStartDate",
+
+                      endDate:
+                        todayStart,
+
+                      unit:
+                        "month",
+
+                      timezone:
+                        IST_TIMEZONE,
+                    },
+                  },
+
+                  1,
+
+                ],
+              },
+
+            ],
+
+          },
+
+        },
+      },
+
+      // -----------------------------------------------
+      // GROUP BY LOAN
+      // -----------------------------------------------
+
+      {
+        $group: {
+
+          _id:
+            "$loan",
+
+          penaltyCount: {
+            $sum:
+              "$penaltyCount",
+          },
+
+        },
+      },
+
+    ]);
+
+  // ===================================================
+  // BUILD MAP
+  // ===================================================
+
+  const paidContributionMap =
+    new Map();
+
+  for (
+    const row
+    of paidPenaltyByLoan
+  ) {
+
+    paidContributionMap.set(
+      String(row._id),
+
+      Number(
+        row.penaltyCount || 0
+      )
+    );
 
   }
 
+  // ===================================================
+  // CALCULATE ACTUAL PAID PENALTY CONTRIBUTION
+  // ===================================================
 
-  catch (error) {
+  for (
+    const loan
+    of activeLoanRows
+  ) {
+
+    const contribution =
+      Number(
+        paidContributionMap.get(
+          String(loan._id)
+        ) || 0
+      );
+
+    if (
+      contribution <= 0
+    ) {
+      continue;
+    }
+
+    const singlePenalty =
+      getLoanPenaltyPerEvent(
+        loan
+      );
+
+    if (
+      singlePenalty <= 0
+    ) {
+      continue;
+    }
+
+    paidLoanPenaltyContribution +=
+      contribution *
+      singlePenalty;
+  }
+}
+
+// =====================================================
+// TOTAL LOAN PENDING PENALTY
+// =====================================================
+
+const totalLoanPendingPenalty =
+  Math.max(
+    0,
+
+    theoreticalLoanPenalty -
+      paidLoanPenaltyContribution
+  );
+
+// =====================================================
+// TOTAL PENDING PENALTY
+// =====================================================
+
+const totalPendingPenalty =
+  Math.max(
+    0,
+
+    Number(
+      totalSavingPendingPenalty
+    ) +
+
+    Number(
+      totalLoanPendingPenalty
+    )
+  );
+
+// =====================================================
+// TOTAL TARGET
+// =====================================================
+
+const totalTarget =
+  Number(
+    dailySavingTarget
+  ) +
+
+  Number(
+    loanTarget
+  );
+
+// =====================================================
+// DEBUG PERFORMANCE
+// =====================================================
+
+console.log(
+  "----------------------------------------"
+);
+
+console.log(
+  `Dashboard calculation completed in ${
+    Date.now() - requestStarted
+  }ms`
+);
+
+console.log(
+  "----------------------------------------"
+);
+
+// =====================================================
+// FINAL DASHBOARD RESPONSE
+// =====================================================
+
+res.json({
+
+  success: true,
+
+  // -----------------------------------------------
+  // EXISTING DASHBOARD VALUES
+  // -----------------------------------------------
+
+  totalAgents,
+
+  totalMembers,
+
+  activeLoans,
+
+  totalDailyCollection,
+
+  totalAgentCollection:
+    totalDailyCollection,
+
+  totalLoanCollection,
+
+  totalExpenses,
+
+  totalLoanGiven,
+
+  totalIncome,
+
+  netProfit,
+
+  recentCollections,
+
+  topAgents,
+
+  // -----------------------------------------------
+  // TARGET VALUES
+  // -----------------------------------------------
+
+  dailySavingTarget,
+
+  loanTarget,
+
+  totalTarget,
+
+  // -----------------------------------------------
+  // TODAY'S ACTUAL COLLECTION
+  // -----------------------------------------------
+
+  todayActualAgentCollection,
+
+  // -----------------------------------------------
+  // PENALTY
+  // -----------------------------------------------
+
+  totalPendingPenalty,
+
+  // -----------------------------------------------
+  // CURRENT MONTH EXPENSE
+  // -----------------------------------------------
+
+  thisMonthExpense,
+
+  // -----------------------------------------------
+  // DEBUG / REPORT VALUES
+  // -----------------------------------------------
+
+  todayKey,
+
+  currentMonth:
+    monthKey,
+
+});
+
+  } catch (error) {
 
     console.error(
       "================================="
@@ -2432,14 +1982,13 @@ async (
       "================================="
     );
 
-
     res.status(500).json({
 
       success: false,
 
       message:
         error.message ||
-        "Dashboard loading failed"
+        "Dashboard loading failed",
 
     });
 
