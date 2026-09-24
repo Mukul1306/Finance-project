@@ -73,6 +73,10 @@ timestamps:true
 });
 
 dailyTransactionSchema.index({
+  collectorId: 1,
+  collectorType: 1
+});
+dailyTransactionSchema.index({
   savingAccount: 1,
   paymentForDate: 1
 });

@@ -149,6 +149,11 @@ dailySavingSchema.index({
   status: 1
 });
 
+dailySavingSchema.index({
+  assignedAgent: 1,
+  collectionType: 1
+});
+
 module.exports =
 mongoose.model(
 "DailySaving",

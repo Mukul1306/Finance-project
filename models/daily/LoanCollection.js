@@ -144,6 +144,10 @@ loanCollectionSchema.index({
   loan: 1,
   installmentNo: 1
 });
+loanCollectionSchema.index({
+  collectorId: 1,
+  collectorType: 1
+});
 
 
 module.exports =

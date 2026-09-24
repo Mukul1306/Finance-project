@@ -188,6 +188,11 @@ loanPendingTillToday: {
   timestamps: true
 });
 
+
+agentSchema.index({ createdAt: -1 });
+agentSchema.index({ mobile: 1 });
+agentSchema.index({ email: 1 });
+
 module.exports = mongoose.model(
   "DailyAgent",
   agentSchema
