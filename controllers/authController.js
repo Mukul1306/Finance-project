@@ -177,15 +177,42 @@ exports.login = async (req, res) => {
 // SOCIETY MEMBER LOGIN
 // =====================================================
 
+const cleanMobile = String(mobile).trim();
+
 const societyMember =
   await Member.findOne({
-    mobile: mobile.trim()
+    mobile: cleanMobile
   })
   .select("+password")
   .populate(
     "societyId",
     "societyName durationMonths startDate maxMembers currentMembers status"
   );
+
+console.log("======================================");
+console.log("SOCIETY LOGIN DEBUG");
+console.log("Entered mobile:", JSON.stringify(cleanMobile));
+console.log("Member found:", !!societyMember);
+
+if (societyMember) {
+  console.log("Mongo ID:", societyMember._id);
+  console.log("Member ID:", societyMember.memberId);
+  console.log("Name:", societyMember.name);
+  console.log("Mobile:", JSON.stringify(societyMember.mobile));
+  console.log("Password exists:", !!societyMember.password);
+  console.log(
+    "Password length:",
+    societyMember.password
+      ? String(societyMember.password).length
+      : 0
+  );
+  console.log(
+    "Password value:",
+    JSON.stringify(societyMember.password)
+  );
+}
+
+console.log("======================================");
 
 console.log(
   "SOCIETY MEMBER FOUND =",
