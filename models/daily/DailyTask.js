@@ -39,8 +39,16 @@ const dailyTaskSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-dailyTaskSchema.index({ status: 1, frequency: 1 });
-dailyTaskSchema.index({ assignedAgent: 1, status: 1 });
+dailyTaskSchema.index({
+  status: 1,
+  createdAt: -1
+});
+
+dailyTaskSchema.index({
+  assignedType: 1,
+  assignedAgent: 1,
+  status: 1
+});
 
 module.exports =
   mongoose.models.DailyTask ||

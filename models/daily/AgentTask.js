@@ -48,11 +48,30 @@ const agentTaskSchema = new mongoose.Schema(
 );
 
 agentTaskSchema.index(
-  { task: 1, agent: 1, occurrenceKey: 1 },
-  { unique: true }
+  {
+    task: 1,
+    agent: 1,
+    occurrenceKey: 1
+  },
+  {
+    unique: true
+  }
 );
 
-agentTaskSchema.index({ agent: 1, dueDate: 1, status: 1 });
+agentTaskSchema.index({
+  agent: 1,
+  dueDate: -1
+});
+
+agentTaskSchema.index({
+  task: 1,
+  periodStart: -1
+});
+
+agentTaskSchema.index({
+  status: 1,
+  dueDate: 1
+});
 
 module.exports =
   mongoose.models.AgentTask ||

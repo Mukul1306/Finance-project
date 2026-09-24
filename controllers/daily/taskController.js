@@ -210,18 +210,18 @@ const ensureTaskForAgent = async (task, agentId, targetDate) => {
   return docs;
 };
 
-const markPastTasksMissed = async (docs) => {
-  const now = new Date();
-
-  for (const item of docs) {
-    if (
-      item.status === "PENDING" &&
-      new Date(item.dueDate).getTime() < now.getTime()
-    ) {
-      item.status = "MISSED";
-      await item.save();
+const markPastTasksMissed = async () => {
+  await AgentTask.updateMany(
+    {
+      status: "PENDING",
+      dueDate: { $lt: new Date() }
+    },
+    {
+      $set: {
+        status: "MISSED"
+      }
     }
-  }
+  );
 };
 
 const populateTask = (query) =>
