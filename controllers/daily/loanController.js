@@ -6247,18 +6247,9 @@ exports.getAgentLoans = async (req, res) => {
     // stores areaName as String.
     // ===================================================
 
-    const loans =
-      await DailyLoan.find({
-        assignedAgent: agentId,
-
-        status: {
-          $in: [
-            "ACTIVE",
-            "DUE",
-            "OVERDUE"
-          ]
-        }
-      })
+   const loans = await DailyLoan.find({
+  assignedAgent: agentId
+})
         .populate(
           "member",
           "memberName memberId mobile fatherName"
