@@ -151,6 +151,63 @@ closedBy: {
   type: String,
   default: ""
 },
+// ==========================================
+// LOAN TERMINATION REQUEST
+// ==========================================
+
+terminationStatus: {
+  type: String,
+  enum: [
+    "NONE",
+    "PENDING",
+    "APPROVED",
+    "REJECTED"
+  ],
+  default: "NONE"
+},
+
+terminationRequestedAt: {
+  type: Date,
+  default: null
+},
+
+terminationRequestedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailyAgent",
+  default: null
+},
+
+terminationReason: {
+  type: String,
+  default: ""
+},
+
+terminationApprovedAt: {
+  type: Date,
+  default: null
+},
+
+terminationApprovedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+  default: null
+},
+
+terminationRejectedAt: {
+  type: Date,
+  default: null
+},
+
+terminationRejectedBy: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+  default: null
+},
+
+terminationRejectionReason: {
+  type: String,
+  default: ""
+},
 
 loanDate: {
     type: Date,

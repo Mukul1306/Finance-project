@@ -7481,6 +7481,421 @@ exports.getLoanRequestsByAgent = async (req, res) => {
 };
 
 // ==========================================================
+// AGENT - REQUEST LOAN TERMINATION
+// ==========================================================
+
+exports.requestLoanTermination = async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    const { agentId, reason } = req.body;
+
+    if (!agentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Agent ID is required",
+      });
+    }
+
+    const loan = await DailyLoan.findById(loanId);
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found",
+      });
+    }
+
+    // ==========================================
+    // AGENT OWNERSHIP CHECK
+    // ==========================================
+
+    if (
+      String(loan.assignedAgent) !==
+      String(agentId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not assigned to this loan",
+      });
+    }
+
+    // ==========================================
+    // ALREADY CLOSED
+    // ==========================================
+
+    if (loan.status === "CLOSED") {
+      return res.status(400).json({
+        success: false,
+        message: "Loan is already closed",
+      });
+    }
+
+    // ==========================================
+    // ALREADY PENDING
+    // ==========================================
+
+    if (loan.terminationStatus === "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: "Termination request is already pending",
+      });
+    }
+
+    // ==========================================
+    // CREATE TERMINATION REQUEST
+    // ==========================================
+
+    const request = await DailyLoanRequest.create({
+      requestType: "LOAN_TERMINATION",
+
+      loan: loan._id,
+
+      member: loan.member,
+
+      assignedAgent: loan.assignedAgent,
+
+      agentId,
+
+      reason:
+        reason ||
+        "Loan termination requested by agent",
+
+      status: "PENDING",
+
+      requestedAt: new Date(),
+    });
+
+    // ==========================================
+    // MARK LOAN AS PENDING TERMINATION
+    // ==========================================
+
+    loan.terminationStatus = "PENDING";
+
+    loan.terminationRequestedAt = new Date();
+
+    loan.terminationRequestedBy = agentId;
+
+    loan.terminationReason =
+      reason ||
+      "Loan termination requested by agent";
+
+    await loan.save();
+
+    return res.status(201).json({
+      success: true,
+
+      message:
+        "Loan termination request submitted successfully. Waiting for admin approval.",
+
+      request,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "TERMINATION REQUEST ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+exports.getLoanTerminationRequests = async (req, res) => {
+  try {
+
+    const requests =
+      await DailyLoanRequest.find({
+        requestType: "LOAN_TERMINATION",
+      })
+      .populate(
+        "loan",
+        "loanNumber loanAmount totalPaid outstandingAmount status loanType"
+      )
+      .populate(
+        "member",
+        "memberName memberId mobile"
+      )
+      .populate(
+        "assignedAgent",
+        "name mobile agentId"
+      )
+      .sort({
+        createdAt: -1,
+      });
+
+    return res.json({
+      success: true,
+      requests,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "GET TERMINATION REQUESTS ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+// ==========================================================
+// ADMIN - APPROVE LOAN TERMINATION
+// ==========================================================
+
+exports.approveLoanTermination = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const request =
+      await DailyLoanRequest.findById(id);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Termination request not found",
+      });
+    }
+
+    // ==========================================
+    // REQUEST TYPE
+    // ==========================================
+
+    if (
+      request.requestType !==
+      "LOAN_TERMINATION"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid termination request",
+      });
+    }
+
+    // ==========================================
+    // REQUEST STATUS
+    // ==========================================
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message:
+          `Request is already ${request.status}`,
+      });
+    }
+
+    // ==========================================
+    // FIND LOAN
+    // ==========================================
+
+    const loan =
+      await DailyLoan.findById(
+        request.loan
+      );
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found",
+      });
+    }
+
+    // ==========================================
+    // ALREADY CLOSED
+    // ==========================================
+
+    if (loan.status === "CLOSED") {
+
+      request.status = "APPROVED";
+
+      request.approvedAt = new Date();
+
+      request.approvedBy =
+        req.user?._id ||
+        req.user?.id ||
+        null;
+
+      await request.save();
+
+      return res.json({
+        success: true,
+        message: "Loan was already closed",
+        loan,
+      });
+    }
+
+    // ==========================================
+    // CLOSE LOAN
+    // ==========================================
+
+    loan.status = "CLOSED";
+
+    loan.terminationStatus = "APPROVED";
+
+    loan.terminationApprovedAt =
+      new Date();
+
+    loan.terminationApprovedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    // ==========================================
+    // REQUEST APPROVED
+    // ==========================================
+
+    request.status = "APPROVED";
+
+    request.approvedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.approvedAt =
+      new Date();
+
+    // ==========================================
+    // SAVE BOTH
+    // ==========================================
+
+    await loan.save();
+
+    await request.save();
+
+    return res.json({
+      success: true,
+
+      message:
+        "Loan termination approved successfully. Loan is now closed.",
+
+      loan,
+      request,
+    });
+
+  } catch (error) {
+
+    console.error(
+      "APPROVE TERMINATION ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+// ==========================================================
+// ADMIN - REJECT LOAN TERMINATION
+// ==========================================================
+
+exports.rejectLoanTermination = async (req, res) => {
+  try {
+
+    const { id } = req.params;
+
+    const {
+      rejectionReason,
+    } = req.body;
+
+    const request =
+      await DailyLoanRequest.findById(id);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Termination request not found",
+      });
+    }
+
+    if (
+      request.requestType !==
+      "LOAN_TERMINATION"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid termination request",
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message:
+          `Request is already ${request.status}`,
+      });
+    }
+
+    const loan =
+      await DailyLoan.findById(
+        request.loan
+      );
+
+    if (loan) {
+
+      loan.terminationStatus =
+        "REJECTED";
+
+      loan.terminationRejectedAt =
+        new Date();
+
+      loan.terminationRejectedBy =
+        req.user?._id ||
+        req.user?.id ||
+        null;
+
+      loan.terminationRejectionReason =
+        rejectionReason ||
+        "Termination request rejected by admin";
+
+      await loan.save();
+    }
+
+    request.status = "REJECTED";
+
+    request.rejectedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    request.rejectedAt =
+      new Date();
+
+    request.rejectionReason =
+      rejectionReason ||
+      "Termination request rejected by admin";
+
+    await request.save();
+
+    return res.json({
+      success: true,
+
+      message:
+        "Loan termination request rejected successfully",
+    });
+
+  } catch (error) {
+
+    console.error(
+      "REJECT TERMINATION ERROR:",
+      error
+    );
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// ==========================================================
 // ADMIN - APPROVE LOAN REQUEST
 // This is the ONLY point where actual DailyLoan is created.
 // ==========================================================

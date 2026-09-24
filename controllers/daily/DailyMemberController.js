@@ -212,7 +212,9 @@ GET SINGLE MEMBER
 
 exports.getMemberProfile = async (req, res) => {
   try {
+
     const member = await DailyMember.findById(req.params.id)
+      .select("-password")
       .populate("areaGroup", "areaName")
       .populate("assignedAgent", "name mobile");
 
@@ -244,57 +246,197 @@ UPDATE MEMBER
 */
 
 exports.updateMember = async (req, res) => {
-
   try {
+    const memberId = req.params.id;
 
-    const member = await DailyMember.findByIdAndUpdate(
+    const {
+      memberId: newMemberId,
+      memberName,
+      fatherName,
+      gender,
+      dob,
+      email,
+      mobile,
+      password,
+      alternateMobile,
+      residentialAddress,
+      city,
+      district,
+      state,
+      pincode,
+      status,
+      areaGroup,
+    } = req.body;
 
-      req.params.id,
+    // =========================
+    // FIND MEMBER
+    // =========================
 
-      req.body,
-
-      {
-        new: true,
-        runValidators: true
-      }
-
-    );
+    const member = await DailyMember.findById(memberId);
 
     if (!member) {
-
       return res.status(404).json({
-
         success: false,
-
-        message: "Member Not Found"
-
+        message: "Member Not Found",
       });
-
     }
 
-    res.status(200).json({
+    // =========================
+    // DUPLICATE MEMBER ID CHECK
+    // =========================
 
+    if (newMemberId && newMemberId !== member.memberId) {
+      const existingMemberId = await DailyMember.findOne({
+        memberId: newMemberId,
+        _id: { $ne: memberId },
+      });
+
+      if (existingMemberId) {
+        return res.status(400).json({
+          success: false,
+          message: "Member ID already exists",
+        });
+      }
+    }
+
+    // =========================
+    // DUPLICATE MOBILE CHECK
+    // =========================
+
+    if (mobile && mobile !== member.mobile) {
+      const existingMobile = await DailyMember.findOne({
+        mobile,
+        _id: { $ne: memberId },
+      });
+
+      if (existingMobile) {
+        return res.status(400).json({
+          success: false,
+          message: "Mobile Number already exists",
+        });
+      }
+    }
+
+    // =========================
+    // AREA + AGENT
+    // =========================
+
+    if (areaGroup) {
+      const area = await AreaGroup
+        .findById(areaGroup)
+        .populate("assignedAgent");
+
+      if (!area) {
+        return res.status(404).json({
+          success: false,
+          message: "Selected Area not found",
+        });
+      }
+
+      // Area must have an agent
+      if (!area.assignedAgent) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Selected Area does not have an Agent assigned",
+        });
+      }
+
+      // Automatically update both
+      member.areaGroup = area._id;
+      member.assignedAgent = area.assignedAgent._id;
+    }
+
+    // =========================
+    // UPDATE BASIC DETAILS
+    // =========================
+
+    if (newMemberId !== undefined)
+      member.memberId = newMemberId;
+
+    if (memberName !== undefined)
+      member.memberName = memberName;
+
+    if (fatherName !== undefined)
+      member.fatherName = fatherName;
+
+    if (gender !== undefined)
+      member.gender = gender;
+
+    if (dob !== undefined)
+      member.dob = dob || null;
+
+    if (email !== undefined)
+      member.email = email;
+
+    if (mobile !== undefined)
+      member.mobile = mobile;
+
+    if (alternateMobile !== undefined)
+      member.alternateMobile = alternateMobile;
+
+    if (residentialAddress !== undefined)
+      member.residentialAddress = residentialAddress;
+
+    if (city !== undefined)
+      member.city = city;
+
+    if (district !== undefined)
+      member.district = district;
+
+    if (state !== undefined)
+      member.state = state;
+
+    if (pincode !== undefined)
+      member.pincode = pincode;
+
+    if (status !== undefined)
+      member.status = status;
+
+    // =========================
+    // PASSWORD
+    // =========================
+
+    // Only change password if user entered
+    // a new password.
+    if (password && password.trim()) {
+      member.password = password;
+    }
+
+    // =========================
+    // SAVE MEMBER
+    // =========================
+
+    await member.save();
+
+    // =========================
+    // RESPONSE
+    // =========================
+
+    const responseMember = member.toObject();
+
+    // Never send password
+    delete responseMember.password;
+
+    return res.status(200).json({
       success: true,
-
       message: "Member Updated Successfully",
-
-      member
-
+      member: responseMember,
     });
 
   } catch (error) {
+    console.error(
+      "UPDATE MEMBER ERROR:",
+      error
+    );
 
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
-      message: error.message
-
+      message: error.message,
     });
-
   }
-
 };
+
 
 /*
 ==================================
@@ -717,6 +859,25 @@ exports.approveMemberRequest = async (req, res) => {
         message: "Member ID or Mobile Number already exists"
       });
     }
+
+
+const area = await AreaGroup.findById(
+  request.areaGroup
+).populate("assignedAgent");
+
+if (!area) {
+  return res.status(404).json({
+    success: false,
+    message: "Selected Area not found",
+  });
+}
+
+if (!area.assignedAgent) {
+  return res.status(400).json({
+    success: false,
+    message: "Selected Area does not have an Agent assigned",
+  });
+}
 
     // =========================
     // CREATE REAL MEMBER
