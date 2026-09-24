@@ -217,7 +217,7 @@ router.put(
 
 // Agent → Request loan termination
 router.post(
-  "/loan-termination-request",
+  "/loan-termination-request/:loanId",
   requestLoanTermination
 );
 
