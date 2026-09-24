@@ -2,6 +2,16 @@ const mongoose = require("mongoose");
 
 const dailyLoanRequestSchema = new mongoose.Schema(
   {
+
+
+requestType: {
+  type: String,
+  enum: ["LOAN_CREATE", "LOAN_TERMINATION"],
+  default: "LOAN_CREATE",
+  required: true
+},
+
+
     // ==========================================
     // MEMBER
     // ==========================================
@@ -94,29 +104,41 @@ const dailyLoanRequestSchema = new mongoose.Schema(
     // ==========================================
     // REQUESTED LOAN DETAILS
     // ==========================================
+loanAmount: {
+  type: Number,
+  required: function () {
+    return this.requestType === "LOAN_CREATE";
+  },
+  min: 1
+},
 
-    loanAmount: {
-      type: Number,
-      required: true,
-      min: 1
-    },
+interestRate: {
+  type: Number,
+  required: function () {
+    return this.requestType === "LOAN_CREATE";
+  },
+  min: 0
+},
 
-    interestRate: {
-      type: Number,
-      required: true,
-      min: 0
-    },
+loanType: {
+  type: String,
+  enum: [
+    "DAILY",
+    "WEEKLY",
+    "MONTHLY",
+    "FIXED"
+  ],
+  required: function () {
+    return this.requestType === "LOAN_CREATE";
+  }
+},
 
-    loanType: {
-      type: String,
-      enum: [
-        "DAILY",
-        "WEEKLY",
-        "MONTHLY",
-        "FIXED"
-      ],
-      required: true
-    },
+loanDate: {
+  type: Date,
+  required: function () {
+    return this.requestType === "LOAN_CREATE";
+  }
+},
 
     durationDays: {
       type: Number,
@@ -138,10 +160,7 @@ const dailyLoanRequestSchema = new mongoose.Schema(
       default: 10
     },
 
-    loanDate: {
-      type: Date,
-      required: true
-    },
+    
 
     startDate: {
       type: Date,
