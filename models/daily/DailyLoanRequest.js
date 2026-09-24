@@ -4,11 +4,37 @@ const dailyLoanRequestSchema = new mongoose.Schema(
   {
 
 
+// ==========================================
+// TERMINATION REQUEST DETAILS
+// ==========================================
+
 requestType: {
   type: String,
   enum: ["LOAN_CREATE", "LOAN_TERMINATION"],
   default: "LOAN_CREATE",
   required: true
+},
+
+loan: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailyLoan",
+  default: null
+},
+
+agentId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "DailyAgent",
+  default: null
+},
+
+reason: {
+  type: String,
+  default: ""
+},
+
+requestedAt: {
+  type: Date,
+  default: null
 },
 
 
