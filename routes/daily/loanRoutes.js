@@ -36,9 +36,9 @@ const {
   getLoanRequestsByAgent,
   approveLoanRequest,
   rejectLoanRequest,
-  createLoanTerminationRequest,
-approveLoanTerminationRequest,
-rejectLoanTerminationRequest,
+  requestLoanTermination,
+approveLoanTermination,
+rejectLoanTermination,
 
 
 } = require("../../controllers/daily/loanController");
@@ -218,19 +218,19 @@ router.put(
 // Agent → Request loan termination
 router.post(
   "/loan-termination-request",
-  createLoanTerminationRequest
+  requestLoanTermination
 );
 
 // Admin → Approve loan termination
 router.put(
   "/loan-termination-request/:id/approve",
-  approveLoanTerminationRequest
+  approveLoanTermination
 );
 
 // Admin → Reject loan termination
 router.put(
   "/loan-termination-request/:id/reject",
-  rejectLoanTerminationRequest
+  rejectLoanTermination
 );
 
 module.exports =
