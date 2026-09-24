@@ -15,7 +15,6 @@ name,
 fatherOrHusbandName,
 gender,
 dob,
-
 mobile,
 alternateMobile,
 email,
@@ -23,11 +22,10 @@ joiningDate,
 address,
 pinCode,
 city,
+ password, 
 district,
 state,
-
 aadhaarNumber,
-
 nomineeName,
 nomineeMobile,
   monthlyInstallment,
@@ -48,18 +46,21 @@ nomineeMobile,
 
     }
 
-    const existingMember = await Member.findOne({ memberId });
+   const existingMember = await Member.findOne({
+  $or: [
+    { memberId: String(memberId).trim() },
+    { mobile: String(mobile).trim() }
+  ]
+});
 
 if (existingMember) {
-
   return res.status(400).json({
-
     success: false,
-
-    message: "Member ID already exists."
-
+    message:
+      existingMember.memberId === String(memberId).trim()
+        ? "Member ID already exists."
+        : "Mobile number already registered."
   });
-
 }
 
     const society =
@@ -120,7 +121,7 @@ const memberJoiningDate = new Date(joiningDate);
   city,
   district,
   state,
-
+ password: password ? String(password).trim() : "",
   aadhaarNumber,
 
   nomineeName,
