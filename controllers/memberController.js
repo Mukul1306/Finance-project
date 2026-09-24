@@ -129,7 +129,7 @@ const memberDueDay = memberJoiningDate.getDate();
   nomineeName,
   nomineeMobile,
 
-  dueDay,
+   dueDay: memberDueDay,
 
   joiningDate: memberJoiningDate,
 
