@@ -79,9 +79,11 @@ if (existingMember) {
 
     }
 
-    const installmentAmount =
-    Number(monthlyInstallment);
+    const installmentAmount = Number(monthlyInstallment);
+
 const memberJoiningDate = new Date(joiningDate);
+
+const memberDueDay = memberJoiningDate.getDate();
 
     const memberEndDate =
     new Date(joiningDate);
