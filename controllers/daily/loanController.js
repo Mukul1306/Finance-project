@@ -7796,67 +7796,67 @@ exports.approveLoanTermination = async (req, res) => {
 
 exports.rejectLoanTermination = async (req, res) => {
   try {
-
     const { id } = req.params;
 
-    const {
-      rejectionReason,
-    } = req.body;
-
-    const request =
-      await DailyLoanRequest.findById(id);
+    const request = await DailyLoanRequest.findById(id);
 
     if (!request) {
       return res.status(404).json({
         success: false,
-        message:
-          "Termination request not found",
+        message: "Termination request not found"
       });
     }
 
-    if (
-      request.requestType !==
-      "LOAN_TERMINATION"
-    ) {
+    if (request.requestType !== "LOAN_TERMINATION") {
       return res.status(400).json({
         success: false,
-        message:
-          "Invalid termination request",
+        message: "Invalid request type"
       });
     }
 
     if (request.status !== "PENDING") {
       return res.status(400).json({
         success: false,
-        message:
-          `Request is already ${request.status}`,
+        message: "Request has already been processed"
       });
     }
 
-    const loan =
-      await DailyLoan.findById(
-        request.loan
-      );
+    const loan = await DailyLoan.findById(request.loan);
 
-    if (loan) {
-
-      loan.terminationStatus =
-        "REJECTED";
-
-      loan.terminationRejectedAt =
-        new Date();
-
-      loan.terminationRejectedBy =
-        req.user?._id ||
-        req.user?.id ||
-        null;
-
-      loan.terminationRejectionReason =
-        rejectionReason ||
-        "Termination request rejected by admin";
-
-      await loan.save();
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found"
+      });
     }
+
+    // ==========================================
+    // REJECT TERMINATION
+    // ==========================================
+
+    loan.terminationStatus = "REJECTED";
+
+    loan.terminationRejectedAt = new Date();
+
+    loan.terminationRejectedBy =
+      req.user?._id ||
+      req.user?.id ||
+      null;
+
+    loan.terminationRejectionReason =
+      req.body?.reason ||
+      req.body?.rejectionReason ||
+      "Termination request rejected by admin";
+
+    // IMPORTANT:
+    // Do NOT change actual loan status
+    // Loan remains ACTIVE / DUE / OVERDUE
+
+    await loan.save();
+
+    // ==========================================
+    // UPDATE REQUEST
+    // ==========================================
 
     request.status = "REJECTED";
 
@@ -7865,32 +7865,28 @@ exports.rejectLoanTermination = async (req, res) => {
       req.user?.id ||
       null;
 
-    request.rejectedAt =
-      new Date();
+    request.rejectedAt = new Date();
 
     request.rejectionReason =
-      rejectionReason ||
+      req.body?.reason ||
+      req.body?.rejectionReason ||
       "Termination request rejected by admin";
 
     await request.save();
 
     return res.json({
       success: true,
-
-      message:
-        "Loan termination request rejected successfully",
+      message: "Loan termination request rejected successfully",
+      loan,
+      request
     });
 
   } catch (error) {
-
-    console.error(
-      "REJECT TERMINATION ERROR:",
-      error
-    );
+    console.error("REJECT TERMINATION ERROR:", error);
 
     return res.status(500).json({
       success: false,
-      message: error.message,
+      message: error.message
     });
   }
 };
