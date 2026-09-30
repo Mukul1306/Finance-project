@@ -2224,10 +2224,10 @@ if (loan.loanType === "DAILY") {
 
 else if (loan.loanType === "WEEKLY") {
 
-  dueTillToday = Math.floor(
-    (today - loanDate) /
-    (1000 * 60 * 60 * 24 * 7)
-  ) + 1;
+    dueTillToday = Math.floor(
+        (today - loanDate) /
+        (1000 * 60 * 60 * 24 * 7)
+    );
 
 }
 
