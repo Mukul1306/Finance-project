@@ -1,10 +1,8 @@
 const DailyMember = require("../../models/daily/DailyMember");
 const DailySaving = require("../../models/daily/DailySaving");
 const DailyTransaction = require("../../models/daily/DailyTransaction");
-
 const DailyLoan = require("../../models/daily/DailyLoan");
 const LoanCollection = require("../../models/daily/LoanCollection");
-
 
 // ======================================================
 // HELPER: MONTHLY / FIXED LOAN PENALTY
@@ -18,7 +16,6 @@ const calculateMonthlyFixedPenalty = ({
     penaltyValue,
     penaltyBase
 }) => {
-
     const due = new Date(dueDate);
     due.setHours(0, 0, 0, 0);
 
@@ -43,13 +40,12 @@ const calculateMonthlyFixedPenalty = ({
     const monthlyPenalty =
         penaltyType === "PERCENTAGE"
             ? Math.round(
-                (
-                    Number(penaltyBase) *
-                    Number(penaltyValue || 0)
-                ) / 100
-            )
+                  (
+                      Number(penaltyBase) *
+                      Number(penaltyValue || 0)
+                  ) / 100
+              )
             : Number(penaltyValue || 0);
-
 
     const penaltyMonths =
         (
@@ -62,10 +58,78 @@ const calculateMonthlyFixedPenalty = ({
         ) +
         1;
 
-
     return monthlyPenalty * penaltyMonths;
 };
 
+
+// ======================================================
+// HELPER: START OF DAY
+// ======================================================
+
+const startOfDay = (date) => {
+    const d = new Date(date);
+
+    d.setHours(0, 0, 0, 0);
+
+    return d;
+};
+
+
+// ======================================================
+// HELPER: DIFFERENCE IN DAYS
+// ======================================================
+
+const differenceInDays = (fromDate, toDate) => {
+    const from = startOfDay(fromDate);
+    const to = startOfDay(toDate);
+
+    return Math.floor(
+        (to - from) /
+        (1000 * 60 * 60 * 24)
+    );
+};
+
+
+// ======================================================
+// HELPER: ADD DAYS
+// ======================================================
+
+const addDays = (date, days) => {
+    const d = new Date(date);
+
+    d.setDate(
+        d.getDate() + Number(days || 0)
+    );
+
+    return d;
+};
+
+
+// ======================================================
+// HELPER: ADD WEEKS
+// ======================================================
+
+const addWeeks = (date, weeks) => {
+    return addDays(
+        date,
+        Number(weeks || 0) * 7
+    );
+};
+
+
+// ======================================================
+// HELPER: DATE KEY
+// ======================================================
+
+const getDateKey = (date) => {
+    const d = startOfDay(date);
+
+    return `${d.getFullYear()}-${String(
+        d.getMonth() + 1
+    ).padStart(2, "0")}-${String(
+        d.getDate()
+    ).padStart(2, "0")}`;
+};
 
 
 // ======================================================
@@ -80,9 +144,7 @@ exports.getPenaltyManagement = async (req, res) => {
         // TODAY
         // ==================================================
 
-        const today = new Date();
-
-        today.setHours(0, 0, 0, 0);
+        const today = startOfDay(new Date());
 
 
         // ==================================================
@@ -95,15 +157,26 @@ exports.getPenaltyManagement = async (req, res) => {
             1
         );
 
+        firstDayOfMonth.setHours(0, 0, 0, 0);
+
+
         const firstDayOfNextMonth = new Date(
             today.getFullYear(),
             today.getMonth() + 1,
             1
         );
 
+        firstDayOfNextMonth.setHours(0, 0, 0, 0);
+
 
         // ==================================================
-        // FETCH ALL DATA
+        // FETCH DATA
+        // ==================================================
+        //
+        // IMPORTANT:
+        // lean() avoids Mongoose document overhead.
+        //
+        // Only required fields are selected.
         // ==================================================
 
         const [
@@ -115,49 +188,73 @@ exports.getPenaltyManagement = async (req, res) => {
         ] = await Promise.all([
 
             DailyMember.find()
-                .select("memberId memberName mobile")
-                .sort({ createdAt: -1 }),
+                .select(
+                    "_id memberId memberName mobile"
+                )
+                .sort({ createdAt: -1 })
+                .lean(),
 
-            DailySaving.find(),
+            DailySaving.find()
+                .select(
+                    "_id member startDate endDate " +
+                    "graceDays penaltyType penaltyValue " +
+                    "collectionType fixedAmount"
+                )
+                .lean(),
 
             DailyTransaction.find()
                 .select(
-                    "savingAccount member collectionDate penalty"
-                ),
+                    "_id savingAccount member collectionDate penalty"
+                )
+                .lean(),
 
             DailyLoan.find({
                 status: {
-                    $in: ["ACTIVE", "OVERDUE"]
+                    $in: [
+                        "ACTIVE",
+                        "OVERDUE"
+                    ]
                 }
-            }),
+            })
+                .select(
+                    "_id member loanType loanDate " +
+                    "durationDays durationWeeks " +
+                    "durationMonths loanTenureMonths " +
+                    "gracePeriod penaltyType penaltyValue " +
+                    "emiAmount totalInterest"
+                )
+                .lean(),
 
             LoanCollection.find()
                 .select(
-                    "loan member installmentNo paymentDate penalty"
+                    "_id loan member installmentNo " +
+                    "paymentDate penalty"
                 )
-
+                .lean()
         ]);
 
 
         // ==================================================
-        // CREATE MEMBER MAP
+        // MEMBER MAP
         // ==================================================
 
         const memberMap = new Map();
 
-
-        members.forEach(member => {
+        for (const member of members) {
 
             memberMap.set(
                 member._id.toString(),
                 {
                     _id: member._id,
 
-                    memberId: member.memberId,
+                    memberId:
+                        member.memberId,
 
-                    memberName: member.memberName,
+                    memberName:
+                        member.memberName,
 
-                    mobile: member.mobile,
+                    mobile:
+                        member.mobile,
 
                     dailyPenaltyPending: 0,
 
@@ -167,29 +264,83 @@ exports.getPenaltyManagement = async (req, res) => {
                 }
             );
 
-        });
-
+        }
 
 
         // ==================================================
         // DAILY TRANSACTION MAP
+        //
         // savingId -> transactions
         // ==================================================
 
-        const dailyTransactionMap = new Map();
+        const dailyTransactionMap =
+            new Map();
+
+        // Total daily penalty collected
+        let dailyPenaltyCollected = 0;
+
+        // Daily penalty collected this month
+        let dailyPenaltyThisMonth = 0;
 
 
-        dailyTransactions.forEach(transaction => {
+        for (const transaction of dailyTransactions) {
 
-            if (!transaction.savingAccount) {
-                return;
+            const penalty =
+                Number(
+                    transaction.penalty || 0
+                );
+
+            dailyPenaltyCollected += penalty;
+
+
+            // ----------------------------------------------
+            // THIS MONTH
+            // ----------------------------------------------
+
+            if (
+                transaction.collectionDate
+            ) {
+
+                const collectionDate =
+                    new Date(
+                        transaction.collectionDate
+                    );
+
+                if (
+                    collectionDate >=
+                        firstDayOfMonth &&
+                    collectionDate <
+                        firstDayOfNextMonth
+                ) {
+
+                    dailyPenaltyThisMonth +=
+                        penalty;
+
+                }
+
             }
+
+
+            // ----------------------------------------------
+            // MAP BY SAVING ACCOUNT
+            // ----------------------------------------------
+
+            if (
+                !transaction.savingAccount
+            ) {
+                continue;
+            }
+
 
             const savingId =
                 transaction.savingAccount.toString();
 
 
-            if (!dailyTransactionMap.has(savingId)) {
+            if (
+                !dailyTransactionMap.has(
+                    savingId
+                )
+            ) {
 
                 dailyTransactionMap.set(
                     savingId,
@@ -203,29 +354,85 @@ exports.getPenaltyManagement = async (req, res) => {
                 .get(savingId)
                 .push(transaction);
 
-        });
-
+        }
 
 
         // ==================================================
         // LOAN COLLECTION MAP
+        //
         // loanId -> collections
         // ==================================================
 
-        const loanCollectionMap = new Map();
+        const loanCollectionMap =
+            new Map();
 
 
-        loanCollections.forEach(collection => {
+        // Total loan penalty collected
+        let loanPenaltyCollected = 0;
 
-            if (!collection.loan) {
-                return;
+        // Loan penalty collected this month
+        let loanPenaltyThisMonth = 0;
+
+
+        for (const collection of loanCollections) {
+
+            const penalty =
+                Number(
+                    collection.penalty || 0
+                );
+
+
+            loanPenaltyCollected += penalty;
+
+
+            // ----------------------------------------------
+            // THIS MONTH
+            // ----------------------------------------------
+
+            if (
+                collection.paymentDate
+            ) {
+
+                const paymentDate =
+                    new Date(
+                        collection.paymentDate
+                    );
+
+                if (
+                    paymentDate >=
+                        firstDayOfMonth &&
+                    paymentDate <
+                        firstDayOfNextMonth
+                ) {
+
+                    loanPenaltyThisMonth +=
+                        penalty;
+
+                }
+
             }
+
+
+            // ----------------------------------------------
+            // MAP BY LOAN
+            // ----------------------------------------------
+
+            if (
+                !collection.loan
+            ) {
+                continue;
+            }
+
 
             const loanId =
                 collection.loan.toString();
 
 
-            if (!loanCollectionMap.has(loanId)) {
+            if (
+                !loanCollectionMap.has(
+                    loanId
+                )
+            ) {
 
                 loanCollectionMap.set(
                     loanId,
@@ -239,120 +446,7 @@ exports.getPenaltyManagement = async (req, res) => {
                 .get(loanId)
                 .push(collection);
 
-        });
-
-
-
-        // ==================================================
-        // DAILY PENALTY COLLECTED
-        // ==================================================
-
-        const dailyPenaltyCollected =
-            dailyTransactions.reduce(
-                (total, transaction) => {
-
-                    return (
-                        total +
-                        Number(transaction.penalty || 0)
-                    );
-
-                },
-                0
-            );
-
-
-
-        // ==================================================
-        // DAILY PENALTY THIS MONTH
-        // ==================================================
-
-        const dailyPenaltyThisMonth =
-            dailyTransactions
-                .filter(transaction => {
-
-                    if (!transaction.collectionDate) {
-                        return false;
-                    }
-
-                    const date =
-                        new Date(
-                            transaction.collectionDate
-                        );
-
-                    return (
-                        date >= firstDayOfMonth &&
-                        date < firstDayOfNextMonth
-                    );
-
-                })
-                .reduce(
-                    (total, transaction) => {
-
-                        return (
-                            total +
-                            Number(transaction.penalty || 0)
-                        );
-
-                    },
-                    0
-                );
-
-
-
-        // ==================================================
-        // LOAN PENALTY COLLECTED
-        // ==================================================
-
-        const loanPenaltyCollected =
-            loanCollections.reduce(
-                (total, collection) => {
-
-                    return (
-                        total +
-                        Number(collection.penalty || 0)
-                    );
-
-                },
-                0
-            );
-
-
-
-        // ==================================================
-        // LOAN PENALTY THIS MONTH
-        // ==================================================
-
-        const loanPenaltyThisMonth =
-            loanCollections
-                .filter(collection => {
-
-                    if (!collection.paymentDate) {
-                        return false;
-                    }
-
-                    const date =
-                        new Date(
-                            collection.paymentDate
-                        );
-
-                    return (
-                        date >= firstDayOfMonth &&
-                        date < firstDayOfNextMonth
-                    );
-
-                })
-                .reduce(
-                    (total, collection) => {
-
-                        return (
-                            total +
-                            Number(collection.penalty || 0)
-                        );
-
-                    },
-                    0
-                );
-
+        }
 
 
         // ==================================================
@@ -379,45 +473,9 @@ exports.getPenaltyManagement = async (req, res) => {
             }
 
 
-            const transactions =
-                dailyTransactionMap.get(
-                    saving._id.toString()
-                ) || [];
-
-
-            // ==============================================
-            // PAID DATE SET
-            // ==============================================
-
-            const paidDates = new Set();
-
-
-            transactions.forEach(transaction => {
-
-                if (!transaction.collectionDate) {
-                    return;
-                }
-
-
-                const date =
-                    new Date(
-                        transaction.collectionDate
-                    );
-
-                date.setHours(0, 0, 0, 0);
-
-
-                paidDates.add(
-                    date.getTime()
-                );
-
-            });
-
-
-
-            // ==============================================
+            // ----------------------------------------------
             // START DATE
-            // ==============================================
+            // ----------------------------------------------
 
             if (!saving.startDate) {
                 continue;
@@ -425,173 +483,291 @@ exports.getPenaltyManagement = async (req, res) => {
 
 
             const startDate =
-                new Date(saving.startDate);
+                startOfDay(
+                    saving.startDate
+                );
 
-            startDate.setHours(0, 0, 0, 0);
 
-
-
-            // ==============================================
+            // ----------------------------------------------
             // END DATE
-            // ==============================================
+            // ----------------------------------------------
 
-            let endDate = today;
+            let endDate =
+                new Date(today);
 
 
             if (saving.endDate) {
 
                 endDate =
-                    new Date(saving.endDate);
+                    startOfDay(
+                        saving.endDate
+                    );
 
-                endDate.setHours(0, 0, 0, 0);
 
+                if (
+                    endDate > today
+                ) {
 
-                if (endDate > today) {
-                    endDate = today;
+                    endDate =
+                        new Date(today);
+
                 }
 
             }
 
 
-
-            // ==============================================
-            // LOOP EVERY DUE DAY
-            // ==============================================
-
-            let current =
-                new Date(startDate);
-
-
-            while (current <= endDate) {
-
-                const currentTime =
-                    current.getTime();
+            // If saving starts after today
+            if (
+                startDate > endDate
+            ) {
+                continue;
+            }
 
 
-                // Already collected
-                if (paidDates.has(currentTime)) {
+            // ----------------------------------------------
+            // GRACE DAYS
+            // ----------------------------------------------
 
-                    current.setDate(
-                        current.getDate() + 1
-                    );
+            const graceDays =
+                Number(
+                    saving.graceDays || 0
+                );
 
+
+            // ==================================================
+            // PAID DATE SET
+            // ==================================================
+
+            const transactions =
+                dailyTransactionMap.get(
+                    saving._id.toString()
+                ) || [];
+
+
+            const paidDates =
+                new Set();
+
+
+            for (
+                const transaction
+                of transactions
+            ) {
+
+                if (
+                    !transaction.collectionDate
+                ) {
                     continue;
                 }
 
 
-
-                // ==========================================
-                // DELAY
-                // ==========================================
-
-                const delay =
-                    Math.floor(
-                        (
-                            today -
-                            current
-                        ) /
-                        (1000 * 60 * 60 * 24)
-                    );
-
-
-
-                // Still within grace period
-                if (
-                    delay <=
-                    Number(saving.graceDays || 0)
-                ) {
-
-                    current.setDate(
-                        current.getDate() + 1
-                    );
-
-                    continue;
-                }
-
-
-
-                // ==========================================
-                // CALCULATE DAILY PENALTY
-                // ==========================================
-
-                let penalty = 0;
-
-
-                // FIXED PENALTY
-                if (
-                    saving.penaltyType === "FIXED"
-                ) {
-
-                    penalty =
-                        Number(
-                            saving.penaltyValue || 0
-                        );
-
-                }
-
-
-                // PERCENTAGE PENALTY
-                else if (
-                    saving.penaltyType === "PERCENTAGE"
-                ) {
-
-                    /*
-                     * IMPORTANT:
-                     *
-                     * Percentage pending penalty can only
-                     * be calculated accurately when the
-                     * expected daily amount is available.
-                     *
-                     * For FIXED collection type, use
-                     * fixedAmount.
-                     */
-
-                    if (
-                        saving.collectionType === "FIXED"
-                    ) {
-
-                        penalty =
-                            Math.round(
-                                (
-                                    Number(
-                                        saving.fixedAmount || 0
-                                    ) *
-                                    Number(
-                                        saving.penaltyValue || 0
-                                    )
-                                ) / 100
-                            );
-
-                    } else {
-
-                        /*
-                         * No fixed expected amount exists
-                         * for flexible collection.
-                         *
-                         * Therefore don't invent a
-                         * penalty amount.
-                         */
-
-                        penalty = 0;
-
-                    }
-
-                }
-
-
-                member.dailyPenaltyPending +=
-                    penalty;
-
-
-
-                current.setDate(
-                    current.getDate() + 1
+                paidDates.add(
+                    getDateKey(
+                        transaction.collectionDate
+                    )
                 );
 
             }
 
-        }
 
+            // ==================================================
+            // LAST DATE WHERE PENALTY CAN START
+            // ==================================================
+            //
+            // Original logic:
+            //
+            // delay <= graceDays
+            // means NO penalty.
+            //
+            // Therefore penalty starts after:
+            //
+            // dueDate + graceDays
+            //
+            // ==================================================
+
+            const penaltyEligibleEnd =
+                addDays(
+                    today,
+                    -graceDays - 1
+                );
+
+
+            const effectiveEnd =
+                penaltyEligibleEnd <
+                    endDate
+                    ? penaltyEligibleEnd
+                    : endDate;
+
+
+            if (
+                effectiveEnd < startDate
+            ) {
+                continue;
+            }
+
+
+            // ==================================================
+            // FIXED / PERCENTAGE PENALTY
+            // ==================================================
+
+            let penaltyPerDay = 0;
+
+
+            if (
+                saving.penaltyType ===
+                "FIXED"
+            ) {
+
+                penaltyPerDay =
+                    Number(
+                        saving.penaltyValue || 0
+                    );
+
+            }
+
+            else if (
+                saving.penaltyType ===
+                "PERCENTAGE"
+            ) {
+
+                // ------------------------------------------
+                // FIXED COLLECTION
+                // ------------------------------------------
+
+                if (
+                    saving.collectionType ===
+                    "FIXED"
+                ) {
+
+                    penaltyPerDay =
+                        Math.round(
+                            (
+                                Number(
+                                    saving.fixedAmount ||
+                                    0
+                                ) *
+                                Number(
+                                    saving.penaltyValue ||
+                                    0
+                                )
+                            ) / 100
+                        );
+
+                }
+
+                // ------------------------------------------
+                // FLEXIBLE COLLECTION
+                // ------------------------------------------
+                //
+                // Same as original:
+                // do not invent a penalty.
+                // ------------------------------------------
+
+                else {
+
+                    penaltyPerDay = 0;
+
+                }
+
+            }
+
+
+            // ==================================================
+            // IF PENALTY IS ZERO
+            // ==================================================
+
+            if (
+                penaltyPerDay <= 0
+            ) {
+                continue;
+            }
+
+
+            // ==================================================
+            // TOTAL POSSIBLE DUE DAYS
+            // ==================================================
+
+            const totalEligibleDays =
+                differenceInDays(
+                    startDate,
+                    effectiveEnd
+                ) + 1;
+
+
+            if (
+                totalEligibleDays <= 0
+            ) {
+                continue;
+            }
+
+
+            // ==================================================
+            // REMOVE PAID DAYS
+            // ==================================================
+
+            let unpaidEligibleDays =
+                totalEligibleDays;
+
+
+            // We only need to check paid dates.
+            // This is much cheaper than looping every
+            // calendar day from startDate to today.
+            // ==================================================
+
+            for (
+                const paidDateKey
+                of paidDates
+            ) {
+
+                const parts =
+                    paidDateKey.split("-");
+
+
+                if (
+                    parts.length !== 3
+                ) {
+                    continue;
+                }
+
+
+                const paidDate =
+                    new Date(
+                        Number(parts[0]),
+                        Number(parts[1]) - 1,
+                        Number(parts[2])
+                    );
+
+
+                paidDate.setHours(
+                    0,
+                    0,
+                    0,
+                    0
+                );
+
+
+                if (
+                    paidDate >= startDate &&
+                    paidDate <= effectiveEnd
+                ) {
+
+                    unpaidEligibleDays--;
+
+                }
+
+            }
+
+
+            if (
+                unpaidEligibleDays > 0
+            ) {
+
+                member.dailyPenaltyPending +=
+                    unpaidEligibleDays *
+                    penaltyPerDay;
+
+            }
+
+        }
 
 
         // ==================================================
@@ -624,35 +800,48 @@ exports.getPenaltyManagement = async (req, res) => {
                 ) || [];
 
 
-
-            // ==============================================
+            // ==================================================
             // PAID INSTALLMENTS
-            // ==============================================
+            // ==================================================
 
-            const paidInstallments = new Set();
+            const paidInstallments =
+                new Set();
 
 
-            collections.forEach(collection => {
+            for (
+                const collection
+                of collections
+            ) {
 
-                paidInstallments.add(
+                const installmentNo =
                     Number(
                         collection.installmentNo
-                    )
-                );
-
-            });
+                    );
 
 
+                if (
+                    installmentNo > 0
+                ) {
 
-            // ==============================================
+                    paidInstallments.add(
+                        installmentNo
+                    );
+
+                }
+
+            }
+
+
+            // ==================================================
             // TOTAL INSTALLMENTS
-            // ==============================================
+            // ==================================================
 
             let totalInstallments = 0;
 
 
             if (
-                loan.loanType === "DAILY"
+                loan.loanType ===
+                "DAILY"
             ) {
 
                 totalInstallments =
@@ -663,7 +852,8 @@ exports.getPenaltyManagement = async (req, res) => {
             }
 
             else if (
-                loan.loanType === "WEEKLY"
+                loan.loanType ===
+                "WEEKLY"
             ) {
 
                 totalInstallments =
@@ -674,7 +864,8 @@ exports.getPenaltyManagement = async (req, res) => {
             }
 
             else if (
-                loan.loanType === "MONTHLY"
+                loan.loanType ===
+                "MONTHLY"
             ) {
 
                 totalInstallments =
@@ -685,7 +876,8 @@ exports.getPenaltyManagement = async (req, res) => {
             }
 
             else if (
-                loan.loanType === "FIXED"
+                loan.loanType ===
+                "FIXED"
             ) {
 
                 totalInstallments =
@@ -696,77 +888,217 @@ exports.getPenaltyManagement = async (req, res) => {
             }
 
 
+            if (
+                totalInstallments <= 0
+            ) {
+                continue;
+            }
 
-            // =================================================
-            // CHECK EVERY INSTALLMENT
-            // =================================================
 
-            for (
-                let installmentNo = 1;
-                installmentNo <= totalInstallments;
-                installmentNo++
+            // ==================================================
+            // DAILY / WEEKLY
+            // ==================================================
+            //
+            // These penalties are fixed per overdue
+            // installment, so we can calculate the count
+            // without unnecessary date processing.
+            //
+            // ==================================================
+
+            if (
+                loan.loanType === "DAILY" ||
+                loan.loanType === "WEEKLY"
             ) {
 
-
-                // =============================================
-                // ALREADY PAID
-                // =============================================
-
-                if (
-                    paidInstallments.has(
-                        installmentNo
-                    )
-                ) {
-
-                    continue;
-
-                }
+                let dueInterval =
+                    loan.loanType ===
+                    "DAILY"
+                        ? 1
+                        : 7;
 
 
-
-                // =============================================
-                // CALCULATE DUE DATE
-                // =============================================
-
-                const dueDate =
-                    new Date(loan.loanDate);
-
-
-                if (
-                    loan.loanType === "DAILY"
-                ) {
-
-                    dueDate.setDate(
-                        dueDate.getDate() +
-                        (installmentNo - 1)
+                const loanDate =
+                    startOfDay(
+                        loan.loanDate
                     );
 
-                }
 
-                else if (
-                    loan.loanType === "WEEKLY"
+                const gracePeriod =
+                    Number(
+                        loan.gracePeriod || 0
+                    );
+
+
+                // ------------------------------------------
+                // Last installment due before grace
+                // ------------------------------------------
+
+                let overdueInstallments = 0;
+
+
+                for (
+                    let installmentNo = 1;
+                    installmentNo <=
+                        totalInstallments;
+                    installmentNo++
                 ) {
+
+                    if (
+                        paidInstallments.has(
+                            installmentNo
+                        )
+                    ) {
+                        continue;
+                    }
+
+
+                    const dueDate =
+                        new Date(
+                            loanDate
+                        );
+
 
                     dueDate.setDate(
                         dueDate.getDate() +
                         (
-                            (installmentNo - 1) *
-                            7
-                        )
+                            installmentNo - 1
+                        ) *
+                        dueInterval
                     );
+
+
+                    dueDate.setHours(
+                        0,
+                        0,
+                        0,
+                        0
+                    );
+
+
+                    if (
+                        dueDate > today
+                    ) {
+                        continue;
+                    }
+
+
+                    const delay =
+                        differenceInDays(
+                            dueDate,
+                            today
+                        );
+
+
+                    if (
+                        delay <=
+                        gracePeriod
+                    ) {
+                        continue;
+                    }
+
+
+                    overdueInstallments++;
+
+                }
+
+
+                // ------------------------------------------
+                // PENALTY
+                // ------------------------------------------
+
+                let penaltyPerInstallment = 0;
+
+
+                if (
+                    loan.penaltyType ===
+                    "PERCENTAGE"
+                ) {
+
+                    penaltyPerInstallment =
+                        Math.round(
+                            (
+                                Number(
+                                    loan.emiAmount ||
+                                    0
+                                ) *
+                                Number(
+                                    loan.penaltyValue ||
+                                    0
+                                )
+                            ) / 100
+                        );
 
                 }
 
                 else {
 
+                    penaltyPerInstallment =
+                        Number(
+                            loan.penaltyValue ||
+                            0
+                        );
+
+                }
+
+
+                member.loanPenaltyPending +=
+                    overdueInstallments *
+                    penaltyPerInstallment;
+
+            }
+
+
+            // ==================================================
+            // MONTHLY / FIXED
+            // ==================================================
+            //
+            // Monthly/fixed penalty depends on the number
+            // of overdue months, so we retain the original
+            // installment-level calculation.
+            //
+            // ==================================================
+
+            else {
+
+                for (
+                    let installmentNo = 1;
+                    installmentNo <=
+                        totalInstallments;
+                    installmentNo++
+                ) {
+
+                    // ------------------------------------------
+                    // ALREADY PAID
+                    // ------------------------------------------
+
+                    if (
+                        paidInstallments.has(
+                            installmentNo
+                        )
+                    ) {
+
+                        continue;
+
+                    }
+
+
+                    // ------------------------------------------
+                    // DUE DATE
+                    // ------------------------------------------
+
+                    const dueDate =
+                        new Date(
+                            loan.loanDate
+                        );
+
+
                     /*
                      * IMPORTANT:
                      *
-                     * Your existing collectEmi logic
-                     * calculates MONTHLY/FIXED due date
-                     * using installmentNo directly.
+                     * Keeping your existing behavior.
                      *
-                     * We keep the same behavior here.
+                     * Monthly/FIXED installment number
+                     * is directly added to month.
                      */
 
                     dueDate.setMonth(
@@ -774,142 +1106,92 @@ exports.getPenaltyManagement = async (req, res) => {
                         installmentNo
                     );
 
-                }
 
-
-                dueDate.setHours(
-                    0,
-                    0,
-                    0,
-                    0
-                );
-
-
-
-                // =============================================
-                // FUTURE EMI
-                // =============================================
-
-                if (
-                    dueDate > today
-                ) {
-
-                    continue;
-
-                }
-
-
-
-                // =============================================
-                // DELAY
-                // =============================================
-
-                const delay =
-                    Math.floor(
-                        (
-                            today -
-                            dueDate
-                        ) /
-                        (1000 * 60 * 60 * 24)
+                    dueDate.setHours(
+                        0,
+                        0,
+                        0,
+                        0
                     );
 
 
-
-                // =============================================
-                // GRACE PERIOD
-                // =============================================
-
-                if (
-                    delay <=
-                    Number(
-                        loan.gracePeriod || 0
-                    )
-                ) {
-
-                    continue;
-
-                }
-
-
-
-                // =============================================
-                // PENALTY
-                // =============================================
-
-                let penalty = 0;
-
-
-
-                // =================================================
-                // DAILY / WEEKLY
-                // =================================================
-
-                if (
-                    loan.loanType === "DAILY" ||
-                    loan.loanType === "WEEKLY"
-                ) {
+                    // ------------------------------------------
+                    // FUTURE EMI
+                    // ------------------------------------------
 
                     if (
-                        loan.penaltyType ===
-                        "PERCENTAGE"
+                        dueDate > today
                     ) {
 
-                        penalty =
-                            Math.round(
-                                (
-                                    Number(
-                                        loan.emiAmount || 0
-                                    ) *
-                                    Number(
-                                        loan.penaltyValue || 0
-                                    )
-                                ) / 100
-                            );
+                        continue;
 
                     }
 
-                    else {
 
-                        penalty =
-                            Number(
-                                loan.penaltyValue || 0
-                            );
+                    // ------------------------------------------
+                    // DELAY
+                    // ------------------------------------------
 
-                    }
-
-                }
-
-
-
-                // =================================================
-                // MONTHLY / FIXED
-                // =================================================
-
-                else {
-
-                    let penaltyBase =
-                        Number(
-                            loan.emiAmount || 0
+                    const delay =
+                        differenceInDays(
+                            dueDate,
+                            today
                         );
 
 
-                    // FIXED LOAN
+                    // ------------------------------------------
+                    // GRACE
+                    // ------------------------------------------
+
                     if (
-                        loan.loanType === "FIXED"
+                        delay <=
+                        Number(
+                            loan.gracePeriod ||
+                            0
+                        )
+                    ) {
+
+                        continue;
+
+                    }
+
+
+                    // ------------------------------------------
+                    // PENALTY BASE
+                    // ------------------------------------------
+
+                    let penaltyBase =
+                        Number(
+                            loan.emiAmount ||
+                            0
+                        );
+
+
+                    // ------------------------------------------
+                    // FIXED LOAN
+                    // ------------------------------------------
+
+                    if (
+                        loan.loanType ===
+                        "FIXED"
                     ) {
 
                         const tenure =
                             Number(
-                                loan.loanTenureMonths || 0
+                                loan.loanTenureMonths ||
+                                0
                             );
 
 
-                        if (tenure > 0) {
+                        if (
+                            tenure > 0
+                        ) {
 
                             penaltyBase =
                                 Math.round(
                                     Number(
-                                        loan.totalInterest || 0
+                                        loan.totalInterest ||
+                                        0
                                     ) /
                                     tenure
                                 );
@@ -919,9 +1201,12 @@ exports.getPenaltyManagement = async (req, res) => {
                     }
 
 
-                    penalty =
-                        calculateMonthlyFixedPenalty({
+                    // ------------------------------------------
+                    // MONTHLY / FIXED PENALTY
+                    // ------------------------------------------
 
+                    const penalty =
+                        calculateMonthlyFixedPenalty({
                             dueDate,
 
                             today,
@@ -936,29 +1221,22 @@ exports.getPenaltyManagement = async (req, res) => {
                                 loan.penaltyValue,
 
                             penaltyBase
-
                         });
 
+
+                    member.loanPenaltyPending +=
+                        penalty;
+
                 }
-
-
-
-                // =============================================
-                // ADD TO MEMBER
-                // =============================================
-
-                member.loanPenaltyPending +=
-                    penalty;
 
             }
 
         }
 
 
-
-        // ======================================================
+        // ==================================================
         // FINAL MEMBER TOTAL
-        // ======================================================
+        // ==================================================
 
         const memberList =
             Array.from(
@@ -966,65 +1244,52 @@ exports.getPenaltyManagement = async (req, res) => {
             );
 
 
-        memberList.forEach(member => {
+        // ==================================================
+        // CALCULATE TOTAL PENALTY
+        // ==================================================
 
-            member.totalPenaltyPending =
+        let dailyPenaltyPending = 0;
+
+        let loanPenaltyPending = 0;
+
+
+        for (
+            const member
+            of memberList
+        ) {
+
+            member.dailyPenaltyPending =
                 Number(
-                    member.dailyPenaltyPending || 0
-                ) +
-                Number(
-                    member.loanPenaltyPending || 0
+                    member.dailyPenaltyPending ||
+                    0
                 );
 
-        });
+
+            member.loanPenaltyPending =
+                Number(
+                    member.loanPenaltyPending ||
+                    0
+                );
 
 
-
-        // ======================================================
-        // TOTAL DAILY PENDING
-        // ======================================================
-
-        const dailyPenaltyPending =
-            memberList.reduce(
-                (total, member) => {
-
-                    return (
-                        total +
-                        Number(
-                            member.dailyPenaltyPending || 0
-                        )
-                    );
-
-                },
-                0
-            );
+            member.totalPenaltyPending =
+                member.dailyPenaltyPending +
+                member.loanPenaltyPending;
 
 
-
-        // ======================================================
-        // TOTAL LOAN PENDING
-        // ======================================================
-
-        const loanPenaltyPending =
-            memberList.reduce(
-                (total, member) => {
-
-                    return (
-                        total +
-                        Number(
-                            member.loanPenaltyPending || 0
-                        )
-                    );
-
-                },
-                0
-            );
+            dailyPenaltyPending +=
+                member.dailyPenaltyPending;
 
 
+            loanPenaltyPending +=
+                member.loanPenaltyPending;
 
-        // ======================================================
+        }
+
+
+        // ==================================================
         // RESPONSE
-        // ======================================================
+        // ==================================================
 
         return res.status(200).json({
 
@@ -1037,7 +1302,6 @@ exports.getPenaltyManagement = async (req, res) => {
                 dailyPenaltyCollected,
 
                 dailyPenaltyThisMonth,
-
 
                 loanPenaltyPending,
 
