@@ -1085,23 +1085,16 @@ const [loans, totalLoans] = await Promise.all([
 
 
         // WEEKLY
-        else if (loan.loanType === "WEEKLY") {
+   else if (loan.loanType === "WEEKLY") {
 
-          dueTillToday =
-            Math.floor(
-              (
-                today - loanDate
-              ) /
-              (
-                1000 *
-                60 *
-                60 *
-                24 *
-                7
-              )
-            ) + 1;
+  dueTillToday = Math.floor(
+    (today - loanDate) /
+    (1000 * 60 * 60 * 24 * 7)
+  );
 
-        }
+}
+
+        
 
 
         // MONTHLY / FIXED
@@ -1207,18 +1200,16 @@ const [loans, totalLoans] = await Promise.all([
           }
 
 
-          else if (
-            loan.loanType === "WEEKLY"
-          ) {
+       else if (
+  loan.loanType === "WEEKLY"
+) {
 
-            dueDate.setDate(
-              dueDate.getDate() +
-              (
-                (i - 1) * 7
-              )
-            );
+  dueDate.setDate(
+    dueDate.getDate() +
+    (i * 7)
+  );
 
-          }
+}
 
 
           else if (
@@ -1547,12 +1538,6 @@ const [loans, totalLoans] = await Promise.all([
         }
 
 
-      // ==========================================
-// FINAL STATUS
-// ==========================================
-
-// Count unpaid installments that are actually
-// due till today
 let duePendingCount = 0;
 
 for (let i = 1; i <= dueTillToday; i++) {
@@ -1563,15 +1548,6 @@ for (let i = 1; i <= dueTillToday; i++) {
 
 }
 
-// ==========================================
-// STATUS RULE
-//
-// CLOSED  = account explicitly closed
-// PAID    = all installments completed
-// DUE     = 1 or 2 installments due
-// OVERDUE = more than 2 installments due
-// ACTIVE  = no installment due yet
-// ==========================================
 
 let currentStatus;
 
@@ -1855,9 +1831,6 @@ message:error.message
 }
 
 };
-
-
-
 
 // ==========================================
 // SEARCH LOAN MEMBERS
@@ -2319,13 +2292,12 @@ dueDate.getDate()+(i-1)
 
 }
 
-else if(loan.loanType==="WEEKLY"){
+else if (loan.loanType === "WEEKLY") {
 
-dueDate.setDate(
-
-dueDate.getDate()+((i-1)*7)
-
-);
+    dueDate.setDate(
+        dueDate.getDate() +
+        (i * 7)
+    );
 
 }
 
