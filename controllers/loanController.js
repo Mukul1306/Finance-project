@@ -334,15 +334,11 @@ const totalMonths =
 const monthsPassed =
   (today.getFullYear() - firstEmiDate.getFullYear()) * 12 +
   (today.getMonth() - firstEmiDate.getMonth());
-  
-const pendingEmis =
-  Number(data.outstandingPrincipal || 0) <= 0
-    ? 0
-    : Math.max(
-        0,
-        Math.min(totalMonths, monthsPassed + 1) -
-          (data.paidEmis || 0)
-      );
+
+const pendingEmis = Math.max(
+  0,
+  Math.min(totalMonths, monthsPassed + 1) - (data.paidEmis || 0)
+);
 
   data.pendingEmis = pendingEmis;
 
