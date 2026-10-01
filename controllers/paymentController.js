@@ -277,12 +277,26 @@ exports.getPaymentSummary = async (req, res) => {
       const joiningDate = new Date(member.joiningDate);
 
       // Determine target date
-      const targetDate = periodStart || today;
+     const targetStartDate = periodStart || new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    1
+);
 
-      // Member has not joined yet
-      if (joiningDate > targetDate) {
-        continue;
-      }
+const targetEndDate = periodEnd || new Date(
+    today.getFullYear(),
+    today.getMonth() + 1,
+    0,
+    23,
+    59,
+    59,
+    999
+);
+
+// Member joined after this month ended
+if (joiningDate > targetEndDate) {
+    continue;
+}
 
       // If specific month/year selected,
       // don't include members whose membership ended
