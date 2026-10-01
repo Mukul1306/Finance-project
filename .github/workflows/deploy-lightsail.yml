@@ -1,0 +1,76 @@
+name: Deploy SRM Finance Backend
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+concurrency:
+  group: lightsail-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to AWS Lightsail
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/lightsail_key
+          chmod 600 ~/.ssh/lightsail_key
+
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy Application Files
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          USER: ${{ secrets.LIGHTSAIL_USER }}
+          APP_DIR: ${{ secrets.LIGHTSAIL_APP_DIR }}
+        run: |
+          rsync -avz \
+            --exclude='.git/' \
+            --exclude='node_modules/' \
+            --exclude='.env' \
+            --exclude='*.log' \
+            -e "ssh -i ~/.ssh/lightsail_key" \
+            ./ "$USER@$HOST:$APP_DIR/"
+
+      - name: Install Dependencies and Restart
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          USER: ${{ secrets.LIGHTSAIL_USER }}
+          APP_DIR: ${{ secrets.LIGHTSAIL_APP_DIR }}
+        run: |
+          ssh -i ~/.ssh/lightsail_key \
+            "$USER@$HOST" << EOF
+
+            set -e
+            cd "$APP_DIR"
+
+            echo "Installing dependencies..."
+            npm ci --omit=dev
+
+            echo "Restarting backend..."
+            pm2 restart finance-backend --update-env
+
+            echo "Checking PM2..."
+            pm2 status finance-backend
+
+            EOF
+
+      - name: Cleanup SSH Key
+        if: always()
+        run: |
+          rm -f ~/.ssh/lightsail_key
