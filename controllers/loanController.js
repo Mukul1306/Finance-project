@@ -3,10 +3,7 @@ const Member = require("../models/Members");
 const LoanPayment = require("../models/LoanPayment");
 const Customer = require("../models/Customer");
 
-/**
- * 
- * Get active members of a society
- */
+
 exports.getMembersBySociety = async (req, res) => {
   try {
     const { societyId } = req.params;
@@ -462,18 +459,24 @@ exports.getPendingEmis = async (req, res) => {
       .populate("memberId", "name memberId");
 
     if (!loan) {
-
-      return res.status(404).json({
-
+    return res.status(404).json({
         success: false,
-
         message: "Loan not found"
+    });
+}
 
-      });
+// No outstanding principal = no pending EMI
+if (Number(loan.outstandingPrincipal || 0) <= 0) {
+    return res.status(200).json({
+        success: true,
+        member: loan.memberId,
+        loanId: loan._id,
+        monthlyInterest: 0,
+        pendingEmis: []
+    });
+}
 
-    }
-
-    const today = new Date();
+const today = new Date();
 
 const loanStartDate = new Date(loan.loanGivenDate);
 
