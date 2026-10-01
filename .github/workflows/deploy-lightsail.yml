@@ -1,4 +1,5 @@
-name: Deploy SRM Finance Backend
+
+name: SRM Finance Backend CI/CD
 
 on:
   push:
@@ -12,13 +13,73 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy to AWS Lightsail
+
+  # ==================================
+  # STAGE 1: CI - VALIDATION
+  # ==================================
+
+  validate:
+    name: Stage 1 - Code Validation
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Source Code
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Validate Package Files
+        run: |
+          test -f package.json
+          test -f package-lock.json
+          echo "Package files verified"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Validate JavaScript Syntax
+        run: |
+          find . \
+            -path './node_modules' -prune -o \
+            -name '*.js' -type f -print0 |
+          xargs -0 -r -n1 node --check
+
+      - name: CI Completed
+        run: echo "Code validation passed"
+
+  # ==================================
+  # STAGE 2: CD - DEPLOYMENT
+  # ==================================
+
+  deploy:
+    name: Stage 2 - Deploy to Lightsail
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+
+      # --------------------------------
+      # PHASE 1: Install Deployment Tools
+      # --------------------------------
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install SSH and Rsync
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client rsync
+
+          rsync --version
+          ssh -V
+
+      # --------------------------------
+      # PHASE 2: Configure SSH
+      # --------------------------------
 
       - name: Configure SSH
         env:
@@ -33,10 +94,28 @@ jobs:
 
           ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
 
+      # --------------------------------
+      # PHASE 3: Verify Server Connection
+      # --------------------------------
+
+      - name: Test Lightsail SSH
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          DEPLOY_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          ssh -i ~/.ssh/lightsail_key \
+            -o BatchMode=yes \
+            "$DEPLOY_USER@$HOST" \
+            "echo 'SSH connection successful'"
+
+      # --------------------------------
+      # PHASE 4: Transfer Application
+      # --------------------------------
+
       - name: Deploy Application Files
         env:
           HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          USER: ${{ secrets.LIGHTSAIL_USER }}
+          DEPLOY_USER: ${{ secrets.LIGHTSAIL_USER }}
           APP_DIR: ${{ secrets.LIGHTSAIL_APP_DIR }}
         run: |
           rsync -avz \
@@ -45,30 +124,51 @@ jobs:
             --exclude='.env' \
             --exclude='*.log' \
             -e "ssh -i ~/.ssh/lightsail_key" \
-            ./ "$USER@$HOST:$APP_DIR/"
+            ./ "$DEPLOY_USER@$HOST:$APP_DIR/"
 
-      - name: Install Dependencies and Restart
+      # --------------------------------
+      # PHASE 5: Install Dependencies
+      # --------------------------------
+
+      - name: Install Production Dependencies
         env:
           HOST: ${{ secrets.LIGHTSAIL_HOST }}
-          USER: ${{ secrets.LIGHTSAIL_USER }}
+          DEPLOY_USER: ${{ secrets.LIGHTSAIL_USER }}
           APP_DIR: ${{ secrets.LIGHTSAIL_APP_DIR }}
         run: |
           ssh -i ~/.ssh/lightsail_key \
-            "$USER@$HOST" << EOF
+            "$DEPLOY_USER@$HOST" \
+            "cd '$APP_DIR' && npm ci --omit=dev"
 
-            set -e
-            cd "$APP_DIR"
+      # --------------------------------
+      # PHASE 6: Restart Backend
+      # --------------------------------
 
-            echo "Installing dependencies..."
-            npm ci --omit=dev
+      - name: Restart PM2 Application
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          DEPLOY_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          ssh -i ~/.ssh/lightsail_key \
+            "$DEPLOY_USER@$HOST" \
+            "pm2 restart finance-backend --update-env"
 
-            echo "Restarting backend..."
-            pm2 restart finance-backend --update-env
+      # --------------------------------
+      # PHASE 7: Verify Deployment
+      # --------------------------------
 
-            echo "Checking PM2..."
-            pm2 status finance-backend
+      - name: Verify PM2 Status
+        env:
+          HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          DEPLOY_USER: ${{ secrets.LIGHTSAIL_USER }}
+        run: |
+          ssh -i ~/.ssh/lightsail_key \
+            "$DEPLOY_USER@$HOST" \
+            "pm2 status finance-backend"
 
-            EOF
+      # --------------------------------
+      # PHASE 8: Cleanup
+      # --------------------------------
 
       - name: Cleanup SSH Key
         if: always()
