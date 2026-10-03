@@ -617,23 +617,23 @@ exports.getSaving = async (req, res) => {
       success: true,
 
       member: {
+  _id: member._id,
 
-        _id:
-          member._id,
+  memberId: member.memberId,
 
-        memberId:
-          member.memberId,
+  name: member.name,
 
-        name:
-          member.name,
+  mobile: member.mobile,
 
-        mobile:
-          member.mobile,
+  status: member.status,
 
-        status:
-          member.status
+  // ADD THIS
+  settlementAmount: Number(member.settlementAmount || 0),
 
-      },
+  // Optional: settlement status/date
+  settlementStatus: member.settlementStatus || "PENDING",
+  settlementDate: member.settlementDate || null
+},
 
 
       society:
