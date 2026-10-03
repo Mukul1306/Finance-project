@@ -1,6 +1,7 @@
 const Member = require("../models/Members");
 const Society = require("../models/Society");
 const Payment = require("../models/Payment");
+const Expense = require("../models/Expense");
 // CREATE MEMBER
 
 exports.createMember = async (req, res) => {
@@ -30,6 +31,7 @@ nomineeName,
 nomineeMobile,
   monthlyInstallment,
   monthlyPenalty,
+  settlementAmount,
   dueDay
 } = req.body;
 
@@ -137,9 +139,11 @@ const memberDueDay = memberJoiningDate.getDate();
 
   monthlyInstallment: installmentAmount,
 
-  monthlyPenalty: Number(monthlyPenalty),
+monthlyPenalty: Number(monthlyPenalty),
 
-  totalInstallments,
+settlementAmount: Number(settlementAmount) || 0,
+
+totalInstallments,
 
   paidInstallments: 0,
 
@@ -461,8 +465,8 @@ exports.updateMember = async (req, res) => {
 
       monthlyInstallment,
       monthlyPenalty,
-
-      dueDay,
+      settlementAmount,
+       dueDay,
 
       password
 
@@ -495,9 +499,10 @@ exports.updateMember = async (req, res) => {
     member.joiningDate = joiningDate;
 
     member.monthlyInstallment = Number(monthlyInstallment);
-    member.monthlyPenalty = Number(monthlyPenalty);
+member.monthlyPenalty = Number(monthlyPenalty);
+member.settlementAmount = Number(settlementAmount) || 0;
 
-    member.dueDay = dueDay;
+member.dueDay = dueDay;
 
     // Update Password Only If Entered
     if (password && password.trim() !== "") {
@@ -636,4 +641,81 @@ exports.getMemberPaymentHistory = async (req, res) => {
 
   }
 
+};
+
+// PAY MEMBER SETTLEMENT
+exports.payMemberSettlement = async (req, res) => {
+  try {
+    const member = await Member.findById(req.params.id);
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+    }
+
+    // Check all installments are completed
+    if (
+      Number(member.paidInstallments) <
+      Number(member.totalInstallments)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All installments are not completed yet."
+      });
+    }
+
+    // Prevent duplicate settlement
+    if (member.settlementStatus === "PAID") {
+      return res.status(400).json({
+        success: false,
+        message: "Settlement has already been paid."
+      });
+    }
+
+    const amount = Number(member.settlementAmount);
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Settlement amount is not set for this member."
+      });
+    }
+
+    // Create expense for Profit & Loss
+    const expense = await Expense.create({
+      type: "EXPENSE",
+      title: `Settlement Paid - ${member.name}`,
+      category: "Member Settlement",
+      amount,
+      paymentMethod: req.body.paymentMethod || "Cash",
+      note:
+        req.body.note ||
+        `Final settlement paid to member ${member.memberId}`
+    });
+
+    // Update member settlement status
+    member.settlementStatus = "PAID";
+    member.settlementDate = new Date();
+    member.settlementExpenseId = expense._id;
+
+    await member.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Member settlement paid successfully.",
+      settlementAmount: amount,
+      settlementDate: member.settlementDate,
+      expenseId: expense._id
+    });
+
+  } catch (error) {
+    console.error("Pay Member Settlement Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
 };

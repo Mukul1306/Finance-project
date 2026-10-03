@@ -1,5 +1,3 @@
-
-
 const Member = require("../models/Members");
 const Society = require("../models/Society");
 const Payment = require("../models/Payment");

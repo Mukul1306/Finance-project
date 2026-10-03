@@ -127,6 +127,46 @@ password: {
     type:Number,
     default:0
   },
+  monthlyPenalty:{
+
+  type:Number,
+
+  default:0
+
+},
+
+settlementAmount:{
+
+  type:Number,
+
+  default:0
+
+},
+settlementStatus: {
+  type: String,
+  enum: ["PENDING", "PAID"],
+  default: "PENDING"
+},
+
+settlementDate: {
+  type: Date,
+  default: null
+},
+
+settlementExpenseId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "Expense",
+  default: null
+},
+
+dueDay:{
+
+  type:Number,
+
+  required:true
+
+},
+
 
   dueDay:{
     type:Number,

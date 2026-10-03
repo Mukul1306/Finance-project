@@ -8,7 +8,8 @@ const {
   getMemberById,
   updateMember,
   deleteMember,
-  getMemberPaymentHistory
+  getMemberPaymentHistory,
+  payMemberSettlement
 } = require("../controllers/memberController");
 
 router.post(
@@ -30,6 +31,8 @@ router.get(
   "/:id/history",
   getMemberPaymentHistory
 );
+
+router.post("/:id/settle", payMemberSettlement);
 
 
 router.put("/update/:id", updateMember);
