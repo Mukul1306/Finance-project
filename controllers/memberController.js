@@ -275,8 +275,10 @@ let currentPenalty = 0;
 const currentDueDate = new Date(
   today.getFullYear(),
   today.getMonth(),
-  member.dueDay
+  Number(member.dueDay)
 );
+
+currentDueDate.setHours(23, 59, 59, 999);
 
 if (
   today > currentDueDate &&
