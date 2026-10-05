@@ -763,13 +763,6 @@ console.log("Member:", member.memberId);
       (currentDate.getMonth() - joiningDate.getMonth());
 
     const pending = [];
-    console.log("===== PENDING DEBUG =====");
-console.log("Member:", member.memberId);
-console.log("Mongo Member ID:", member._id);
-console.log("Joining:", joiningDate);
-console.log("Today:", currentDate);
-console.log("Months Passed:", monthsPassed);
-console.log("Total Installments:", member.totalInstallments);
 
 for (
   let i = 0;
@@ -806,27 +799,22 @@ for (
 
   const year = installmentDate.getFullYear();
 
-  // Delay Calculation
- // Add grace period
-const graceEndDate = new Date(dueDate);
-
-graceEndDate.setDate(
-  graceEndDate.getDate() +
-  Number(member.graceDays || 0)
-);
-
+// Delay Calculation
 let delayMonths = 0;
 
-if (currentDate > graceEndDate) {
+// Due date is valid for the COMPLETE calendar day
+dueDate.setHours(23, 59, 59, 999);
+
+// Penalty starts only AFTER the due date
+if (currentDate > dueDate) {
 
   delayMonths =
-    (currentDate.getFullYear() - graceEndDate.getFullYear()) * 12 +
-    (currentDate.getMonth() - graceEndDate.getMonth());
+    (currentDate.getFullYear() - dueDate.getFullYear()) * 12 +
+    (currentDate.getMonth() - dueDate.getMonth());
 
-  if (currentDate.getDate() >= graceEndDate.getDate()) {
-    delayMonths++;
+  if (delayMonths < 1) {
+    delayMonths = 1;
   }
-
 }
 
 const penalty =
