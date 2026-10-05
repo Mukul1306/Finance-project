@@ -719,8 +719,8 @@ if (loan.outstandingPrincipal < 0) {
 }
 
 loan.monthlyInterest =
-(loan.outstandingPrincipal / 100) *
-loan.interestPerHundred;
+  (loan.principalAmount / 100) *
+  loan.interestPerHundred;
 
 loan.totalAmountCollected += totalReceived;
 
