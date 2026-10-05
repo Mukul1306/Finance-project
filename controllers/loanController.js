@@ -435,33 +435,31 @@ exports.getAllLoans = async (req, res) => {
 
 
       // ==========================================
-      // STATUS
-      // ==========================================
+// STATUS
+// ==========================================
 
-      let currentEmiStatus = "ACTIVE";
+let currentEmiStatus = "ACTIVE";
 
-      if (data.status === "CLOSED") {
+if (data.status === "CLOSED") {
 
-        currentEmiStatus = "CLOSED";
+  currentEmiStatus = "CLOSED";
 
-      } else if (earliestUnpaidDueDate) {
+} else if (pendingEmis === 0) {
 
-        if (
-          earliestUnpaidDueDate.getTime() ===
-          todayDate.getTime()
-        ) {
+  // No pending EMI
+  currentEmiStatus = "ACTIVE";
 
-          currentEmiStatus = "DUE";
+} else if (pendingEmis === 1) {
 
-        } else if (
-          earliestUnpaidDueDate < todayDate
-        ) {
+  // Only 1 EMI pending
+  currentEmiStatus = "DUE";
 
-          currentEmiStatus = "OVERDUE";
+} else {
 
-        }
+  // 2 or more EMI pending
+  currentEmiStatus = "OVERDUE";
 
-      }
+}
 
 
       // ==========================================
