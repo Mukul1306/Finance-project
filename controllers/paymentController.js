@@ -54,31 +54,30 @@ installmentDate.setMonth(
     // Current Date
     const today = new Date();
 
-
-// Due date for selected installment
+   // Due date for selected installment
 const dueDate = new Date(installmentDate);
 
-// Use member's configured payment due day
-dueDate.setDate(Number(member.dueDay));
+// Use member's configured due day
+dueDate.setDate(member.dueDay);
 
-// Due day is valid for the complete calendar day
-dueDate.setHours(23, 59, 59, 999);
+// Add grace days
+const graceEndDate = new Date(dueDate);
+
+graceEndDate.setDate(
+  graceEndDate.getDate() +
+  Number(member.graceDays || 0)
+);
 
 let delayMonths = 0;
 
-// Penalty starts only AFTER the due date
-if (today > dueDate) {
+
+// Penalty starts AFTER grace period
+if (today > graceEndDate) {
+
   delayMonths =
-    (today.getFullYear() - dueDate.getFullYear()) * 12 +
-    (today.getMonth() - dueDate.getMonth());
-
-  if (today.getDate() > Number(member.dueDay)) {
-    delayMonths++;
-  }
-
-  if (delayMonths < 1) {
-    delayMonths = 1;
-  }
+    (today.getFullYear() - graceEndDate.getFullYear()) * 12 +
+    (today.getMonth() - graceEndDate.getMonth()) +
+    1;
 }
 
 const installmentAmount =
@@ -294,12 +293,14 @@ const targetEndDate = periodEnd || new Date(
     999
 );
 
-
+// Member joined after this month ended
 if (joiningDate > targetEndDate) {
     continue;
 }
 
-    
+      // If specific month/year selected,
+      // don't include members whose membership ended
+      // before that month.
       if (
         year !== "all" &&
         month !== "all"
@@ -761,7 +762,14 @@ console.log("Member:", member.memberId);
       (currentDate.getFullYear() - joiningDate.getFullYear()) * 12 +
       (currentDate.getMonth() - joiningDate.getMonth());
 
-
+    const pending = [];
+    console.log("===== PENDING DEBUG =====");
+console.log("Member:", member.memberId);
+console.log("Mongo Member ID:", member._id);
+console.log("Joining:", joiningDate);
+console.log("Today:", currentDate);
+console.log("Months Passed:", monthsPassed);
+console.log("Total Installments:", member.totalInstallments);
 
 for (
   let i = 0;
