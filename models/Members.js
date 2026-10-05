@@ -127,13 +127,7 @@ password: {
     type:Number,
     default:0
   },
-  monthlyPenalty:{
-
-  type:Number,
-
-  default:0
-
-},
+ 
 
 settlementAmount:{
 
@@ -158,16 +152,6 @@ settlementExpenseId: {
   ref: "Expense",
   default: null
 },
-
-dueDay:{
-
-  type:Number,
-
-  required:true
-
-},
-
-
   dueDay:{
     type:Number,
     required:true

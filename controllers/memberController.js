@@ -306,11 +306,14 @@ for (let i = paidInstallments; i < dueInstallments; i++) {
 
   const dueDate = new Date(installmentDate);
 
-  dueDate.setDate(member.dueDay);
+dueDate.setDate(member.dueDay);
 
-  let delayMonths = 0;
+// Due date is valid for the entire day
+dueDate.setHours(23, 59, 59, 999);
 
-  if (today > dueDate) {
+let delayMonths = 0;
+
+if (today > dueDate) {
 
     delayMonths =
       (today.getFullYear() - dueDate.getFullYear()) * 12 +
