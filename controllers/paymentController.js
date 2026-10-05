@@ -787,38 +787,38 @@ for (
     joiningDate.getMonth() + i
   );
 
-// Due Date
-const dueDate = new Date(installmentDate);
+  // Due Date
+  const dueDate = new Date(installmentDate);
+  dueDate.setDate(member.dueDay);
 
-dueDate.setDate(Number(member.dueDay));
+  // Month Name
+  const month = installmentDate.toLocaleString("en-IN", {
+    month: "long"
+  });
 
-// Due date is valid for the complete calendar day
-dueDate.setHours(23, 59, 59, 999);
+  const year = installmentDate.getFullYear();
 
-// Month Name
-const month = installmentDate.toLocaleString("en-IN", {
-  month: "long"
-});
+  // Delay Calculation
+ // Add grace period
+const graceEndDate = new Date(dueDate);
 
-const year = installmentDate.getFullYear();
+graceEndDate.setDate(
+  graceEndDate.getDate() +
+  Number(member.graceDays || 0)
+);
 
-// Delay Calculation
 let delayMonths = 0;
 
-// Penalty starts only AFTER the due date
-if (currentDate > dueDate) {
+if (currentDate > graceEndDate) {
 
   delayMonths =
-    (currentDate.getFullYear() - dueDate.getFullYear()) * 12 +
-    (currentDate.getMonth() - dueDate.getMonth());
+    (currentDate.getFullYear() - graceEndDate.getFullYear()) * 12 +
+    (currentDate.getMonth() - graceEndDate.getMonth());
 
-  if (currentDate.getDate() > Number(member.dueDay)) {
+  if (currentDate.getDate() >= graceEndDate.getDate()) {
     delayMonths++;
   }
 
-  if (delayMonths < 1) {
-    delayMonths = 1;
-  }
 }
 
 const penalty =
