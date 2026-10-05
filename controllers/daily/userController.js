@@ -5,11 +5,7 @@ const DailyTransaction = require("../../models/daily/DailyTransaction");
 const DailyLoan = require("../../models/daily/DailyLoan");
 const LoanCollection = require("../../models/daily/LoanCollection");
 
-/*
-====================================================
-HELPER
-====================================================
-*/
+
 
 const SAVING_STATUSES = [
   "ACTIVE",
@@ -26,11 +22,7 @@ const LOAN_STATUSES = [
 ];
 
 
-/*
-====================================================
-MEMBER LOGIN
-====================================================
-*/
+
 
 exports.memberLogin = async (req, res) => {
   try {

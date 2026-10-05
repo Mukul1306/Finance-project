@@ -184,9 +184,9 @@ exports.createDailySaving = async (req, res) => {
 
     const endDate = new Date(startDate);
 
-    endDate.setDate(
-      endDate.getDate() + Number(durationDays)
-    );
+   endDate.setDate(
+  endDate.getDate() + Number(durationDays) - 1
+);
 
     // ==========================================
     // CREATE SAVING ACCOUNT
@@ -895,10 +895,11 @@ exports.updateDailySaving = async (req, res) => {
 
     const end = new Date(start);
 
-    end.setDate(
-      end.getDate() +
-      Number(saving.durationDays)
-    );
+   end.setDate(
+  end.getDate() +
+  Number(saving.durationDays) -
+  1
+);
 
     saving.endDate = end;
 
