@@ -44,101 +44,84 @@ try{
 GET PENDING INTEREST
 */
 
-exports.getPendingInterest =
-async(req,res)=>{
+exports.getPendingInterest = async (req, res) => {
+  try {
+    const { loanId } = req.params;
 
-try{
+    const loan = await Loan.findById(loanId);
 
- const { loanId } =
- req.params;
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found"
+      });
+    }
 
- const loan =
- await Loan.findById(loanId);
+    const collections = await InterestCollection.find({
+      loanId
+    });
 
- if(!loan){
-  return res.status(404).json({
-   success:false,
-   message:"Loan not found"
-  });
- }
+    const today = new Date();
 
- const collections =
- await InterestCollection.find({
-  loanId
- });
+    const loanDate = new Date(loan.loanGivenDate);
 
- const today =
- new Date();
+    // Calculate monthly interest safely
+    const monthlyInterest =
+      (Number(loan.principalAmount) / 100) *
+      Number(loan.interestPerHundred);
 
- const loanDate =
- new Date(
-  loan.loanGivenDate
- );
+    // Number of completed months since loan date
+    let monthsPassed =
+      (today.getFullYear() - loanDate.getFullYear()) * 12 +
+      (today.getMonth() - loanDate.getMonth());
 
- const monthsPassed =
+    // Don't count current month until the loan date has arrived
+    if (today.getDate() < loanDate.getDate()) {
+      monthsPassed--;
+    }
 
- ((today.getFullYear()
- -
- loanDate.getFullYear())
- *12)
+    monthsPassed = Math.max(0, monthsPassed);
 
- +
+    const expectedInterest =
+      monthsPassed * monthlyInterest;
 
- (today.getMonth()
- -
- loanDate.getMonth())
+    const collectedInterest =
+      collections.reduce(
+        (sum, item) =>
+          sum + Number(item.amountPaid || 0),
+        0
+      );
 
- +1;
+    const pendingInterest = Math.max(
+      0,
+      expectedInterest - collectedInterest
+    );
 
- const expectedInterest =
+    res.status(200).json({
+      success: true,
 
- monthsPassed *
- loan.monthlyInterest;
+      principalAmount: loan.principalAmount,
 
- const collectedInterest =
+      monthlyInterest,
 
- collections.reduce(
- (sum,item)=>
- sum + item.amountPaid,
- 0
- );
+      expectedInterest,
 
- const pendingInterest =
+      collectedInterest,
 
- expectedInterest -
- collectedInterest;
+      pendingInterest
+    });
 
- res.status(200).json({
+  } catch (error) {
 
-  success:true,
+    console.log(error);
 
-  principalAmount:
-  loan.principalAmount,
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
 
-  monthlyInterest:
-  loan.monthlyInterest,
-
-  expectedInterest,
-
-  collectedInterest,
-
-  pendingInterest
-
- });
-
-}catch(error){
-
- console.log(error);
-
- res.status(500).json({
-  success:false,
-  message:error.message
- });
-
-}
-
+  }
 };
-
 
 
 exports.collectInterest = async (req, res) => {
