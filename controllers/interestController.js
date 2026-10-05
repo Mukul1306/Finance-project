@@ -40,9 +40,7 @@ try{
 }
 
 };
-/*
-GET PENDING INTEREST
-*/
+
 
 exports.getPendingInterest = async (req, res) => {
   try {

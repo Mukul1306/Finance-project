@@ -316,9 +316,17 @@ exports.getAllLoans = async (req, res) => {
       });
 const updatedLoans = loans.map((loan) => {
 
-  const data = loan.toObject();
+const data = loan.toObject();
 
- const today = new Date();
+// Always calculate monthly interest from original loan principal
+// and configured interest rate.
+const calculatedMonthlyInterest =
+  (Number(data.principalAmount || 0) / 100) *
+  Number(data.interestPerHundred || 0);
+
+data.monthlyInterest = calculatedMonthlyInterest;
+
+const today = new Date();
 
 const loanStartDate = new Date(data.loanGivenDate);
 
@@ -475,6 +483,10 @@ exports.getPendingEmis = async (req, res) => {
 
     const today = new Date();
 
+    const monthlyInterest =
+  (Number(loan.principalAmount || 0) / 100) *
+  Number(loan.interestPerHundred || 0);
+
 const loanStartDate = new Date(loan.loanGivenDate);
 
 const firstEmiDate = new Date(loan.loanGivenDate);
@@ -537,15 +549,16 @@ if (today > dueDate) {
 }
 
       const penaltyAmount =
-        (
-          loan.monthlyInterest *
-          loan.emiPenaltyPercentage *
-          delayMonths
-        ) / 100;
+  (
+    monthlyInterest *
+    loan.emiPenaltyPercentage *
+    delayMonths
+  ) / 100;
 
-      const total =
-        loan.monthlyInterest +
-        penaltyAmount;
+
+const total =
+  monthlyInterest +
+  penaltyAmount;
 
       pendingEmis.push({
 
@@ -557,7 +570,7 @@ if (today > dueDate) {
 
         dueDate,
 
-        interestAmount: loan.monthlyInterest,
+interestAmount: monthlyInterest,
 
         penaltyPercentage:
           loan.emiPenaltyPercentage,
@@ -580,8 +593,7 @@ if (today > dueDate) {
 
       loanId: loan._id,
 
-      monthlyInterest:
-        loan.monthlyInterest,
+    monthlyInterest,
 
       pendingEmis
 
@@ -797,6 +809,11 @@ exports.loanDashboard = async (req, res) => {
 
     for (const loan of loans) {
 
+      const monthlyInterest =
+  (Number(loan.principalAmount || 0) / 100) *
+  Number(loan.interestPerHundred || 0);
+
+
       loanDistributed +=
         loan.principalAmount || 0;
 
@@ -820,12 +837,12 @@ const monthsPassed =
   );
 
       pendingInterest +=
-        pendingMonths *
-        loan.monthlyInterest;
+  pendingMonths *
+  monthlyInterest;
 
-      outstandingAmount +=
-        pendingMonths *
-        loan.monthlyInterest;
+outstandingAmount +=
+  pendingMonths *
+  monthlyInterest;
 
     }
 
