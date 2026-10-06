@@ -1647,6 +1647,30 @@ exports.updateLoan = async (req, res) => {
   try {
 
     const loan = await DailyLoan.findById(req.params.id);
+    const memberData = await DailyMember.findById(loan.member)
+  .populate("areaGroup", "areaName")
+  .populate("assignedAgent", "name mobile");
+
+         if (!memberData) {
+  return res.status(404).json({
+    success: false,
+    message: "Member Not Found"
+  });
+}
+
+if (!memberData.areaGroup) {
+  return res.status(400).json({
+    success: false,
+    message: "Member does not have an Area assigned"
+  });
+}
+
+if (!memberData.assignedAgent) {
+  return res.status(400).json({
+    success: false,
+    message: "Member does not have an Agent assigned"
+  });
+} 
 
     if (!loan) {
       return res.status(404).json({
@@ -1784,19 +1808,9 @@ exports.getLoan = async(req,res)=>{
 try{
 
 const loan =
-await DailyLoan.findById(
-
-req.params.id
-
-)
-
-.populate(
-
-"assignedAgent",
-
-"name mobile"
-
-);
+  await DailyLoan.findById(req.params.id)
+    .populate("member")
+    .populate("assignedAgent", "name mobile");
 
 if(!loan){
 
