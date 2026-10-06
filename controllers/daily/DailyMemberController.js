@@ -408,6 +408,25 @@ exports.updateMember = async (req, res) => {
     // =========================
 
     await member.save();
+    // =========================
+// SYNC MEMBER → ALL LOANS
+// =========================
+
+const memberArea = await AreaGroup.findById(member.areaGroup);
+
+if (memberArea && member.assignedAgent) {
+  await DailyLoan.updateMany(
+    {
+      member: member._id
+    },
+    {
+      $set: {
+        areaName: memberArea.areaName,
+        assignedAgent: member.assignedAgent
+      }
+    }
+  );
+}
 
     // =========================
     // RESPONSE
