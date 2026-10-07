@@ -617,7 +617,7 @@ if(loanType==="FIXED"){
 // ==========================================
 
 const loan =
-await DailyLoan.create({
+new DailyLoan({
 
 member:memberData._id,
 
@@ -696,11 +696,7 @@ totalInstallments,
 
 lastInstallmentNo:0,
 
-gracePeriod: 0,
-penaltyType: "PERCENTAGE",
-penaltyValue: 0,
-maxPenalty: 0,
-autoPenalty: true,
+
 
 status:"ACTIVE",
 // ==========================================
@@ -855,6 +851,18 @@ remarks
 
 });
 
+// ==========================================
+// APPLY CENTRAL PENALTY POLICY
+// ==========================================
+
+await applyPenaltyRuleToNewAccount({
+    memberId: memberData._id,
+    type: "LOAN",
+    account: loan
+});
+
+await loan.save();
+
 
 // ==========================================
 // RESPONSE
@@ -885,9 +893,7 @@ message:error.message
 }
 
 };
-// ==========================================
-// GET ALL LOANS
-// ==========================================
+
 // ==========================================
 // GET ALL LOANS - OPTIMIZED
 // ==========================================
