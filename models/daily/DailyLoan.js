@@ -575,6 +575,15 @@ penaltyValue: {
   default: 0
 },
 
+maxPenalty: {
+  type: Number,
+  default: 0,
+},
+
+autoPenalty: {
+  type: Boolean,
+  default: true,
+},
   // ==========================================
   // REMARKS
   // ==========================================
@@ -584,7 +593,8 @@ penaltyValue: {
     default: ""
   }
 
-}, {
+},
+ {
   timestamps: true
 });
 dailyLoanSchema.index({

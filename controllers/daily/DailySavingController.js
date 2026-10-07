@@ -17,6 +17,11 @@ const AreaGroup =
 const DailySavingRequest =
   require("../../models/daily/DailySavingRequest");
 
+  const {
+  applyPenaltyRuleToNewAccount
+} = require("../../services/daily/penaltyPolicyService");
+
+
 // =====================================================
 // IST DATE HELPERS
 // =====================================================
@@ -192,7 +197,7 @@ exports.createDailySaving = async (req, res) => {
     // CREATE SAVING ACCOUNT
     // ==========================================
 
-    const saving = await DailySaving.create({
+    const saving = new DailySaving({
       member: memberData._id,
 
       // Automatically taken from Member
@@ -214,11 +219,12 @@ exports.createDailySaving = async (req, res) => {
 
       endDate,
 
-      graceDays: Number(graceDays || 0),
 
-      penaltyType,
-
-      penaltyValue: Number(penaltyValue || 0),
+graceDays: 0,
+penaltyType: "PERCENTAGE",
+penaltyValue: 0,
+maxPenalty: 0,
+autoPenalty: true,
 
       status: "ACTIVE",
 
@@ -226,6 +232,18 @@ exports.createDailySaving = async (req, res) => {
 
       nomineeMobile: nomineeMobile || ""
     });
+
+    // ==========================================
+// APPLY CENTRAL PENALTY POLICY
+// ==========================================
+
+await applyPenaltyRuleToNewAccount({
+  memberId: memberData._id,
+  type: "DAILY_SAVING",
+  account: saving
+});
+
+await saving.save();
 
     // ==========================================
     // UPDATE AREA MEMBER COUNT
@@ -1831,54 +1849,68 @@ exports.approveSavingRequest = async (req, res) => {
     // CREATE REAL SAVING ACCOUNT
     // =====================================================
 
-    const saving =
-      await DailySaving.create({
+   // =====================================================
+// CREATE REAL SAVING ACCOUNT
+// =====================================================
 
-        member:
-          request.member,
+const saving = new DailySaving({
 
-        nomineeName:
-          request.nomineeName || "",
+  member:
+    request.member,
 
-        nomineeMobile:
-          request.nomineeMobile || "",
+  nomineeName:
+    request.nomineeName || "",
 
-        areaGroup:
-          request.areaGroup,
+  nomineeMobile:
+    request.nomineeMobile || "",
 
-        // Agent who submitted request
-        assignedAgent:
-          request.requestedBy,
+  areaGroup:
+    request.areaGroup,
 
-        collectionType:
-          request.collectionType,
+  // Agent who submitted request
+  assignedAgent:
+    request.requestedBy,
 
-        fixedAmount:
-          request.collectionType === "FIXED"
-            ? Number(request.fixedAmount || 0)
-            : 0,
+  collectionType:
+    request.collectionType,
 
-        durationDays:
-          Number(request.durationDays),
+  fixedAmount:
+    request.collectionType === "FIXED"
+      ? Number(request.fixedAmount || 0)
+      : 0,
 
-        startDate:
-          request.startDate,
+  durationDays:
+    Number(request.durationDays),
 
-        endDate:
-          request.endDate,
+  startDate:
+    request.startDate,
 
-        graceDays:
-          Number(request.graceDays || 0),
+  endDate:
+    request.endDate,
 
-        penaltyType:
-          request.penaltyType ||
-          "PERCENTAGE",
+  // Temporary defaults.
+  // Central Penalty Policy will override these.
+  graceDays: 0,
+  penaltyType: "PERCENTAGE",
+  penaltyValue: 0,
+  maxPenalty: 0,
+  autoPenalty: true,
 
-        penaltyValue:
-          Number(request.penaltyValue || 0),
+  status: "ACTIVE"
+});
 
-        status: "ACTIVE"
-      });
+// =====================================================
+// APPLY CENTRAL PENALTY POLICY
+// =====================================================
+
+await applyPenaltyRuleToNewAccount({
+  memberId: request.member,
+  type: "DAILY_SAVING",
+  account: saving
+});
+
+// Save after central penalty policy is applied
+await saving.save();
 
     // =====================================================
     // UPDATE AREA COUNT

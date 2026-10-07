@@ -6,6 +6,9 @@ const LoanCollection = require("../../models/daily/LoanCollection");
 const AreaGroup = require("../../models/daily/AreaGroup");
 const Agent = require("../../models/daily/Agent");
 const DailyLoanRequest = require("../../models/daily/DailyLoanRequest");
+const {
+  applyPenaltyRuleToNewAccount
+} = require("../../services/daily/penaltyPolicyService");
 
 
 // ==========================================
@@ -693,11 +696,11 @@ totalInstallments,
 
 lastInstallmentNo:0,
 
-gracePeriod:Number(gracePeriod),
-
-penaltyType,
-
-penaltyValue:Number(penaltyValue),
+gracePeriod: 0,
+penaltyType: "PERCENTAGE",
+penaltyValue: 0,
+maxPenalty: 0,
+autoPenalty: true,
 
 status:"ACTIVE",
 // ==========================================
@@ -7987,285 +7990,318 @@ if (!member.assignedAgent) {
     // CREATE ACTUAL LOAN
     // ------------------------------------------
 
-    const loan = await DailyLoan.create({
-      member: member._id,
+   const loan = new DailyLoan({
 
-      memberId: member.memberId,
+  member: member._id,
 
-      borrowerName: member.memberName,
-      fatherName: member.fatherName,
-      gender: member.gender,
-      dob: member.dob,
-      mobile: member.mobile,
-      alternateMobile: member.alternateMobile,
-      email: member.email,
+  memberId: member.memberId,
 
-      address: member.residentialAddress,
-      city: member.city,
-      district: member.district,
-      state: member.state,
-      pincode: member.pincode,
+  borrowerName: member.memberName,
+  fatherName: member.fatherName,
+  gender: member.gender,
+  dob: member.dob,
+  mobile: member.mobile,
+  alternateMobile: member.alternateMobile,
+  email: member.email,
 
-      areaName: member.areaGroup.areaName,
+  address: member.residentialAddress,
+  city: member.city,
+  district: member.district,
+  state: member.state,
+  pincode: member.pincode,
 
-assignedAgent: member.assignedAgent._id,
+  areaName: member.areaGroup.areaName,
 
-loanNumber: loanNumber,
+  assignedAgent: member.assignedAgent._id,
 
-loanAmount: request.loanAmount,
+  loanNumber: loanNumber,
 
-      interestRate:
-        request.interestRate,
+  loanAmount: request.loanAmount,
 
-      loanType:
-        request.loanType,
+  interestRate:
+    request.interestRate,
 
-      durationDays:
-        request.durationDays || 0,
+  loanType:
+    request.loanType,
 
-      durationWeeks:
-        request.durationWeeks || 0,
+  durationDays:
+    request.durationDays || 0,
 
-      durationMonths:
-        request.durationMonths || 0,
+  durationWeeks:
+    request.durationWeeks || 0,
 
-      loanTenureMonths:
-        request.loanTenureMonths || 10,
+  durationMonths:
+    request.durationMonths || 0,
 
-      startDate:
-        request.startDate,
+  loanTenureMonths:
+    request.loanTenureMonths || 10,
 
-      endDate:
-        request.endDate,
+  startDate:
+    request.startDate,
 
-      loanDate:
-        request.loanDate,
+  endDate:
+    request.endDate,
 
-      totalInterest:
-        request.totalInterest,
+  loanDate:
+    request.loanDate,
 
-      totalPayable:
-        request.totalPayable,
+  totalInterest:
+    request.totalInterest,
 
-      emiAmount:
-        request.emiAmount,
+  totalPayable:
+    request.totalPayable,
 
-      totalPaid: 0,
+  emiAmount:
+    request.emiAmount,
 
-      outstandingAmount:
-        request.loanType === "FIXED"
-          ? request.loanAmount
-          : request.totalPayable,
+  totalPaid: 0,
 
-      completedInstallments: 0,
+  outstandingAmount:
+    request.loanType === "FIXED"
+      ? request.loanAmount
+      : request.totalPayable,
 
-      pendingInstallments:
-        request.totalInstallments,
+  completedInstallments: 0,
 
-      lastInstallmentNo: 0,
+  pendingInstallments:
+    request.totalInstallments,
 
-      status: "ACTIVE",
+  lastInstallmentNo: 0,
 
-      nomineeName:
-        request.nomineeName || "",
+  status: "ACTIVE",
 
-      nomineeMobile:
-        request.nomineeMobile || "",
+  nomineeName:
+    request.nomineeName || "",
 
-      passportPhotoSubmitted:
-        request.passportPhotoSubmitted,
+  nomineeMobile:
+    request.nomineeMobile || "",
 
-      aadhaarNumber:
-        request.aadhaarNumber || "",
+  passportPhotoSubmitted:
+    request.passportPhotoSubmitted,
 
-      aadhaarSubmitted:
-        request.aadhaarSubmitted,
+  aadhaarNumber:
+    request.aadhaarNumber || "",
 
-      panNumber:
-        request.panNumber || "",
+  aadhaarSubmitted:
+    request.aadhaarSubmitted,
 
-      panSubmitted:
-        request.panSubmitted,
+  panNumber:
+    request.panNumber || "",
 
-      cheque1Number:
-        request.cheque1Number || "",
+  panSubmitted:
+    request.panSubmitted,
 
-      cheque2Number:
-        request.cheque2Number || "",
+  cheque1Number:
+    request.cheque1Number || "",
 
-      cheque1Submitted:
-        request.cheque1Submitted,
+  cheque2Number:
+    request.cheque2Number || "",
 
-      cheque2Submitted:
-        request.cheque2Submitted,
+  cheque1Submitted:
+    request.cheque1Submitted,
 
-      stampPaperSubmitted:
-        request.stampPaperSubmitted,
+  cheque2Submitted:
+    request.cheque2Submitted,
 
-      securityType:
-        request.securityType,
+  stampPaperSubmitted:
+    request.stampPaperSubmitted,
 
-      securityDetails:
-        request.securityDetails,
+  securityType:
+    request.securityType,
 
-      // GUARANTOR 1
-      guarantor1Name:
-        request.guarantor1Name,
+  securityDetails:
+    request.securityDetails,
 
-      guarantor1FatherName:
-        request.guarantor1FatherName,
+  // =========================
+  // GUARANTOR 1
+  // =========================
 
-      guarantor1Gender:
-        request.guarantor1Gender,
+  guarantor1Name:
+    request.guarantor1Name,
 
-      guarantor1Dob:
-        request.guarantor1Dob,
+  guarantor1FatherName:
+    request.guarantor1FatherName,
 
-      guarantor1Mobile:
-        request.guarantor1Mobile,
+  guarantor1Gender:
+    request.guarantor1Gender,
 
-      guarantor1AlternateMobile:
-        request.guarantor1AlternateMobile,
+  guarantor1Dob:
+    request.guarantor1Dob,
 
-      guarantor1Email:
-        request.guarantor1Email,
+  guarantor1Mobile:
+    request.guarantor1Mobile,
 
-      guarantor1Address:
-        request.guarantor1Address,
+  guarantor1AlternateMobile:
+    request.guarantor1AlternateMobile,
 
-      guarantor1City:
-        request.guarantor1City,
+  guarantor1Email:
+    request.guarantor1Email,
 
-      guarantor1District:
-        request.guarantor1District,
+  guarantor1Address:
+    request.guarantor1Address,
 
-      guarantor1State:
-        request.guarantor1State,
+  guarantor1City:
+    request.guarantor1City,
 
-      guarantor1Pincode:
-        request.guarantor1Pincode,
+  guarantor1District:
+    request.guarantor1District,
 
-      guarantor1PhotoSubmitted:
-        request.guarantor1PhotoSubmitted,
+  guarantor1State:
+    request.guarantor1State,
 
-      guarantor1AadhaarNumber:
-        request.guarantor1AadhaarNumber,
+  guarantor1Pincode:
+    request.guarantor1Pincode,
 
-      guarantor1AadhaarSubmitted:
-        request.guarantor1AadhaarSubmitted,
+  guarantor1PhotoSubmitted:
+    request.guarantor1PhotoSubmitted,
 
-      guarantor1PanNumber:
-        request.guarantor1PanNumber,
+  guarantor1AadhaarNumber:
+    request.guarantor1AadhaarNumber,
 
-      guarantor1PanSubmitted:
-        request.guarantor1PanSubmitted,
+  guarantor1AadhaarSubmitted:
+    request.guarantor1AadhaarSubmitted,
 
-      guarantor1Cheque1Number:
-        request.guarantor1Cheque1Number,
+  guarantor1PanNumber:
+    request.guarantor1PanNumber,
 
-      guarantor1Cheque2Number:
-        request.guarantor1Cheque2Number,
+  guarantor1PanSubmitted:
+    request.guarantor1PanSubmitted,
 
-      guarantor1Cheque1Submitted:
-        request.guarantor1Cheque1Submitted,
+  guarantor1Cheque1Number:
+    request.guarantor1Cheque1Number,
 
-      guarantor1Cheque2Submitted:
-        request.guarantor1Cheque2Submitted,
+  guarantor1Cheque2Number:
+    request.guarantor1Cheque2Number,
 
-      guarantor1StampPaperSubmitted:
-        request.guarantor1StampPaperSubmitted,
+  guarantor1Cheque1Submitted:
+    request.guarantor1Cheque1Submitted,
 
-      guarantor1SecurityType:
-        request.guarantor1SecurityType,
+  guarantor1Cheque2Submitted:
+    request.guarantor1Cheque2Submitted,
 
-      guarantor1SecurityDetails:
-        request.guarantor1SecurityDetails,
+  guarantor1StampPaperSubmitted:
+    request.guarantor1StampPaperSubmitted,
 
-      // GUARANTOR 2
-      guarantor2Name:
-        request.guarantor2Name,
+  guarantor1SecurityType:
+    request.guarantor1SecurityType,
 
-      guarantor2FatherName:
-        request.guarantor2FatherName,
+  guarantor1SecurityDetails:
+    request.guarantor1SecurityDetails,
 
-      guarantor2Gender:
-        request.guarantor2Gender,
+  // =========================
+  // GUARANTOR 2
+  // =========================
 
-      guarantor2Dob:
-        request.guarantor2Dob,
+  guarantor2Name:
+    request.guarantor2Name,
 
-      guarantor2Mobile:
-        request.guarantor2Mobile,
+  guarantor2FatherName:
+    request.guarantor2FatherName,
 
-      guarantor2AlternateMobile:
-        request.guarantor2AlternateMobile,
+  guarantor2Gender:
+    request.guarantor2Gender,
 
-      guarantor2Email:
-        request.guarantor2Email,
+  guarantor2Dob:
+    request.guarantor2Dob,
 
-      guarantor2Address:
-        request.guarantor2Address,
+  guarantor2Mobile:
+    request.guarantor2Mobile,
 
-      guarantor2City:
-        request.guarantor2City,
+  guarantor2AlternateMobile:
+    request.guarantor2AlternateMobile,
 
-      guarantor2District:
-        request.guarantor2District,
+  guarantor2Email:
+    request.guarantor2Email,
 
-      guarantor2State:
-        request.guarantor2State,
+  guarantor2Address:
+    request.guarantor2Address,
 
-      guarantor2Pincode:
-        request.guarantor2Pincode,
+  guarantor2City:
+    request.guarantor2City,
 
-      guarantor2PhotoSubmitted:
-        request.guarantor2PhotoSubmitted,
+  guarantor2District:
+    request.guarantor2District,
 
-      guarantor2AadhaarNumber:
-        request.guarantor2AadhaarNumber,
+  guarantor2State:
+    request.guarantor2State,
 
-      guarantor2AadhaarSubmitted:
-        request.guarantor2AadhaarSubmitted,
+  guarantor2Pincode:
+    request.guarantor2Pincode,
 
-      guarantor2PanNumber:
-        request.guarantor2PanNumber,
+  guarantor2PhotoSubmitted:
+    request.guarantor2PhotoSubmitted,
 
-      guarantor2PanSubmitted:
-        request.guarantor2PanSubmitted,
+  guarantor2AadhaarNumber:
+    request.guarantor2AadhaarNumber,
 
-      guarantor2Cheque1Number:
-        request.guarantor2Cheque1Number,
+  guarantor2AadhaarSubmitted:
+    request.guarantor2AadhaarSubmitted,
 
-      guarantor2Cheque2Number:
-        request.guarantor2Cheque2Number,
+  guarantor2PanNumber:
+    request.guarantor2PanNumber,
 
-      guarantor2Cheque1Submitted:
-        request.guarantor2Cheque1Submitted,
+  guarantor2PanSubmitted:
+    request.guarantor2PanSubmitted,
 
-      guarantor2Cheque2Submitted:
-        request.guarantor2Cheque2Submitted,
+  guarantor2Cheque1Number:
+    request.guarantor2Cheque1Number,
 
-      guarantor2StampPaperSubmitted:
-        request.guarantor2StampPaperSubmitted,
+  guarantor2Cheque2Number:
+    request.guarantor2Cheque2Number,
 
-      guarantor2SecurityType:
-        request.guarantor2SecurityType,
+  guarantor2Cheque1Submitted:
+    request.guarantor2Cheque1Submitted,
 
-      guarantor2SecurityDetails:
-        request.guarantor2SecurityDetails,
+  guarantor2Cheque2Submitted:
+    request.guarantor2Cheque2Submitted,
 
-      gracePeriod:
-        request.gracePeriod,
+  guarantor2StampPaperSubmitted:
+    request.guarantor2StampPaperSubmitted,
 
-      penaltyType:
-        request.penaltyType,
+  guarantor2SecurityType:
+    request.guarantor2SecurityType,
 
-      penaltyValue:
-        request.penaltyValue,
+  guarantor2SecurityDetails:
+    request.guarantor2SecurityDetails,
 
-      remarks:
-        request.remarks
-    });
+  // =========================
+  // PENALTY
+  // =========================
+
+  // DO NOT take these from request anymore.
+  // They will come from centralized penalty policy.
+
+  gracePeriod: 0,
+
+  penaltyType: "PERCENTAGE",
+
+  penaltyValue: 0,
+
+  maxPenalty: 0,
+
+  autoPenalty: true,
+
+  remarks:
+    request.remarks
+});
+
+
+// ==========================================
+// APPLY CENTRALIZED PENALTY POLICY
+// ==========================================
+
+await applyPenaltyRuleToNewAccount({
+  memberId: member._id,
+  type: "LOAN",
+  account: loan
+});
+
+
+// ==========================================
+// SAVE LOAN
+// ==========================================
+
+await loan.save();
 
     // ------------------------------------------
     // UPDATE REQUEST
