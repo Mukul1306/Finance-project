@@ -441,25 +441,21 @@ exports.getAllLoans = async (req, res) => {
 let currentEmiStatus = "ACTIVE";
 
 if (data.status === "CLOSED") {
-
   currentEmiStatus = "CLOSED";
-
-} else if (pendingEmis === 0) {
-
-  // No pending EMI
-  currentEmiStatus = "ACTIVE";
-
+} else if (paidEmis >= totalMonths) {
+  // Every EMI in the loan schedule has been collected
+  currentEmiStatus = "ALL EMI COLLECTED";
 } else if (pendingEmis === 1) {
-
-  // Only 1 EMI pending
+  // Exactly one EMI is due and unpaid
   currentEmiStatus = "DUE";
-
-} else {
-
-  // 2 or more EMI pending
+} else if (pendingEmis >= 2) {
+  // Two or more EMIs are due and unpaid
   currentEmiStatus = "OVERDUE";
-
+} else {
+  // Future EMIs remain, but none are due yet
+  currentEmiStatus = "ACTIVE";
 }
+
 
 
       // ==========================================
