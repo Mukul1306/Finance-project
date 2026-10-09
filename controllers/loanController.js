@@ -296,258 +296,167 @@ monthlyInterest,
 
 };
 
+
 /**
  * Get all loans
  */
-/**
- * Get all loans
- */
+
 exports.getAllLoans = async (req, res) => {
   try {
-
     const loans = await Loan.find()
-      .populate(
-        "memberId",
-        "name mobile"
-      )
-      .populate(
-        "societyId",
-        "societyName"
-      )
-      .sort({
-        createdAt: -1
-      });
+      .populate("memberId", "name mobile")
+      .populate("societyId", "societyName")
+      .sort({ createdAt: -1 });
 
-    const today = new Date();
-
-    // Remove time from today
-    const todayDate = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate()
-    );
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
 
     const updatedLoans = loans.map((loan) => {
-
       const data = loan.toObject();
 
-      // ==========================================
-      // MONTHLY INTEREST
-      // Always calculate from ORIGINAL PRINCIPAL
-      // ==========================================
-
+      // Monthly interest from original principal
       const monthlyInterest =
         (Number(data.principalAmount || 0) / 100) *
         Number(data.interestPerHundred || 0);
 
       data.monthlyInterest = monthlyInterest;
 
-
-      // ==========================================
-      // EMI SCHEDULE
-      // ==========================================
-
-      const firstEmiDate = new Date(data.loanGivenDate);
-
-      firstEmiDate.setMonth(
-        firstEmiDate.getMonth() + 1
-      );
-
+      // EMI schedule
+      const loanGivenDate = new Date(data.loanGivenDate);
       const loanEndDate = new Date(data.loanEndDate);
 
+      const paidEmis = Math.max(
+        0,
+        Number(data.paidEmis || 0)
+      );
+
+      const emiDueDay = Math.max(
+        1,
+        Math.min(31, Number(data.emiDueDay || 1))
+      );
+
+      // First EMI is one month after loan issue
+      const firstEmiDate = new Date(
+        loanGivenDate.getFullYear(),
+        loanGivenDate.getMonth() + 1,
+        1
+      );
+
+      // Total scheduled EMI months
       const totalMonths =
         (loanEndDate.getFullYear() -
           firstEmiDate.getFullYear()) * 12 +
         (loanEndDate.getMonth() -
           firstEmiDate.getMonth()) + 1;
 
+      // Generate an EMI date without month overflow
+      const getEmiDate = (index) => {
+        const year = firstEmiDate.getFullYear();
+        const month = firstEmiDate.getMonth() + index;
 
-      // ==========================================
-      // FIND ALL EMI DUE DATES
-      // ==========================================
+        const lastDay = new Date(
+          year,
+          month + 1,
+          0
+        ).getDate();
+
+        return new Date(
+          year,
+          month,
+          Math.min(emiDueDay, lastDay)
+        );
+      };
 
       let pendingEmis = 0;
       let overdueEmis = 0;
       let dueEmis = 0;
-
       let earliestUnpaidDueDate = null;
 
-      const paidEmis = Number(data.paidEmis || 0);
-
+      // Count EMIs that are due but have not been paid
       for (let i = paidEmis; i < totalMonths; i++) {
+        const dueDate = getEmiDate(i);
 
-        const dueDate = new Date(firstEmiDate);
-
-        dueDate.setMonth(
-          firstEmiDate.getMonth() + i
-        );
-
-        // IMPORTANT:
-        // Use configured EMI due day
-        dueDate.setDate(
-          Number(data.emiDueDay)
-        );
-
-        const dueDateOnly = new Date(
-          dueDate.getFullYear(),
-          dueDate.getMonth(),
-          dueDate.getDate()
-        );
-
-
-        // Future EMI
-        if (dueDateOnly > todayDate) {
+        if (dueDate > todayDate) {
           continue;
         }
 
-
-        // EMI is due or overdue
         pendingEmis++;
 
-
-        // First unpaid EMI
         if (!earliestUnpaidDueDate) {
-          earliestUnpaidDueDate = dueDateOnly;
+          earliestUnpaidDueDate = dueDate;
         }
 
-
-        // ======================================
-        // OVERDUE
-        // ======================================
-
-        if (dueDateOnly < todayDate) {
+        if (dueDate < todayDate) {
           overdueEmis++;
-        }
-
-
-        // ======================================
-        // DUE TODAY
-        // ======================================
-
-        if (
-          dueDateOnly.getTime() ===
-          todayDate.getTime()
-        ) {
+        } else {
           dueEmis++;
         }
-
       }
 
+      // Loan status
+      let currentEmiStatus = "ACTIVE";
 
-      // ==========================================
-// STATUS
-// ==========================================
+      if (data.status === "CLOSED") {
+        currentEmiStatus = "CLOSED";
+      } else if (
+        totalMonths > 0 &&
+        paidEmis >= totalMonths
+      ) {
+        currentEmiStatus = "ALL EMI COLLECTED";
+      } else if (pendingEmis >= 2) {
+        currentEmiStatus = "OVERDUE";
+      } else if (pendingEmis === 1) {
+        currentEmiStatus = "DUE";
+      }
 
-let currentEmiStatus = "ACTIVE";
-
-if (data.status === "CLOSED") {
-  currentEmiStatus = "CLOSED";
-} else if (paidEmis >= totalMonths) {
-  // Every EMI in the loan schedule has been collected
-  currentEmiStatus = "ALL EMI COLLECTED";
-} else if (pendingEmis === 1) {
-  // Exactly one EMI is due and unpaid
-  currentEmiStatus = "DUE";
-} else if (pendingEmis >= 2) {
-  // Two or more EMIs are due and unpaid
-  currentEmiStatus = "OVERDUE";
-} else {
-  // Future EMIs remain, but none are due yet
-  currentEmiStatus = "ACTIVE";
-}
-
-
-
-      // ==========================================
-      // PENDING INTEREST
-      // ==========================================
-
+      // Pending EMI and interest
       data.pendingEmis = pendingEmis;
-
       data.overdueEmis = overdueEmis;
-
       data.dueEmis = dueEmis;
-
       data.currentEmiStatus = currentEmiStatus;
 
       data.pendingInterest =
         pendingEmis * monthlyInterest;
 
-
-      // ==========================================
-      // OUTSTANDING AMOUNT
-      // ==========================================
-
+      // Outstanding amount
       data.outstandingAmount =
         Number(data.outstandingPrincipal || 0) +
         Number(data.pendingInterest || 0);
 
+      data.totalEmis = Math.max(0, totalMonths);
 
-      data.totalEmis = totalMonths;
-
-
-      // ==========================================
-      // NEXT EMI DATE
-      // ==========================================
-
+      // Next unpaid EMI date, including future EMIs
       let nextDueDate = null;
 
-      for (
-        let i = paidEmis;
-        i < totalMonths;
-        i++
-      ) {
+      for (let i = paidEmis; i < totalMonths; i++) {
+        const checkDate = getEmiDate(i);
 
-        const checkDate = new Date(firstEmiDate);
-
-        checkDate.setMonth(
-          firstEmiDate.getMonth() + i
-        );
-
-        checkDate.setDate(
-          Number(data.emiDueDay)
-        );
-
-        const checkDateOnly = new Date(
-          checkDate.getFullYear(),
-          checkDate.getMonth(),
-          checkDate.getDate()
-        );
-
-        if (checkDateOnly >= todayDate) {
-
-          nextDueDate = checkDateOnly;
-
+        if (checkDate >= todayDate) {
+          nextDueDate = checkDate;
           break;
         }
       }
 
       data.nextDueDate = nextDueDate;
 
-
       return data;
-
     });
-
 
     res.status(200).json({
       success: true,
       count: updatedLoans.length,
       loans: updatedLoans
     });
-
-
   } catch (error) {
-
-    console.log(error);
+    console.error("getAllLoans error:", error);
 
     res.status(500).json({
       success: false,
       message: error.message
     });
-
   }
 };
+
 /**
  * Get single loan
  */
