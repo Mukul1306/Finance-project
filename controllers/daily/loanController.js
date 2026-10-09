@@ -2324,14 +2324,29 @@ else if (loan.loanType === "WEEKLY") {
 
 }
 
+
 else if (
     loan.loanType === "MONTHLY" ||
     loan.loanType === "FIXED"
 ) {
-    dueDate.setMonth(
-        dueDate.getMonth() + i
+    // First installment is one month after loan date.
+    // Preserve the original day when possible.
+    const originalDay = dueDate.getDate();
+
+    dueDate.setDate(1);
+    dueDate.setMonth(dueDate.getMonth() + i);
+
+    const lastDay = new Date(
+        dueDate.getFullYear(),
+        dueDate.getMonth() + 1,
+        0
+    ).getDate();
+
+    dueDate.setDate(
+        Math.min(originalDay, lastDay)
     );
 }
+
 
 dueDate.setHours(0,0,0,0);
 
