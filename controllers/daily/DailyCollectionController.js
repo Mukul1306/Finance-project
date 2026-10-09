@@ -1902,9 +1902,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
         .lean(),
     ]);
 
-    // ==========================================================
-    // NOTHING TO COLLECT
-    // ==========================================================
+   
 
     if (savings.length === 0 && loans.length === 0) {
       console.log(
@@ -1918,18 +1916,11 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       });
     }
 
-    // ==========================================================
-    // IDS
-    // ==========================================================
-
+ 
     const savingIds = savings.map((saving) => saving._id);
     const loanIds = loans.map((loan) => loan._id);
 
-    // ==========================================================
-    // EARLIEST SAVING DATE
-    //
-    // Same logic as your old controller.
-    // ==========================================================
+   
 
     let earliestSavingDate = null;
 
@@ -1945,23 +1936,7 @@ exports.getUnifiedAgentCollection = async (req, res) => {
       }
     }
 
-    // ==========================================================
-    // STEP 2
-    // OPTIMIZED PAYMENT QUERIES
-    //
-    // IMPORTANT:
-    // We only need:
-    //
-    // Saving:
-    //   savingAccount + payment date
-    //
-    // Loan:
-    //   loan + installmentNo
-    //
-    // We DON'T need complete payment documents.
-    //
-    // MongoDB groups duplicates before sending them to Node.
-    // ==========================================================
+   
 
     const [savingPayments, loanPayments] = await Promise.all([
       savingIds.length > 0
@@ -2533,16 +2508,29 @@ exports.getUnifiedAgentCollection = async (req, res) => {
               ((i - 1) * 7)
             );
           }
+else if (
+  loan.loanType === "MONTHLY" ||
+  loan.loanType === "FIXED"
+) {
+  const originalDay = dueDate.getUTCDate();
 
-          else if (
-            loan.loanType === "MONTHLY" ||
-            loan.loanType === "FIXED"
-          ) {
-            dueDate.setUTCMonth(
-              dueDate.getUTCMonth() +
-              (i - 1)
-            );
-          }
+  // Move to the first day to avoid month overflow.
+  dueDate.setUTCDate(1);
+  dueDate.setUTCMonth(dueDate.getUTCMonth() + i);
+
+  // Keep the day within the target month's limit.
+  const lastDay = new Date(
+    Date.UTC(
+      dueDate.getUTCFullYear(),
+      dueDate.getUTCMonth() + 1,
+      0
+    )
+  ).getUTCDate();
+
+  dueDate.setUTCDate(
+    Math.min(originalDay, lastDay)
+  );
+}
 
           // ================================================
           // EMI
