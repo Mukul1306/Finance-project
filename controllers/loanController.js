@@ -1016,6 +1016,7 @@ exports.getLoanHistory = async (req, res) => {
 };
 
 
+
 exports.addAdditionalPrincipal = async (req, res) => {
   try {
     const { loanId } = req.params;
@@ -1026,6 +1027,7 @@ exports.addAdditionalPrincipal = async (req, res) => {
       ? new Date(disbursementDate)
       : new Date();
 
+    // Validate additional amount
     if (!Number.isFinite(additionalAmount) || additionalAmount <= 0) {
       return res.status(400).json({
         success: false,
@@ -1033,22 +1035,22 @@ exports.addAdditionalPrincipal = async (req, res) => {
       });
     }
 
-   
-if (Number.isNaN(issuedAt.getTime())) {
-  return res.status(400).json({
-    success: false,
-    message: "Invalid disbursement date. Please provide a valid date.",
-  });
-}
+    // Validate disbursement date
+    if (Number.isNaN(issuedAt.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid disbursement date.",
+      });
+    }
 
-if (issuedAt.getTime() > Date.now() + 60 * 1000) {
-  return res.status(400).json({
-    success: false,
-    message: "Disbursement date cannot be in the future.",
-  });
-}
+    if (issuedAt.getTime() > Date.now() + 60 * 1000) {
+      return res.status(400).json({
+        success: false,
+        message: "Disbursement date cannot be in the future.",
+      });
+    }
 
-
+    // Validate payment mode
     const allowedModes = [
       "Cash",
       "Bank Transfer",
@@ -1063,6 +1065,7 @@ if (issuedAt.getTime() > Date.now() + 60 * 1000) {
       });
     }
 
+    // Find loan
     const loan = await Loan.findById(loanId);
 
     if (!loan) {
@@ -1079,48 +1082,45 @@ if (issuedAt.getTime() > Date.now() + 60 * 1000) {
       });
     }
 
-    
-const outstanding = Number(loan.outstandingPrincipal);
-const originalPrincipal = Number(loan.principalAmount);
+    // Calculate current outstanding principal.
+    // A stored zero is treated as zero, not automatically replaced
+    // with original principal, because the loan may already be repaid.
+    const outstanding = Number(loan.outstandingPrincipal);
+    const originalPrincipal = Number(loan.principalAmount);
 
-const principalBefore =
-  Number.isFinite(outstanding) && outstanding > 0
-    ? outstanding
-    : Number.isFinite(originalPrincipal) && originalPrincipal > 0
-      ? originalPrincipal
-      : 0;
+    const principalBefore =
+      loan.outstandingPrincipal == null
+        ? originalPrincipal
+        : outstanding;
 
-const rate = Number(loan.interestPerHundred);
+    const rate = Number(loan.interestPerHundred);
 
-if (
-  !Number.isFinite(principalBefore) ||
-  principalBefore <= 0 ||
-  !Number.isFinite(rate) ||
-  rate < 0
-) {
-  return res.status(400).json({
-    success: false,
-    message: "Loan principal or interest rate is invalid.",
-    debug: {
-      outstandingPrincipal: loan.outstandingPrincipal,
-      principalAmount: loan.principalAmount,
-      interestPerHundred: loan.interestPerHundred,
-    },
-  });
-}
-
-
-    const rate = Number(loan.interestPerHundred || 0);
-
-    if (principalBefore <= 0 || rate < 0) {
+    if (
+      !Number.isFinite(principalBefore) ||
+      principalBefore < 0 ||
+      !Number.isFinite(rate) ||
+      rate < 0
+    ) {
       return res.status(400).json({
         success: false,
         message: "Loan principal or interest rate is invalid.",
+        debug: {
+          outstandingPrincipal: loan.outstandingPrincipal,
+          principalAmount: loan.principalAmount,
+          interestPerHundred: loan.interestPerHundred,
+        },
       });
     }
 
-    // Calculate the next EMI due date after the disbursement.
-    const loanStart = new Date(loan.loanGivenDate);
+    // Additional principal cannot be issued against a fully repaid loan.
+    if (principalBefore === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Outstanding principal is zero. Verify the loan balance before adding principal.",
+      });
+    }
+
+    // Calculate the next applicable EMI date.
     const dueDay = Math.max(
       1,
       Math.min(31, Number(loan.emiDueDay || 1))
@@ -1130,27 +1130,32 @@ if (
       const year = date.getFullYear();
       const month = date.getMonth();
 
-      let next = new Date(year, month, 1);
+      const lastDay = new Date(year, month + 1, 0).getDate();
+
       const currentMonthDue = new Date(
         year,
         month,
-        Math.min(
-          dueDay,
-          new Date(year, month + 1, 0).getDate()
-        )
+        Math.min(dueDay, lastDay)
       );
+
+      let next;
 
       if (date < currentMonthDue) {
         next = currentMonthDue;
       } else {
-        const nextMonth = month + 1;
+        const nextMonthDate = new Date(year, month + 1, 1);
+        const nextYear = nextMonthDate.getFullYear();
+        const nextMonth = nextMonthDate.getMonth();
+        const nextMonthLastDay = new Date(
+          nextYear,
+          nextMonth + 1,
+          0
+        ).getDate();
+
         next = new Date(
-          year,
+          nextYear,
           nextMonth,
-          Math.min(
-            dueDay,
-            new Date(year, nextMonth + 1, 0).getDate()
-          )
+          Math.min(dueDay, nextMonthLastDay)
         );
       }
 
@@ -1158,7 +1163,6 @@ if (
     };
 
     const effectiveFrom = nextEmiDateAfter(issuedAt);
-
     const principalAfter = principalBefore + additionalAmount;
 
     const monthlyInterestBefore =
@@ -1167,7 +1171,7 @@ if (
     const monthlyInterestAfter =
       (principalAfter / 100) * rate;
 
-    // Save an auditable disbursement entry.
+    // Create audit ledger entry
     const ledgerEntry = await LoanAdditionalPrincipal.create({
       loanId: loan._id,
       memberId: loan.memberId || null,
@@ -1182,18 +1186,24 @@ if (
       monthlyInterestAfter,
     });
 
-    // Total principal ever issued increases.
-    loan.principalAmount =
-      Number(loan.principalAmount || 0) + additionalAmount;
+    try {
+      // Total principal ever issued increases.
+      loan.principalAmount =
+        Number(loan.principalAmount || 0) + additionalAmount;
 
-    // Current outstanding principal increases.
-    loan.outstandingPrincipal = principalAfter;
+      // Outstanding principal increases.
+      loan.outstandingPrincipal = principalAfter;
 
-    // This is the interest for the new principal balance.
-    // EMI generation must apply it from effectiveFrom, not to earlier dues.
-    loan.monthlyInterest = monthlyInterestAfter;
+      // Current interest estimate for the new principal.
+      // Pending EMI generation must respect effectiveFrom.
+      loan.monthlyInterest = monthlyInterestAfter;
 
-    await loan.save();
+      await loan.save();
+    } catch (saveError) {
+      // Prevent an orphaned ledger entry if the loan update fails.
+      await LoanAdditionalPrincipal.findByIdAndDelete(ledgerEntry._id);
+      throw saveError;
+    }
 
     return res.status(201).json({
       success: true,
