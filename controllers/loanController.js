@@ -1079,9 +1079,36 @@ if (issuedAt.getTime() > Date.now() + 60 * 1000) {
       });
     }
 
-    const principalBefore = Number(
-      loan.outstandingPrincipal ?? loan.principalAmount ?? 0
-    );
+    
+const outstanding = Number(loan.outstandingPrincipal);
+const originalPrincipal = Number(loan.principalAmount);
+
+const principalBefore =
+  Number.isFinite(outstanding) && outstanding > 0
+    ? outstanding
+    : Number.isFinite(originalPrincipal) && originalPrincipal > 0
+      ? originalPrincipal
+      : 0;
+
+const rate = Number(loan.interestPerHundred);
+
+if (
+  !Number.isFinite(principalBefore) ||
+  principalBefore <= 0 ||
+  !Number.isFinite(rate) ||
+  rate < 0
+) {
+  return res.status(400).json({
+    success: false,
+    message: "Loan principal or interest rate is invalid.",
+    debug: {
+      outstandingPrincipal: loan.outstandingPrincipal,
+      principalAmount: loan.principalAmount,
+      interestPerHundred: loan.interestPerHundred,
+    },
+  });
+}
+
 
     const rate = Number(loan.interestPerHundred || 0);
 
