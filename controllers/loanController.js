@@ -2,11 +2,8 @@ const Loan = require("../models/Loan");
 const Member = require("../models/Members");
 const LoanPayment = require("../models/LoanPayment");
 const Customer = require("../models/Customer");
+const LoanAdditionalPrincipal = require("../models/LoanAdditionalPrincipal");
 
-/**
- * 
- * Get active members of a society
- */
 exports.getMembersBySociety = async (req, res) => {
   try {
     const { societyId } = req.params;
@@ -35,9 +32,7 @@ exports.getMembersBySociety = async (req, res) => {
   }
 };
 
-/**
- * Get single member details
- */
+
 exports.getMemberDetails = async (req, res) => {
   try {
     const { memberId } = req.params;
@@ -71,9 +66,7 @@ exports.getMemberDetails = async (req, res) => {
   }
 };
 
-/**
- * Create Loan
- */
+
 exports.createLoan = async (req, res) => {
 
   try {
@@ -297,10 +290,6 @@ monthlyInterest,
 };
 
 
-/**
- * Get all loans
- */
-
 exports.getAllLoans = async (req, res) => {
   try {
     const loans = await Loan.find()
@@ -457,9 +446,7 @@ exports.getAllLoans = async (req, res) => {
   }
 };
 
-/**
- * Get single loan
- */
+
 exports.getLoanById = async (req, res) => {
   try {
     const loan = await Loan.findById(
@@ -489,9 +476,7 @@ exports.getLoanById = async (req, res) => {
   }
 };
 
-/**
- * Close Loan
- */
+
 exports.closeLoan = async (req, res) => {
   try {
     const loan = await Loan.findById(
@@ -527,8 +512,6 @@ loan.principalAmount = 0;
     });
   }
 };
-
-
 
 
 exports.getPendingEmis = async (req, res) => {
@@ -999,8 +982,6 @@ outstandingAmount +=
 };
 
 
-
-
 exports.getLoanHistory = async (req, res) => {
 
   try {
@@ -1032,4 +1013,170 @@ exports.getLoanHistory = async (req, res) => {
 
   }
 
+};
+
+
+exports.addAdditionalPrincipal = async (req, res) => {
+  try {
+    const { loanId } = req.params;
+    const { amount, disbursementDate, paymentMode, remarks } = req.body;
+
+    const additionalAmount = Number(amount);
+    const issuedAt = disbursementDate
+      ? new Date(disbursementDate)
+      : new Date();
+
+    if (!Number.isFinite(additionalAmount) || additionalAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Enter a valid additional principal amount.",
+      });
+    }
+
+    if (Number.isNaN(issuedAt.getTime()) || issuedAt > new Date()) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid disbursement date.",
+      });
+    }
+
+    const allowedModes = [
+      "Cash",
+      "Bank Transfer",
+      "UPI",
+      "Cheque",
+    ];
+
+    if (!allowedModes.includes(paymentMode)) {
+      return res.status(400).json({
+        success: false,
+        message: "Select a valid payment mode.",
+      });
+    }
+
+    const loan = await Loan.findById(loanId);
+
+    if (!loan) {
+      return res.status(404).json({
+        success: false,
+        message: "Loan not found.",
+      });
+    }
+
+    if (loan.status !== "ACTIVE") {
+      return res.status(400).json({
+        success: false,
+        message: "Additional principal can only be issued to an active loan.",
+      });
+    }
+
+    const principalBefore = Number(
+      loan.outstandingPrincipal ?? loan.principalAmount ?? 0
+    );
+
+    const rate = Number(loan.interestPerHundred || 0);
+
+    if (principalBefore <= 0 || rate < 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Loan principal or interest rate is invalid.",
+      });
+    }
+
+    // Calculate the next EMI due date after the disbursement.
+    const loanStart = new Date(loan.loanGivenDate);
+    const dueDay = Math.max(
+      1,
+      Math.min(31, Number(loan.emiDueDay || 1))
+    );
+
+    const nextEmiDateAfter = (date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+
+      let next = new Date(year, month, 1);
+      const currentMonthDue = new Date(
+        year,
+        month,
+        Math.min(
+          dueDay,
+          new Date(year, month + 1, 0).getDate()
+        )
+      );
+
+      if (date < currentMonthDue) {
+        next = currentMonthDue;
+      } else {
+        const nextMonth = month + 1;
+        next = new Date(
+          year,
+          nextMonth,
+          Math.min(
+            dueDay,
+            new Date(year, nextMonth + 1, 0).getDate()
+          )
+        );
+      }
+
+      return next;
+    };
+
+    const effectiveFrom = nextEmiDateAfter(issuedAt);
+
+    const principalAfter = principalBefore + additionalAmount;
+
+    const monthlyInterestBefore =
+      (principalBefore / 100) * rate;
+
+    const monthlyInterestAfter =
+      (principalAfter / 100) * rate;
+
+    // Save an auditable disbursement entry.
+    const ledgerEntry = await LoanAdditionalPrincipal.create({
+      loanId: loan._id,
+      memberId: loan.memberId || null,
+      amount: additionalAmount,
+      disbursementDate: issuedAt,
+      effectiveFrom,
+      paymentMode,
+      remarks: remarks || "",
+      principalBefore,
+      principalAfter,
+      monthlyInterestBefore,
+      monthlyInterestAfter,
+    });
+
+    // Total principal ever issued increases.
+    loan.principalAmount =
+      Number(loan.principalAmount || 0) + additionalAmount;
+
+    // Current outstanding principal increases.
+    loan.outstandingPrincipal = principalAfter;
+
+    // This is the interest for the new principal balance.
+    // EMI generation must apply it from effectiveFrom, not to earlier dues.
+    loan.monthlyInterest = monthlyInterestAfter;
+
+    await loan.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Additional principal recorded successfully.",
+      additionalPrincipal: ledgerEntry,
+      loan: {
+        _id: loan._id,
+        principalAmount: loan.principalAmount,
+        outstandingPrincipal: loan.outstandingPrincipal,
+        monthlyInterest: loan.monthlyInterest,
+        effectiveFrom,
+      },
+    });
+  } catch (error) {
+    console.error("addAdditionalPrincipal error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to add additional principal.",
+    });
+  }
 };

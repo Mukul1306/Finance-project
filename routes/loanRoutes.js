@@ -12,12 +12,11 @@ const {
   getPendingEmis,
   collectLoanEmi,
   getLoanHistory,
-  loanDashboard
+  loanDashboard,
+  addAdditionalPrincipal
 } = require("../controllers/loanController");
 
-/*
-GET ACTIVE MEMBERS OF SOCIETY
-*/
+
 router.get(
   "/members/:societyId",
   getMembersBySociety
@@ -31,9 +30,7 @@ router.get(
   getMemberDetails
 );
 
-/*
-CREATE LOAN
-*/
+
 router.post(
   "/create",
   createLoan
@@ -71,6 +68,10 @@ router.put(
 );
 
 
+router.post(
+  "/:loanId/additional-principal",
+  addAdditionalPrincipal
+);
 
 // ===========================
 // LOAN DASHBOARD
