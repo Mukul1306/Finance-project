@@ -1033,12 +1033,21 @@ exports.addAdditionalPrincipal = async (req, res) => {
       });
     }
 
-    if (Number.isNaN(issuedAt.getTime()) || issuedAt > new Date()) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid disbursement date.",
-      });
-    }
+   
+if (Number.isNaN(issuedAt.getTime())) {
+  return res.status(400).json({
+    success: false,
+    message: "Invalid disbursement date. Please provide a valid date.",
+  });
+}
+
+if (issuedAt.getTime() > Date.now() + 60 * 1000) {
+  return res.status(400).json({
+    success: false,
+    message: "Disbursement date cannot be in the future.",
+  });
+}
+
 
     const allowedModes = [
       "Cash",
