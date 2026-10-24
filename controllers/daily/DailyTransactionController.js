@@ -1,87 +1,152 @@
-const DailyTransaction =
-require("../../models/daily/DailyTransaction");
+const mongoose = require("mongoose");
 
-const DailyMember =
-require("../../models/daily/DailyMember");
+const DailyTransaction = require("../../models/daily/DailyTransaction");
+const DailyMember = require("../../models/daily/DailyMember");
+const DailySaving = require("../../models/daily/DailySaving");
+const AreaGroup = require("../../models/daily/AreaGroup");
 
-exports.collectPayment =
-async(req,res)=>{
+exports.collectPayment = async (req, res) => {
+  try {
+    const {
+      memberId,
+      savingId,
+      amount,
+      paymentMethod = "CASH",
+      paymentForDate,
+    } = req.body;
 
-try{
+    if (
+      !mongoose.Types.ObjectId.isValid(memberId) ||
+      !mongoose.Types.ObjectId.isValid(savingId)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid Member ID and Saving ID are required",
+      });
+    }
 
-const {
+    const paymentAmount = Number(amount);
 
-memberId,
-agentId,
-amount,
-paymentMethod
+    if (!Number.isFinite(paymentAmount) || paymentAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment amount must be greater than zero",
+      });
+    }
 
-} = req.body;
+    if (!["CASH", "UPI", "BANK"].includes(paymentMethod)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment method",
+      });
+    }
 
-const member =
-await DailyMember.findById(
-memberId
-);
+    const member = await DailyMember.findById(memberId);
 
-if(!member){
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found",
+      });
+    }
 
-return res.status(404).json({
+    const saving = await DailySaving.findOne({
+      _id: savingId,
+      member: memberId,
+      status: "ACTIVE",
+    });
 
-success:false,
-message:"Member Not Found"
+    if (!saving) {
+      return res.status(404).json({
+        success: false,
+        message: "Active Saving Account Not Found",
+      });
+    }
 
-});
+    const date = paymentForDate
+      ? new Date(paymentForDate)
+      : new Date();
 
-}
+    if (Number.isNaN(date.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment date",
+      });
+    }
 
-await DailyTransaction.create({
+    // Use the saving's area to preserve its financial history.
+    const areaId = saving.areaGroup;
 
-  member: memberId,
+    // Prevent paying the same saving date twice.
+    const startOfDay = new Date(date);
+    startOfDay.setUTCHours(0, 0, 0, 0);
 
-  area: member.areaGroup,
+    const endOfDay = new Date(startOfDay);
+    endOfDay.setUTCDate(endOfDay.getUTCDate() + 1);
 
-  collectorType: "AGENT",
+    const existingPayment = await DailyTransaction.findOne({
+      savingAccount: saving._id,
+      paymentForDate: {
+        $gte: startOfDay,
+        $lt: endOfDay,
+      },
+    });
 
-  collectorId: agentId,
+    if (existingPayment) {
+      return res.status(400).json({
+        success: false,
+        message: "Payment already collected for this date",
+      });
+    }
 
-  collectionDate: new Date(),
+    const transaction = await DailyTransaction.create({
+      member: member._id,
+      savingAccount: saving._id,
+      area: areaId,
 
-  // The date this payment is for
-  paymentForDate: req.body.paymentForDate || new Date(),
+      collectorType: "ADMIN",
+      collectorId: null,
 
-  dailyAmount: amount,
+      collectionDate: new Date(),
+      paymentForDate: date,
 
-  penalty: 0,
+      dailyAmount: paymentAmount,
+      penalty: 0,
+      totalAmount: paymentAmount,
+      paymentMethod,
+      status: "PAID",
+    });
 
-  totalAmount: amount,
+    saving.totalSaved =
+      Number(saving.totalSaved || 0) + paymentAmount;
 
-  paymentMethod
+    saving.totalDaysPaid =
+      Number(saving.totalDaysPaid || 0) + 1;
 
-});
+    saving.completedDays = saving.totalDaysPaid;
+    saving.lastCollectionDate = new Date();
 
-member.totalPaid += Number(amount);
+    await saving.save();
 
-member.totalDaysPaid =
-(member.totalDaysPaid || 0) + 1;
+    await AreaGroup.findByIdAndUpdate(areaId, {
+      $inc: {
+        totalCollection: paymentAmount,
+      },
+    });
 
-await member.save();
+    return res.status(201).json({
+      success: true,
+      message: "Payment Collected Successfully",
+      transaction,
+      totalSaved: saving.totalSaved,
+      totalDaysPaid: saving.totalDaysPaid,
+    });
+  } catch (error) {
+    console.error("COLLECT PAYMENT ERROR:", error);
 
-res.status(200).json({
-
-success:true,
-message:"Payment Collected"
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
-
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };

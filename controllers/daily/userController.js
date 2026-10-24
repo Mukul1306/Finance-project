@@ -5,8 +5,6 @@ const DailyTransaction = require("../../models/daily/DailyTransaction");
 const DailyLoan = require("../../models/daily/DailyLoan");
 const LoanCollection = require("../../models/daily/LoanCollection");
 
-
-
 const SAVING_STATUSES = [
   "ACTIVE",
   "COMPLETED",
@@ -66,7 +64,6 @@ exports.memberLogin = async (req, res) => {
         $in: SAVING_STATUSES
       }
     })
-      .populate("assignedAgent", "name mobile")
       .populate("areaGroup", "areaName duration")
       .sort({ startDate: -1, createdAt: -1 });
 
@@ -169,7 +166,6 @@ exports.dashboard = async (req, res) => {
         $in: SAVING_STATUSES
       }
     })
-      .populate("assignedAgent", "name mobile")
       .populate("areaGroup", "areaName duration")
       .sort({
         startDate: -1,
@@ -424,8 +420,6 @@ exports.dashboard = async (req, res) => {
             status:
               saving.status,
 
-            assignedAgent:
-              saving.assignedAgent,
 
             areaGroup:
               saving.areaGroup,
@@ -1086,7 +1080,7 @@ exports.passbook = async (req, res) => {
         $in: SAVING_STATUSES
       }
     })
-      .populate("assignedAgent", "name mobile")
+      
       .populate("areaGroup", "areaName duration")
       .sort({
         startDate: -1,

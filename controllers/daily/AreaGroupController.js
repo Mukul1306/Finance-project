@@ -1,12 +1,143 @@
-const AreaGroup =
-require("../../models/daily/AreaGroup");
 
+const AreaGroup = require("../../models/daily/AreaGroup");
 
 // CREATE AREA GROUP
-
 exports.createAreaGroup = async (req, res) => {
-
   try {
+    const {
+      areaName,
+      duration,
+      durationType,
+      maxMembers,
+      startDate,
+    } = req.body;
+
+    // Validate required fields
+    if (
+      !areaName ||
+      !duration ||
+      !durationType ||
+      !maxMembers ||
+      !startDate
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
+
+    const validDurationTypes = ["DAYS", "MONTHS", "YEARS"];
+
+    if (!validDurationTypes.includes(durationType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid duration type",
+      });
+    }
+
+    const parsedDuration = Number(duration);
+    const parsedMaxMembers = Number(maxMembers);
+    const parsedStartDate = new Date(startDate);
+
+    if (
+      !Number.isFinite(parsedDuration) ||
+      parsedDuration <= 0 ||
+      !Number.isInteger(parsedDuration) ||
+      !Number.isFinite(parsedMaxMembers) ||
+      parsedMaxMembers <= 0 ||
+      !Number.isInteger(parsedMaxMembers) ||
+      Number.isNaN(parsedStartDate.getTime())
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide valid duration, capacity, and start date",
+      });
+    }
+
+    const endDate = new Date(parsedStartDate);
+
+    if (durationType === "DAYS") {
+      endDate.setDate(endDate.getDate() + parsedDuration);
+    } else if (durationType === "MONTHS") {
+      endDate.setMonth(endDate.getMonth() + parsedDuration);
+    } else if (durationType === "YEARS") {
+      endDate.setFullYear(endDate.getFullYear() + parsedDuration);
+    }
+
+    const group = await AreaGroup.create({
+      areaName: areaName.trim(),
+      duration: parsedDuration,
+      durationType,
+      maxMembers: parsedMaxMembers,
+      startDate: parsedStartDate,
+      endDate,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Area Group Created",
+      group,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// GET ALL AREA GROUPS
+exports.getAreaGroups = async (req, res) => {
+  try {
+    const groups = await AreaGroup.find().sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      groups,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// GET SINGLE AREA GROUP
+exports.getAreaGroup = async (req, res) => {
+  try {
+    const group = await AreaGroup.findById(req.params.id);
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Area Group Not Found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      group,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// UPDATE AREA GROUP
+exports.updateAreaGroup = async (req, res) => {
+  try {
+    const group = await AreaGroup.findById(req.params.id);
+
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Area Group Not Found",
+      });
+    }
 
     const {
       areaName,
@@ -14,188 +145,84 @@ exports.createAreaGroup = async (req, res) => {
       durationType,
       maxMembers,
       startDate,
-      assignedAgent,
-      secondaryAgent
     } = req.body;
 
-    const endDate = new Date(startDate);
+    // Update only supported fields
+    if (areaName !== undefined) {
+      if (typeof areaName !== "string" || !areaName.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Area name is required",
+        });
+      }
 
-    if (durationType === "DAYS") {
-      endDate.setDate(endDate.getDate() + Number(duration));
+      group.areaName = areaName.trim();
     }
 
-    if (durationType === "MONTHS") {
-      endDate.setMonth(endDate.getMonth() + Number(duration));
+    if (duration !== undefined) {
+      const parsedDuration = Number(duration);
+
+      if (
+        !Number.isInteger(parsedDuration) ||
+        parsedDuration <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Duration must be a positive integer",
+        });
+      }
+
+      group.duration = parsedDuration;
     }
 
-    if (durationType === "YEARS") {
-      endDate.setFullYear(endDate.getFullYear() + Number(duration));
+    if (durationType !== undefined) {
+      if (!["DAYS", "MONTHS", "YEARS"].includes(durationType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid duration type",
+        });
+      }
+
+      group.durationType = durationType;
     }
 
-    const group = await AreaGroup.create({
-
-      areaName,
-
-      duration,
-
-      durationType,
-
-      maxMembers,
-
-      startDate,
-
-      endDate,
-
-      assignedAgent,
-
-      secondaryAgent
-
-    });
-
-    res.status(201).json({
-
-      success: true,
-
-      message: "Area Group Created",
-
-      group
-
-    });
-
-  } catch (error) {
-
-    res.status(500).json({
-
-      success: false,
-
-      message: error.message
-
-    });
-
-  }
-
-};
-
-
-// GET ALL AREA GROUPS
-
-exports.getAreaGroups =
-async(req,res)=>{
-
-try{
-
-const groups =
-await AreaGroup
-.find()
-.populate("assignedAgent", "name")
-.populate("secondaryAgent", "name")
-.sort({
-createdAt:-1
-});
-
-res.status(200).json({
-
-success:true,
-groups
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
-
-};
-
-
-// GET SINGLE AREA GROUP
-
-exports.getAreaGroup =
-async(req,res)=>{
-
-try{
-
-const group =
-await AreaGroup
-.findById(
-req.params.id
-)
-.populate(
-"assignedAgent",
-"name mobile"
-);
-
-if(!group){
-
-return res.status(404).json({
-
-success:false,
-message:"Area Group Not Found"
-
-});
-
-}
-
-res.status(200).json({
-
-success:true,
-group
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
-
-};
-
-
-// UPDATE AREA GROUP
-
-exports.updateAreaGroup = async (req, res) => {
-
-  try {
-
-    const group = await AreaGroup.findById(req.params.id);
-
-    if (!group) {
-
-      return res.status(404).json({
-
-        success: false,
-
-        message: "Area Group Not Found"
-
-      });
-
+    if (maxMembers !== undefined) {
+      const parsedMaxMembers = Number(maxMembers);
+
+      if (
+        !Number.isInteger(parsedMaxMembers) ||
+        parsedMaxMembers <= 0
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Maximum members must be a positive integer",
+        });
+      }
+
+      group.maxMembers = parsedMaxMembers;
     }
 
-    Object.assign(group, req.body);
+    if (startDate !== undefined) {
+      const parsedStartDate = new Date(startDate);
 
+      if (Number.isNaN(parsedStartDate.getTime())) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid start date",
+        });
+      }
+
+      group.startDate = parsedStartDate;
+    }
+
+    // Recalculate end date whenever duration settings change
     const endDate = new Date(group.startDate);
 
     if (group.durationType === "DAYS") {
       endDate.setDate(endDate.getDate() + Number(group.duration));
-    }
-
-    if (group.durationType === "MONTHS") {
+    } else if (group.durationType === "MONTHS") {
       endDate.setMonth(endDate.getMonth() + Number(group.duration));
-    }
-
-    if (group.durationType === "YEARS") {
+    } else if (group.durationType === "YEARS") {
       endDate.setFullYear(endDate.getFullYear() + Number(group.duration));
     }
 
@@ -203,72 +230,41 @@ exports.updateAreaGroup = async (req, res) => {
 
     await group.save();
 
-    res.status(200).json({
-
+    return res.status(200).json({
       success: true,
-
-      message: "Area Updated",
-
-      group
-
+      message: "Area Group Updated",
+      group,
     });
-
   } catch (error) {
-
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
-      message: error.message
-
+      message: error.message,
     });
-
   }
-
 };
 
-
 // DELETE AREA GROUP
+exports.deleteAreaGroup = async (req, res) => {
+  try {
+    const group = await AreaGroup.findById(req.params.id);
 
-exports.deleteAreaGroup =
-async(req,res)=>{
+    if (!group) {
+      return res.status(404).json({
+        success: false,
+        message: "Area Group Not Found",
+      });
+    }
 
-try{
+    await group.deleteOne();
 
-const group =
-await AreaGroup.findById(
-req.params.id
-);
-
-if(!group){
-
-return res.status(404).json({
-
-success:false,
-message:"Area Group Not Found"
-
-});
-
-}
-
-await group.deleteOne();
-
-res.status(200).json({
-
-success:true,
-message:"Area Deleted"
-
-});
-
-}catch(error){
-
-res.status(500).json({
-
-success:false,
-message:error.message
-
-});
-
-}
-
+    return res.status(200).json({
+      success: true,
+      message: "Area Deleted",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };

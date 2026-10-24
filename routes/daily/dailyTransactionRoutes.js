@@ -1,21 +1,16 @@
-const express =
-require("express");
 
-const router =
-express.Router();
+const express = require("express");
+const router = express.Router();
 
 const {
+  collectPayment,
+} = require("../../controllers/daily/DailyTransactionController");
 
-collectPayment
+// ==========================================
+// DAILY TRANSACTION COLLECTION
+// ==========================================
 
-} = require(
-"../../controllers/daily/DailyTransactionController"
-);
+// Admin collects a daily saving payment
+router.post("/collect-payment", collectPayment);
 
-router.post(
-"/collect-payment",
-collectPayment
-);
-
-module.exports =
-router;
+module.exports = router;

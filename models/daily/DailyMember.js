@@ -1,104 +1,102 @@
+
 const mongoose = require("mongoose");
 
-const dailyMemberSchema = new mongoose.Schema({
+const dailyMemberSchema = new mongoose.Schema(
+  {
+    memberId: {
+      type: String,
+      required: true,
+      unique: true,
+      trim: true,
+    },
 
-  memberId: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true
+    memberName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    fatherName: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+
+    gender: {
+      type: String,
+      enum: ["Male", "Female", "Other"],
+      required: true,
+    },
+
+    dob: {
+      type: Date,
+      required: true,
+    },
+
+    email: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+
+    mobile: {
+      type: String,
+      required: true,
+      unique: true,
+      match: /^[0-9]{10}$/,
+    },
+
+    password: {
+      type: String,
+      required: true,
+    },
+
+    alternateMobile: {
+      type: String,
+      default: "",
+    },
+
+    residentialAddress: {
+      type: String,
+      required: true,
+    },
+
+    city: {
+      type: String,
+      required: true,
+    },
+
+    areaGroup: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AreaGroup",
+      default: null,
+    },
+
+    district: {
+      type: String,
+      required: true,
+    },
+
+    state: {
+      type: String,
+      required: true,
+    },
+
+    pincode: {
+      type: String,
+      required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["ACTIVE", "INACTIVE"],
+      default: "ACTIVE",
+    },
   },
-
-  memberName: {
-    type: String,
-    required: true,
-    trim: true
-  },
-
-  fatherName: {
-    type: String,
-    required: true,
-    trim: true
-  },
-
-  gender: {
-    type: String,
-    enum: ["Male", "Female", "Other"],
-    required: true
-  },
-
-  dob: {
-    type: Date,
-    required: true
-  },
-
-  email: {
-    type: String,
-    default: ""
-  },
-
-  mobile: {
-    type: String,
-    required: true,
-    unique: true,
-    match: /^[0-9]{10}$/
-  },
-  password: {
-  type: String,
-  required: true
-},
-
-
-  alternateMobile: {
-    type: String,
-    default: ""
-  },
-
-  residentialAddress: {
-    type: String,
-    required: true
-  },
-
-  city: {
-    type: String,
-    required: true
-  },
-
-areaGroup: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "AreaGroup",
-  default: null,
-},
-
-assignedAgent: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "DailyAgent",
-  default: null,
-},
-  district: {
-    type: String,
-    required: true
-  },
-
-  state: {
-    type: String,
-    required: true
-  },
-
-  pincode: {
-    type: String,
-    required: true
-  },
-
-  status: {
-    type: String,
-    enum: ["ACTIVE", "INACTIVE"],
-    default: "ACTIVE"
+  {
+    timestamps: true,
   }
-
-}, {
-  timestamps: true
-});
+);
 
 module.exports = mongoose.model(
   "DailyMember",

@@ -1,176 +1,30 @@
-const express = require("express");
 
+const express = require("express");
 const router = express.Router();
 
 const {
   createDailySaving,
-
   getAllDailySavings,
-
   getDailySaving,
-
   updateDailySaving,
   getSavingDetails,
   closeDailySaving,
-
   terminateDailySaving,
-
   getSavingMemberDetails,
-
-  getSavingAccounts,
-
-  // ==========================================
-  // SAVING REQUEST
-  // ==========================================
-  createSavingRequest,
-
-  getSavingRequests,
-
-  getSavingRequestsByAgent,
-
-  approveSavingRequest,
-
-  rejectSavingRequest,
-   collectAdvancePayment,
-   createTerminationRequest,
-
-
+  collectAdvancePayment,
 } = require("../../controllers/daily/DailySavingController");
 
+// Savings — Admin
+router.post("/create-saving", createDailySaving);
+router.get("/saving-accounts", getAllDailySavings);
+router.get("/saving/:id", getDailySaving);
+router.get("/saving-details/:id", getSavingDetails);
+router.put("/saving/:id", updateDailySaving);
+router.put("/close-saving/:id", closeDailySaving);
+router.put("/saving/:id/terminate", terminateDailySaving);
+router.get("/saving-member/:memberId", getSavingMemberDetails);
 
-// ==========================================
-// ADMIN DIRECT CREATE DAILY SAVING
-// ==========================================
-
-router.post(
-  "/create-saving",
-  createDailySaving
-);
-
-// ==========================================
-// COLLECT ADVANCE SAVING PAYMENT
-// ==========================================
-
-router.post(
-  "/collect-advance",
-  collectAdvancePayment
-);
-
-// ==========================================
-// AGENT CREATE DAILY SAVING REQUEST
-// ==========================================
-
-router.post(
-  "/saving-request",
-  createSavingRequest
-);
-
-
-// ==========================================
-// ADMIN GET PENDING SAVING REQUESTS
-// ==========================================
-
-router.get(
-  "/saving-requests",
-  getSavingRequests
-);
-
-
-// ==========================================
-// AGENT GET OWN SAVING REQUESTS
-// ==========================================
-
-router.get(
-  "/saving-requests/agent/:agentId",
-  getSavingRequestsByAgent
-);
-
-
-// ==========================================
-// ADMIN APPROVE SAVING REQUEST
-// ==========================================
-
-router.put(
-  "/saving-request/:id/approve",
-  approveSavingRequest
-);
-
-router.get(
-  "/saving-details/:id",
-  getSavingDetails
-);
-// ==========================================
-// ADMIN REJECT SAVING REQUEST
-// ==========================================
-
-router.put(
-  "/saving-request/:id/reject",
-  rejectSavingRequest
-);
-
-router.post(
-  "/saving-termination-request",
-  createTerminationRequest
-);
-
-// ==========================================
-// GET ALL ACTIVE / EXISTING SAVINGS
-// ==========================================
-
-router.get(
-  "/saving-accounts",
-  getSavingAccounts
-);
-
-
-// ==========================================
-// GET SINGLE SAVING ACCOUNT
-// ==========================================
-
-router.get(
-  "/saving/:id",
-  getDailySaving
-);
-
-
-// ==========================================
-// UPDATE SAVING ACCOUNT
-// ==========================================
-
-router.put(
-  "/saving/:id",
-  updateDailySaving
-);
-
-
-// ==========================================
-// TERMINATE SAVING ACCOUNT
-// ==========================================
-
-router.put(
-  "/saving/:id/terminate",
-  terminateDailySaving
-);
-
-
-// ==========================================
-// CLOSE SAVING ACCOUNT
-// ==========================================
-
-router.put(
-  "/close-saving/:id",
-  closeDailySaving
-);
-
-
-// ==========================================
-// GET MEMBER DETAILS FOR NEW SAVING
-// ==========================================
-
-router.get(
-  "/saving-member/:memberId",
-  getSavingMemberDetails
-);
-
+// Saving payments
+router.post("/collect-advance", collectAdvancePayment);
 
 module.exports = router;

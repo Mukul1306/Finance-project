@@ -1,169 +1,152 @@
+
 const mongoose = require("mongoose");
 
-const dailySavingSchema = new mongoose.Schema({
+const dailySavingSchema = new mongoose.Schema(
+  {
+    member: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DailyMember",
+      required: true,
+    },
 
- member: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "DailyMember",
-  required: true
-},
-nomineeName: {
-    type: String,
-    default: ""
-},
+    nomineeName: {
+      type: String,
+      default: "",
+    },
 
-nomineeMobile: {
-    type: String,
-    default: ""
-},
-  areaGroup:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"AreaGroup",
-    required:true
+    nomineeMobile: {
+      type: String,
+      default: "",
+    },
+
+    areaGroup: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "AreaGroup",
+      required: true,
+    },
+
+    collectionType: {
+      type: String,
+      enum: ["FIXED", "FLEXIBLE"],
+      required: true,
+    },
+
+    fixedAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    durationDays: {
+      type: Number,
+      required: true,
+    },
+
+    startDate: {
+      type: Date,
+      required: true,
+    },
+
+    endDate: {
+      type: Date,
+      required: true,
+    },
+
+    graceDays: {
+      type: Number,
+      default: 0,
+    },
+
+    penaltyType: {
+      type: String,
+      enum: ["PERCENTAGE", "FIXED"],
+      default: "PERCENTAGE",
+    },
+
+    penaltyValue: {
+      type: Number,
+      default: 0,
+    },
+
+    status: {
+      type: String,
+      enum: ["ACTIVE", "COMPLETED", "CLOSED", "TERMINATED"],
+      default: "ACTIVE",
+    },
+
+    terminationDate: {
+      type: Date,
+      default: null,
+    },
+
+    terminationReason: {
+      type: String,
+      default: "",
+    },
+
+    terminatedBy: {
+      type: String,
+      default: "",
+    },
+
+    totalSaved: {
+      type: Number,
+      default: 0,
+    },
+
+    totalPenalty: {
+      type: Number,
+      default: 0,
+    },
+
+    completedDays: {
+      type: Number,
+      default: 0,
+    },
+
+    totalDaysPaid: {
+      type: Number,
+      default: 0,
+    },
+
+    pendingDays: {
+      type: Number,
+      default: 0,
+    },
+
+    pendingAmount: {
+      type: Number,
+      default: 0,
+    },
+
+    maxPenalty: {
+      type: Number,
+      default: 0,
+    },
+
+    autoPenalty: {
+      type: Boolean,
+      default: true,
+    },
+
+    nextCollectionDate: {
+      type: Date,
+    },
+
+    completedDate: {
+      type: Date,
+    },
+
+    lastCollectionDate: {
+      type: Date,
+    },
   },
-
-  assignedAgent:{
-    type:mongoose.Schema.Types.ObjectId,
-    ref:"DailyAgent",
-    required:true
-  },
-
-  collectionType:{
-    type:String,
-    enum:["FIXED","FLEXIBLE"],
-    required:true
-  },
-
-  fixedAmount:{
-    type:Number,
-    default:0
-  },
-
-  durationDays:{
-    type:Number,
-    required:true
-  },
-
-  startDate:{
-    type:Date,
-    required:true
-  },
-
-  endDate:{
-    type:Date,
-    required:true
-  },
-
-  graceDays:{
-    type:Number,
-    default:0
-  },
-
-  penaltyType:{
-    type:String,
-    enum:["PERCENTAGE","FIXED"],
-    default:"PERCENTAGE"
-  },
-
-  penaltyValue:{
-    type:Number,
-    default:0
-  },
-
-status: {
-  type: String,
-  enum: [
-    "ACTIVE",
-    "COMPLETED",
-    "CLOSED",
-    "TERMINATED"
-  ],
-  default: "ACTIVE"
-},
-
-
-terminationDate: {
-  type: Date,
-  default: null
-},
-
-terminationReason: {
-  type: String,
-  default: ""
-},
-
-terminatedBy: {
-  type: String,
-  default: ""
-},
-
-
-  totalSaved:{
-    type:Number,
-    default:0
-  },
-
-  totalPenalty:{
-    type:Number,
-    default:0
-  },
-  completedDays: {
-  type: Number,
-  default: 0
-},
-
-  totalDaysPaid:{
-    type:Number,
-    default:0
-  },
-
-  pendingDays:{
-    type:Number,
-    default:0
-  },
-  pendingAmount: {
-  type: Number,
-  default: 0
-},
-maxPenalty: {
-  type: Number,
-  default: 0,
-},
-
-autoPenalty: {
-  type: Boolean,
-  default: true,
-},
-
-
-
-nextCollectionDate: {
-  type: Date
-},
-completedDate: {
-  type: Date
-},
-
-  lastCollectionDate:{
-    type:Date
+  {
+    timestamps: true,
   }
-
-},{
-  timestamps:true
-});
-
-dailySavingSchema.index({
-  assignedAgent: 1,
-  status: 1
-});
-
-dailySavingSchema.index({
-  assignedAgent: 1,
-  collectionType: 1
-});
-
-module.exports =
-mongoose.model(
-"DailySaving",
-dailySavingSchema
 );
+
+
+dailySavingSchema.index({ member: 1, status: 1 });
+dailySavingSchema.index({ areaGroup: 1, status: 1 });
+
+module.exports = mongoose.model("DailySaving", dailySavingSchema);

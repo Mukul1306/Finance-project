@@ -1,8 +1,7 @@
-const express =
-require("express");
 
-const router =
-express.Router();
+const express = require("express");
+const router = express.Router();
+
 const {
   createLoan,
   getLoans,
@@ -23,215 +22,101 @@ const {
   closeLoan,
   updateLoan,
   getPendingInstallments,
-  getAgentLoans,
-  getAgentsByArea,
-
-  // FIXED LOAN
   collectFixedInterestPrincipal,
   giveMoreLoan,
 
-  // Loan Request
+  // Loan applications
   createLoanRequest,
   getLoanRequests,
-  getLoanRequestsByAgent,
   approveLoanRequest,
   rejectLoanRequest,
-  requestLoanTermination,
-approveLoanTermination,
-rejectLoanTermination,
 
-
+  // Loan termination requests
+  getLoanTerminationRequests,
+  approveLoanTermination,
+  rejectLoanTermination,
 } = require("../../controllers/daily/loanController");
 
-const {
-  sendSingleNotification,
-  sendAllMembersNotification,
-  sendLoanMembersNotification,
-  sendPendingMembersNotification
-} = require(
-  "../../controllers/daily/notificationController"
-);
-router.post(
-"/create-loan",
-createLoan
-);
-// Search Member
-router.get(
-"/loan-search/:keyword",
-searchLoanMembers
-);
+// ==========================================
+// MEMBER SEARCH AND DETAILS
+// ==========================================
 
-// Member Details
-router.get(
-"/loan-member/:memberId",
-getLoanMemberDetails
-);
+router.get("/loan-search/:keyword", searchLoanMembers);
+router.get("/loan-member/:memberId", getLoanMemberDetails);
+router.get("/member-details/:id", getMember);
+router.get("/members-by-area/:areaId", getMembersByArea);
+router.get("/areas", getAreas);
 
-// Loan Calculator
-router.post(
-"/calculate-loan",
-calculateLoan
-);
+// ==========================================
+// LOAN CALCULATOR
+// ==========================================
 
+router.post("/calculate-loan", calculateLoan);
 
-router.get(
-"/loans",
-getLoans
-);
-router.get(
-"/loan/:id",
-getLoan
-);
+// ==========================================
+// ADMIN LOAN MANAGEMENT
+// ==========================================
 
-router.get(
-"/loan-history/:loanId",
-getLoanHistory
-);
+router.post("/create-loan", createLoan);
+router.get("/loans", getLoans);
+router.get("/loan-dashboard", loanDashboard);
+router.get("/loan/:id", getLoan);
+router.get("/loan-details/:id", getLoanDetails);
+router.get("/loan-history/:loanId", getLoanHistory);
+router.put("/loan/:id", updateLoan);
+router.put("/close-loan/:id", closeLoan);
 router.post("/give-more-loan", giveMoreLoan);
 
-router.get(
-"/loan-dashboard",
-loanDashboard
-);
+// ==========================================
+// EMI AND PRINCIPAL COLLECTION
+// ==========================================
 
+router.post("/collect-emi", collectEmi);
 router.get(
-    "/agents-by-area/:areaId",
-    getAgentsByArea
+  "/loan/:loanId/advance-preview",
+  advanceEmiPreview
 );
-router.get(
-"/loan-details/:id",
-getLoanDetails  
-);
-router.put("/loan/:id", updateLoan);
+router.post("/collect-advance-loan", collectAdvanceEmi);
 router.post(
-"/collect-emi",
-collectEmi
+  "/collect-fixed-interest-principal",
+  collectFixedInterestPrincipal
 );
-// ==========================================================
-// ADVANCE EMI
-// ==========================================================
-
-router.get(
-    "/loan/:loanId/advance-preview",
-    advanceEmiPreview
-);
-
-router.post(
-    "/collect-advance-loan",
-    collectAdvanceEmi
-);
-
-router.post(
-    "/collect-fixed-interest-principal",
-    collectFixedInterestPrincipal
-);
-
-router.post(
-"/collect-principal",
-collectPrincipal
-);
-
-router.get(
-"/areas",
-getAreas
-);
+router.post("/collect-principal", collectPrincipal);
 router.get(
   "/pending-installments/:loanId",
   getPendingInstallments
 );
-router.get(
-"/members-by-area/:areaId",
-getMembersByArea
-);
 
-router.get(
-"/member-details/:id",
-getMember
-);
+// ==========================================
+// USER LOAN APPLICATION + ADMIN REVIEW
+// ==========================================
 
-router.get(
-  "/agent-loans/:agentId",
-  getAgentLoans
-);
-router.put(
-  "/close-loan/:id",
-  closeLoan
-);
-
-router.post(
-  "/notification/member",
-  sendSingleNotification
-);
-
-router.post(
-  "/notification/all-members",
-  sendAllMembersNotification
-);
-
-router.post(
-  "/notification/loan-members",
-  sendLoanMembersNotification
-);
-
-router.post(
-  "/notification/pending-members",
-  sendPendingMembersNotification
-);
-// ==========================================================
-// LOAN REQUESTS
-// ==========================================================
-
-// Agent → Create loan request
-router.post(
-  "/loan-request",
-  createLoanRequest
-);
-
-// Admin → Get all loan requests
-router.get(
-  "/loan-requests",
-  getLoanRequests
-);
-
-// Agent → Get own loan requests
-router.get(
-  "/loan-requests/agent/:agentId",
-  getLoanRequestsByAgent
-);
-
-// Admin → Approve loan request
+router.post("/loan-request", createLoanRequest);
+router.get("/loan-requests", getLoanRequests);
 router.put(
   "/loan-request/:id/approve",
   approveLoanRequest
 );
-
-// Admin → Reject loan request
 router.put(
   "/loan-request/:id/reject",
   rejectLoanRequest
 );
 
-// ==========================================================
-// LOAN TERMINATION REQUESTS
-// ==========================================================
+// ==========================================
+// LOAN TERMINATION — ADMIN
+// ==========================================
 
-// Agent → Request loan termination
-router.post(
-  "/loan-termination-request/:loanId",
-  requestLoanTermination
+router.get(
+  "/loan-termination-requests",
+  getLoanTerminationRequests
 );
-
-// Admin → Approve loan termination
 router.put(
   "/loan-termination-request/:id/approve",
   approveLoanTermination
 );
-
-// Admin → Reject loan termination
 router.put(
   "/loan-termination-request/:id/reject",
   rejectLoanTermination
 );
 
-module.exports =
-router;
+module.exports = router;

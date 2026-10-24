@@ -35,11 +35,6 @@ memberId: {
     default: ""
   },
 
-  assignedAgent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "DailyAgent",
-    default: null
-  },
 
   // ==========================================
   // LOAN DETAILS
@@ -151,62 +146,11 @@ closedBy: {
   type: String,
   default: ""
 },
-// ==========================================
-// LOAN TERMINATION REQUEST
-// ==========================================
-
-terminationStatus: {
-  type: String,
-  enum: [
-    "NONE",
-    "PENDING",
-    "APPROVED",
-    "REJECTED"
-  ],
-  default: "NONE"
-},
-
-terminationRequestedAt: {
-  type: Date,
-  default: null
-},
 
 terminationRequestedBy: {
   type: mongoose.Schema.Types.ObjectId,
-  ref: "DailyAgent",
+  ref: "DailyMember",
   default: null
-},
-
-terminationReason: {
-  type: String,
-  default: ""
-},
-
-terminationApprovedAt: {
-  type: Date,
-  default: null
-},
-
-terminationApprovedBy: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "User",
-  default: null
-},
-
-terminationRejectedAt: {
-  type: Date,
-  default: null
-},
-
-terminationRejectedBy: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "User",
-  default: null
-},
-
-terminationRejectionReason: {
-  type: String,
-  default: ""
 },
 
 loanDate: {
@@ -584,6 +528,40 @@ autoPenalty: {
   type: Boolean,
   default: true,
 },
+
+
+  // ==========================================
+  // LOAN TERMINATION
+  // ==========================================
+
+  terminationStatus: {
+    type: String,
+    enum: ["NONE", "PENDING", "APPROVED", "REJECTED"],
+    default: "NONE"
+  },
+
+  terminationApprovedAt: Date,
+
+  terminationApprovedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
+  },
+
+  terminationRejectedAt: Date,
+
+  terminationRejectedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null
+  },
+
+  terminationRejectionReason: {
+    type: String,
+    default: ""
+  },
+  
+
   // ==========================================
   // REMARKS
   // ==========================================
@@ -597,10 +575,8 @@ autoPenalty: {
  {
   timestamps: true
 });
-dailyLoanSchema.index({
-  assignedAgent: 1,
-  status: 1
-});
+
+
 module.exports =
 mongoose.models.DailyLoan ||
 mongoose.model(

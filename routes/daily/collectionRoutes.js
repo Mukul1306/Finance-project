@@ -1,118 +1,57 @@
-const express =
-require("express");
 
-const router =
-express.Router();
+const express = require("express");
+const router = express.Router();
 
+// ==========================================
+// COLLECTION CONTROLLER
+// ==========================================
 const {
+  collectPayment,
+  getAllCollections,
+  adminSummary,
+} = require("../../controllers/daily/collectionController");
 
-collectPayment,
-getAllCollections,
-getAgentCollections,
-agentDashboard,
-getAgentHistory,
-adminSummary,
-
-}=require(
-
-"../../controllers/daily/collectionController"
-
-);
-
+// ==========================================
+// DAILY SAVING COLLECTION CONTROLLER
+// ==========================================
 const {
   getPendingDays,
   collectPendingPayment,
   getMemberSaving,
   getCollectionMembers,
-  getAgentCollectionMembers,
   getCollectionSummary,
-  getAgentMonthlyCollection,
-  getUnifiedAgentCollection
-} = require(
-  "../../controllers/daily/DailyCollectionController"
-);
+} = require("../../controllers/daily/DailyCollectionController");
 
+// ==========================================
+// ADMIN COLLECTION OPERATIONS
+// ==========================================
 
-router.post(
-"/collect-payment",
-collectPayment
-);
+// Collect a payment
+router.post("/collect-payment", collectPayment);
 
-router.get(
-"/collections",
-getAllCollections
-);
+// View all collections
+router.get("/collections", getAllCollections);
 
-router.get(
-"/agent-collections/:agentId",
-getAgentCollections
-);
+// Admin collection summary
+router.get("/admin-summary", adminSummary);
 
-router.get(
-"/agent-dashboard/:agentId",
-agentDashboard
-);
-router.get(
-"/agent-history/:agentId",
-getAgentHistory
-);
+// ==========================================
+// DAILY SAVING PAYMENT OPERATIONS
+// ==========================================
 
-router.get(
-"/admin-summary",
-adminSummary
-);
-router.get(
+// Get pending payment days for a saving account
+router.get("/pending-days/:id", getPendingDays);
 
-"/pending-days/:id",
+// Collect pending payment
+router.post("/collect-pending", collectPendingPayment);
 
-getPendingDays
+// Get member saving account
+router.get("/member-saving/:id", getMemberSaving);
 
-);
-router.post(
-"/collect-pending",
-collectPendingPayment
-);
-router.get(
-"/member-saving/:id",
-getMemberSaving
-);
+// Get members available for collection
+router.get("/collection-members", getCollectionMembers);
 
-// ==============================
-// ADMIN COLLECTION MEMBERS
-// ==============================
+// Collection summary
+router.get("/collection-summary", getCollectionSummary);
 
-router.get(
-"/collection-members",
-getCollectionMembers
-);
-router.get(
-  "/agent-monthly-collection",
-  getAgentMonthlyCollection
-);
-
-// ==============================
-// AGENT COLLECTION MEMBERS
-// ==============================
-
-router.get(
-"/agent-collection-members/:agentId",
-getAgentCollectionMembers
-);
-
-router.get(
-  "/collection-summary",
-  getCollectionSummary
-);
-
-// ==================================================
-// UNIFIED AGENT COLLECTION
-// SAVINGS + LOANS GROUPED BY MEMBER
-// ==================================================
-
-router.get(
-  "/unified-agent-collection/:agentId",
-  getUnifiedAgentCollection
-);
-
-module.exports =
-router;
+module.exports = router;

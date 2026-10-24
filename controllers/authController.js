@@ -2,7 +2,6 @@
 const Admin = require("../models/Admin");
 const jwt = require("jsonwebtoken");
 
-const Agent = require("../models/daily/Agent");
 const DailyMember = require("../models/daily/DailyMember");
 const Member = require("../models/Members");
 
@@ -36,9 +35,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ==========================================
     // ADMIN LOGIN
-    // ==========================================
     const admin = await Admin.findOne({ mobile });
 
     if (admin) {
@@ -59,32 +56,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ==========================================
-    // AGENT LOGIN
-    // ==========================================
-    const agent = await Agent.findOne({ mobile });
-
-    if (agent) {
-      if (password !== agent.password) {
-        return res.status(401).json({
-          success: false,
-          message: "Invalid Password",
-        });
-      }
-
-      const token = createLoginToken(agent._id, "AGENT");
-
-      return res.status(200).json({
-        success: true,
-        role: "AGENT",
-        token,
-        agent: publicData(agent),
-      });
-    }
-
-    // ==========================================
     // DAILY MEMBER LOGIN
-    // ==========================================
     const dailyMember = await DailyMember.findOne({ mobile });
 
     if (dailyMember) {
@@ -111,9 +83,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    // ==========================================
     // SOCIETY MEMBER LOGIN
-    // ==========================================
     const societyMember = await Member.findOne({ mobile })
       .select("+password")
       .populate(

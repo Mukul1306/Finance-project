@@ -3,9 +3,9 @@ const DailyLoan = require("../../models/daily/DailyLoan");
 const DailyMember = require("../../models/daily/DailyMember");
 const DailySaving = require("../../models/daily/DailySaving");
 const LoanCollection = require("../../models/daily/LoanCollection");
-const AreaGroup = require("../../models/daily/AreaGroup");
-const Agent = require("../../models/daily/Agent");
 const DailyLoanRequest = require("../../models/daily/DailyLoanRequest");
+const AreaGroup = require("../../models/daily/AreaGroup");
+
 const {
   applyPenaltyRuleToNewAccount
 } = require("../../services/daily/penaltyPolicyService");
@@ -454,8 +454,7 @@ guarantor2SecurityDetails
 // ==========================================
 
 const memberData = await DailyMember.findById(member)
-    .populate("areaGroup", "areaName")
-    .populate("assignedAgent", "name mobile");
+    .populate("areaGroup", "areaName");
 
 if (!memberData) {
     return res.status(404).json({
@@ -468,13 +467,6 @@ if (!memberData.areaGroup) {
     return res.status(400).json({
         success: false,
         message: "Member does not have an Area assigned"
-    });
-}
-
-if (!memberData.assignedAgent) {
-    return res.status(400).json({
-        success: false,
-        message: "Member does not have an Agent assigned"
     });
 }
 
@@ -650,9 +642,6 @@ state:memberData.state,
 pincode:memberData.pincode,
 
 areaName: memberData.areaGroup.areaName,
-
-assignedAgent: memberData.assignedAgent._id,
-
 loanNumber,
 
 loanTenureMonths:
@@ -908,7 +897,6 @@ exports.getLoans = async (req, res) => {
 const [loans, totalLoans] = await Promise.all([
   DailyLoan.find()
     .populate("member", "memberId memberName mobile")
-    .populate("assignedAgent", "name mobile")
     .sort({ createdAt: -1 })
     .lean(),
 
@@ -917,15 +905,13 @@ const [loans, totalLoans] = await Promise.all([
 
 
     // No loans
-    if (!loans.length) {
-
+   if (!loans.length) {
   return res.json({
-  success: true,
-  loans: updatedLoans,
-  total: totalLoans
-});
-
-    }
+    success: true,
+    loans: [],
+    total: totalLoans
+  });
+}
 
 
     // ==========================================
@@ -938,11 +924,8 @@ const [loans, totalLoans] = await Promise.all([
 
 
     const collections = await LoanCollection.find({
-
-      loan: {
-        $in: loanIds
-      }
-
+      loan: { $in: loanIds },
+      status: "PAID"
     })
       .select(
         "loan installmentNo"
@@ -1654,32 +1637,7 @@ else {
 
 exports.updateLoan = async (req, res) => {
   try {
-
     const loan = await DailyLoan.findById(req.params.id);
-    const memberData = await DailyMember.findById(loan.member)
-  .populate("areaGroup", "areaName")
-  .populate("assignedAgent", "name mobile");
-
-         if (!memberData) {
-  return res.status(404).json({
-    success: false,
-    message: "Member Not Found"
-  });
-}
-
-if (!memberData.areaGroup) {
-  return res.status(400).json({
-    success: false,
-    message: "Member does not have an Area assigned"
-  });
-}
-
-if (!memberData.assignedAgent) {
-  return res.status(400).json({
-    success: false,
-    message: "Member does not have an Agent assigned"
-  });
-} 
 
     if (!loan) {
       return res.status(404).json({
@@ -1687,6 +1645,25 @@ if (!memberData.assignedAgent) {
         message: "Loan Not Found"
       });
     }
+
+    const memberData = await DailyMember.findById(loan.member)
+      .populate("areaGroup", "areaName");
+
+    if (!memberData) {
+      return res.status(404).json({
+        success: false,
+        message: "Member Not Found"
+      });
+    }
+
+    if (!memberData.areaGroup) {
+      return res.status(400).json({
+        success: false,
+        message: "Member does not have an Area assigned"
+      });
+    }
+
+  
 
     // Preserve values that should never be overwritten
     const {
@@ -1704,11 +1681,8 @@ if (!memberData.assignedAgent) {
       createdAt,
       updatedAt,
 
-  // Area & Agent must never be changed manually
+  // Area must never be changed manually
   areaName,
-  assignedAgent,
-
-
       ...data
     } = req.body;
 
@@ -1818,8 +1792,7 @@ try{
 
 const loan =
   await DailyLoan.findById(req.params.id)
-    .populate("member")
-    .populate("assignedAgent", "name mobile");
+    .populate("member");
 
 if(!loan){
 
@@ -1897,9 +1870,6 @@ exports.searchLoanMembers = async (req, res) => {
       // Get Area information
       .populate("areaGroup", "areaName")
 
-      // IMPORTANT
-      // Get Agent information
-      .populate("assignedAgent", "name mobile email")
 
       .limit(20);
 
@@ -1939,8 +1909,7 @@ exports.getLoanMemberDetails = async (req, res) => {
   try {
 
     const member = await DailyMember.findById(req.params.memberId)
-      .populate("areaGroup", "areaName")
-      .populate("assignedAgent", "name mobile email");
+      .populate("areaGroup", "areaName");
 
     if (!member) {
 
@@ -1965,18 +1934,6 @@ exports.getLoanMemberDetails = async (req, res) => {
     }
 
     // ==========================================
-    // AGENT VALIDATION
-    // ==========================================
-
-    if (!member.assignedAgent) {
-
-      return res.status(400).json({
-        success: false,
-        message: "Member does not have an Agent assigned"
-      });
-
-    }
-
     // ==========================================
     // RESPONSE
     // ==========================================
@@ -1989,7 +1946,6 @@ exports.getLoanMemberDetails = async (req, res) => {
 
       areaGroup: member.areaGroup,
 
-      assignedAgent: member.assignedAgent
 
     });
 
@@ -2195,21 +2151,17 @@ message:"Loan Not Found"
 
 
 
-const collections =
-await LoanCollection.find({
-
-loan:loan._id
-
+const collections = await LoanCollection.find({
+  loan: loan._id,
+  status: "PAID"
 })
+  .sort({ installmentNo: 1 })
+  .select("installmentNo")
+  .lean();
 
-.sort({
-
-installmentNo:1
-
-});
-
-const paidInstallments =
-collections.map(item => item.installmentNo);
+const paidInstallments = new Set(
+  collections.map(item => Number(item.installmentNo))
+);
 
 let totalInstallments;
 
@@ -2291,11 +2243,7 @@ for (
   i++
 ){
 
-if (
-
-paidInstallments.includes(i)
-
-) {
+if (paidInstallments.has(i)) {
 
 continue;
 
@@ -3085,11 +3033,6 @@ exports.collectAdvanceEmi = async (
             loanId,
 
             advanceCount,
-
-            collectorType,
-
-            collectorId,
-
             paymentMethod
 
         } = req.body;
@@ -3102,7 +3045,6 @@ exports.collectAdvanceEmi = async (
         if (
             !loanId ||
             !advanceCount ||
-            !collectorType ||
             !paymentMethod
         ) {
 
@@ -3111,7 +3053,7 @@ exports.collectAdvanceEmi = async (
                 success: false,
 
                 message:
-                    "loanId, advanceCount, collectorType and paymentMethod are required"
+                    "loanId, advanceCount and paymentMethod are required"
 
             });
 
@@ -3138,156 +3080,41 @@ exports.collectAdvanceEmi = async (
 
         }
 
-
         // ------------------------------------------
-        // VALIDATE COLLECTOR TYPE
+        // GET LOAN AND VALIDATE STATE
         // ------------------------------------------
-
-        const allowedCollectorTypes = [
-            "ADMIN",
-            "AGENT"
-        ];
-
-
-        if (
-            !allowedCollectorTypes.includes(
-                String(
-                    collectorType
-                ).toUpperCase()
-            )
-        ) {
-
-            return res.status(400).json({
-
-                success: false,
-
-                message:
-                    "collectorType must be ADMIN or AGENT"
-
-            });
-
-        }
-
-
-        // ------------------------------------------
-        // GET LOAN
-        // ------------------------------------------
-
-        const loan =
-            await DailyLoan.findById(
-                loanId
-            );
-
+        const loan = await DailyLoan.findById(loanId);
 
         if (!loan) {
-
             return res.status(404).json({
-
                 success: false,
-
-                message:
-                    "Loan Not Found"
-
+                message: "Loan Not Found"
             });
-
         }
 
-
-        // ------------------------------------------
-        // CLOSED LOAN
-        // ------------------------------------------
-
-        if (
-            loan.status === "CLOSED"
-        ) {
-
+        if (loan.status === "CLOSED") {
             return res.status(400).json({
-
                 success: false,
-
-                message:
-                    "This loan is already closed"
-
+                message: "This loan is already closed"
             });
-
         }
 
-
-        // ------------------------------------------
-        // TOTAL INSTALLMENTS
-        // ------------------------------------------
-
-        const totalInstallments =
-            getLoanTotalInstallments(
-                loan
-            );
-
-
-        if (
-            totalInstallments <= 0
-        ) {
-
+        const totalInstallments = getLoanTotalInstallments(loan);
+        if (!Number.isInteger(totalInstallments) || totalInstallments <= 0) {
             return res.status(400).json({
-
                 success: false,
-
-                message:
-                    "Invalid total installment count"
-
+                message: "Invalid total installment count"
             });
-
         }
 
-
-        // ------------------------------------------
-        // GET PAID INSTALLMENTS
-        // ------------------------------------------
-
-        const paidInstallments =
-            await getPaidInstallmentNumbers(
-                loan._id
-            );
-
-
-        // ------------------------------------------
-        // FIND NEXT UNPAID INSTALLMENTS
-        // ------------------------------------------
-
+        const paidInstallments = await getPaidInstallmentNumbers(loan._id);
         const installmentNumbers = [];
 
-
-        for (
-            let installmentNo = 1;
-
-            installmentNo <=
-            totalInstallments;
-
-            installmentNo++
-        ) {
-
-            if (
-                paidInstallments.has(
-                    installmentNo
-                )
-            ) {
-                continue;
-            }
-
-
-            installmentNumbers.push(
-                installmentNo
-            );
-
-
-            if (
-                installmentNumbers.length >=
-                count
-            ) {
-                break;
-            }
-
+        for (let installmentNo = 1; installmentNo <= totalInstallments; installmentNo++) {
+            if (paidInstallments.has(installmentNo)) continue;
+            installmentNumbers.push(installmentNo);
+            if (installmentNumbers.length >= count) break;
         }
-
 
         // ------------------------------------------
         // NOT ENOUGH INSTALLMENTS
@@ -3581,15 +3408,9 @@ exports.collectAdvanceEmi = async (
 
                         totalAmount,
 
-                    collectorType:
+                    collectorType: "ADMIN",
 
-                        String(
-                            collectorType
-                        ).toUpperCase(),
-
-                    collectorId:
-
-                        collectorId || null,
+                    collectorId: null,
 
                     paymentMethod:
 
@@ -3770,10 +3591,7 @@ exports.collectAdvanceEmi = async (
                 loan.closedDate =
                     new Date();
 
-                loan.closedBy =
-                    String(
-                        collectorType
-                    ).toUpperCase();
+                loan.closedBy = "ADMIN";
 
             }
 
@@ -3802,10 +3620,7 @@ exports.collectAdvanceEmi = async (
                 loan.closedDate =
                     new Date();
 
-                loan.closedBy =
-                    String(
-                        collectorType
-                    ).toUpperCase();
+                loan.closedBy = "ADMIN";
 
             }
 
@@ -3959,8 +3774,6 @@ const{
 
 loanId,
 installmentNo,
-collectorType,
-collectorId,
 paymentMethod
 
 }=req.body;
@@ -3972,7 +3785,6 @@ paymentMethod
 if(
 !loanId ||
 !installmentNo ||
-!collectorType ||
 !paymentMethod
 ){
 
@@ -4005,13 +3817,10 @@ message:"Loan Not Found"
 // CHECK DUPLICATE EMI
 // ==========================================
 
-const alreadyPaid =
-await LoanCollection.findOne({
-
-loan:loan._id,
-
-installmentNo:Number(installmentNo)
-
+const alreadyPaid = await LoanCollection.findOne({
+  loan: loan._id,
+  installmentNo: Number(installmentNo),
+  status: "PAID"
 });
 
 if(alreadyPaid){
@@ -4347,8 +4156,6 @@ String(installmentNo).padStart(3,"0");
 // ==========================================
 // SAVE COLLECTION
 // ==========================================
-console.log("Collector Type:", collectorType);
-console.log("Collector Id:", collectorId);
 
 await LoanCollection.create({
 
@@ -4377,10 +4184,8 @@ penalty,
 
 totalAmount,
 
-collectorType,
-
-collectorId,
-
+collectorType: "ADMIN",
+collectorId: null,
 paymentMethod,
 
 receiptNo,
@@ -4448,7 +4253,7 @@ if (loan.loanType === "FIXED") {
 
         loan.status = "CLOSED";
         loan.closedDate = new Date();
-        loan.closedBy = collectorType;
+        loan.closedBy = "ADMIN";
 
     } else if (delay > loan.gracePeriod) {
 
@@ -4469,7 +4274,7 @@ if (loan.loanType === "FIXED") {
 
         loan.status = "CLOSED";
         loan.closedDate = new Date();
-        loan.closedBy = collectorType;
+        loan.closedBy = "ADMIN";
 
     } else if (delay > loan.gracePeriod) {
 
@@ -4561,8 +4366,6 @@ exports.collectPrincipal = async (req, res) => {
 
         const {
             loanId,
-            collectorType,
-            collectorId,
             paymentMethod,
             amount,
             remarks
@@ -4681,10 +4484,8 @@ exports.collectPrincipal = async (req, res) => {
 
             totalAmount: principalAmount,
 
-            collectorType,
-
-            collectorId,
-
+            collectorType: "ADMIN",
+            collectorId: null,
             paymentMethod,
 
             receiptNo,
@@ -4731,8 +4532,7 @@ exports.collectPrincipal = async (req, res) => {
             loan.closedDate =
                 new Date();
 
-            loan.closedBy =
-                collectorType;
+            loan.closedBy = "ADMIN";
         }
 
         // ------------------------------------------
@@ -4835,8 +4635,6 @@ exports.collectFixedInterestPrincipal = async (
             loanId,
             installmentNo,
             principalAmount,
-            collectorType,
-            collectorId,
             paymentMethod,
             remarks
         } = req.body;
@@ -5053,10 +4851,8 @@ const currentInstallment = Number(installmentNo);
             totalAmount:
                 totalAmount,
 
-            collectorType,
-
-            collectorId,
-
+            collectorType: "ADMIN",
+            collectorId: null,
             paymentMethod,
 
             receiptNo,
@@ -5126,8 +4922,7 @@ const currentInstallment = Number(installmentNo);
             loan.closedDate =
                 new Date();
 
-            loan.closedBy =
-                collectorType;
+            loan.closedBy = "ADMIN";
 
         } else {
 
@@ -5222,10 +5017,6 @@ const loan = await DailyLoan.findById(req.params.id)
   .populate(
     "member",
     "memberId memberName mobile fatherName"
-  )
-  .populate(
-    "assignedAgent",
-    "name mobile"
   );
 
 if(!loan){
@@ -6108,816 +5899,6 @@ message:error.message
 }
 
 };
-exports.getAgentsByArea = async (req, res) => {
-  try {
-    const area = await AreaGroup.findById(req.params.areaId)
-      .populate("assignedAgent", "name mobile")
-      .populate("secondaryAgent", "name mobile");
-
-    if (!area) {
-      return res.status(404).json({
-        success: false,
-        message: "Area not found"
-      });
-    }
-
-    const agents = [];
-
-    if (area.assignedAgent) {
-      agents.push(area.assignedAgent);
-    }
-
-    if (area.secondaryAgent) {
-      agents.push(area.secondaryAgent);
-    }
-
-    res.json({
-      success: true,
-      agents
-    });
-
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-// ==========================================================
-// IST DATE KEY
-// ==========================================================
-
-const getISTDateKey = (value) => {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return null;
-  }
-
-  const parts = new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).formatToParts(date);
-
-  const result = {};
-
-  for (const part of parts) {
-    if (part.type !== "literal") {
-      result[part.type] = part.value;
-    }
-  }
-
-  return `${result.year}-${result.month}-${result.day}`;
-};
-// ==========================================================
-// ADD MONTHS SAFELY
-// ==========================================================
-// Prevents JavaScript date overflow.
-//
-// Example:
-// 31 Jan + 1 month
-// should become 28 Feb / 29 Feb,
-// not March.
-//
-// Used for MONTHLY and FIXED loan due dates.
-// ==========================================================
-
-const addMonthsUTC = (dateValue, months) => {
-  const source = new Date(dateValue);
-
-  if (Number.isNaN(source.getTime())) {
-    return new Date(NaN);
-  }
-
-  const originalDay =
-    source.getUTCDate();
-
-  const result =
-    new Date(source);
-
-  // Start from day 1 so month changes
-  // don't overflow into the next month.
-  result.setUTCDate(1);
-
-  result.setUTCMonth(
-    result.getUTCMonth() +
-    Number(months)
-  );
-
-  // Last day of target month
-  const lastDay =
-    new Date(
-      Date.UTC(
-        result.getUTCFullYear(),
-        result.getUTCMonth() + 1,
-        0
-      )
-    ).getUTCDate();
-
-  result.setUTCDate(
-    Math.min(
-      originalDay,
-      lastDay
-    )
-  );
-
-  return result;
-};
-
-
-exports.getAgentLoans = async (req, res) => {
-  try {
-
-    // ===================================================
-    // AGENT ID
-    // ===================================================
-
-    const agentId = req.params.agentId;
-
-    // ===================================================
-    // VALIDATE AGENT ID
-    // ===================================================
-
-    if (
-      !agentId ||
-      !mongoose.Types.ObjectId.isValid(agentId)
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Agent ID"
-      });
-    }
-
-    // ===================================================
-    // GET ACTIVE AGENT LOANS
-    // IMPORTANT:
-    // areaGroup populate removed because DailyLoan
-    // stores areaName as String.
-    // ===================================================
-
-   const loans = await DailyLoan.find({
-  assignedAgent: agentId
-})
-        .populate(
-          "member",
-          "memberName memberId mobile fatherName"
-        )
-        .sort({
-          createdAt: -1
-        })
-        .lean();
-
-    // ===================================================
-    // GET ALL COLLECTIONS FOR THESE LOANS
-    // ONE QUERY
-    // ===================================================
-
-    const loanIds =
-      loans.map(
-        (loan) => loan._id
-      );
-
-    const collections =
-      loanIds.length > 0
-        ? await LoanCollection.find({
-            loan: {
-              $in: loanIds
-            }
-          })
-            .select(
-              "loan installmentNo paymentDate dueDate totalAmount emiType status"
-            )
-            .lean()
-        : [];
-
-    // ===================================================
-    // GROUP COLLECTIONS BY LOAN
-    // ===================================================
-
-    const collectionsByLoan =
-      new Map();
-
-    for (
-      const collection of collections
-    ) {
-
-      if (!collection?.loan) {
-        continue;
-      }
-
-      const loanId =
-        collection.loan.toString();
-
-      if (
-        !collectionsByLoan.has(
-          loanId
-        )
-      ) {
-        collectionsByLoan.set(
-          loanId,
-          []
-        );
-      }
-
-      collectionsByLoan
-        .get(loanId)
-        .push(collection);
-    }
-
-    // ===================================================
-    // TODAY IN IST
-    // ===================================================
-
-    const todayKey =
-      getISTDateKey(
-        new Date()
-      );
-
-    const todayDate =
-      new Date(
-        `${todayKey}T00:00:00+05:30`
-      );
-
-    // ===================================================
-    // PROCESS EACH LOAN
-    // ===================================================
-
-    const updatedLoans =
-      loans.map((loan) => {
-
-        // =================================================
-        // LOAN ID
-        // =================================================
-
-        const loanId =
-          loan._id.toString();
-
-        // =================================================
-        // GET COLLECTIONS FOR THIS LOAN
-        // =================================================
-
-        const loanCollections =
-          collectionsByLoan.get(
-            loanId
-          ) || [];
-
-        // =================================================
-        // PAID INSTALLMENTS
-        //
-        // installmentNo = 0
-        // means principal payment.
-        //
-        // It must NOT be treated as an EMI.
-        // =================================================
-
-        const paidInstallments =
-          new Set(
-            loanCollections
-              .map(
-                (item) =>
-                  Number(
-                    item.installmentNo
-                  )
-              )
-              .filter(
-                (no) =>
-                  Number.isFinite(no)
-              )
-              .filter(
-                (no) =>
-                  no > 0
-              )
-          );
-
-        // =================================================
-        // LOAN DATE
-        // =================================================
-
-        if (!loan.loanDate) {
-
-          return {
-            ...loan,
-
-            pastDueEMIs: 0,
-            pastDueEMIAmount: 0,
-
-            todayDueEMI: 0,
-            todayDueEMIAmount: 0
-          };
-        }
-
-        const loanDateKey =
-          getISTDateKey(
-            loan.loanDate
-          );
-
-        if (!loanDateKey) {
-
-          return {
-            ...loan,
-
-            pastDueEMIs: 0,
-            pastDueEMIAmount: 0,
-
-            todayDueEMI: 0,
-            todayDueEMIAmount: 0
-          };
-        }
-
-        const loanDate =
-          new Date(
-            `${loanDateKey}T00:00:00+05:30`
-          );
-
-        // =================================================
-        // TOTAL INSTALLMENTS
-        //
-        // FIXED:
-        // No fixed EMI count.
-        // It is monthly interest-only.
-        // =================================================
-
-        let totalInstallments = 0;
-
-        if (
-          loan.loanType ===
-          "DAILY"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.durationDays || 0
-            );
-
-        } else if (
-          loan.loanType ===
-          "WEEKLY"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.durationWeeks || 0
-            );
-
-        } else if (
-          loan.loanType ===
-          "MONTHLY"
-        ) {
-
-          totalInstallments =
-            Number(
-              loan.durationMonths || 0
-            );
-
-        } else if (
-          loan.loanType ===
-          "FIXED"
-        ) {
-
-          // FIXED = monthly interest only.
-          // There is no fixed EMI count.
-          totalInstallments = 0;
-        }
-
-        // =================================================
-        // HOW MANY INSTALLMENTS HAVE BECOME DUE?
-        //
-        // IMPORTANT:
-        //
-        // Loan date itself is NOT an EMI date.
-        //
-        // DAILY:
-        // loanDate + 1 day
-        //
-        // WEEKLY:
-        // loanDate + 7 days
-        //
-        // MONTHLY:
-        // loanDate + 1 month
-        //
-        // FIXED:
-        // loanDate + 1 month
-        // =================================================
-
-        let dueTillToday = 0;
-
-        // =================================================
-        // LOAN HAS NOT STARTED
-        // =================================================
-
-        if (
-          todayDate <
-          loanDate
-        ) {
-
-          dueTillToday = 0;
-
-        }
-
-        // =================================================
-        // DAILY
-        // =================================================
-
-        else if (
-          loan.loanType ===
-          "DAILY"
-        ) {
-
-          const days =
-            Math.floor(
-              (
-                todayDate -
-                loanDate
-              ) /
-              86400000
-            );
-
-          // Loan date is NOT EMI date.
-          //
-          // Example:
-          // 14 Sep -> 0
-          // 15 Sep -> 1
-          // 16 Sep -> 2
-          // 17 Sep -> 3
-
-          dueTillToday =
-            Math.max(
-              0,
-              days
-            );
-
-          // DAILY has tenure.
-          dueTillToday =
-            Math.min(
-              dueTillToday,
-              totalInstallments
-            );
-        }
-
-        // =================================================
-        // WEEKLY
-        // =================================================
-
-        else if (
-          loan.loanType ===
-          "WEEKLY"
-        ) {
-
-          const days =
-            Math.floor(
-              (
-                todayDate -
-                loanDate
-              ) /
-              86400000
-            );
-
-          // First weekly EMI after 7 days.
-          //
-          // Example:
-          // 14 Sep -> 0
-          // 21 Sep -> 1
-          // 28 Sep -> 2
-
-          dueTillToday =
-            Math.max(
-              0,
-              Math.floor(
-                days / 7
-              )
-            );
-
-          dueTillToday =
-            Math.min(
-              dueTillToday,
-              totalInstallments
-            );
-        }
-
-        // =================================================
-        // MONTHLY / FIXED
-        // =================================================
-
-        else if (
-          loan.loanType ===
-            "MONTHLY" ||
-          loan.loanType ===
-            "FIXED"
-        ) {
-
-          const monthDiff =
-            (
-              (
-                todayDate.getUTCFullYear() -
-                loanDate.getUTCFullYear()
-              ) * 12
-            ) +
-            (
-              todayDate.getUTCMonth() -
-              loanDate.getUTCMonth()
-            );
-
-          // No monthly EMI during same month.
-          if (
-            monthDiff <= 0
-          ) {
-
-            dueTillToday = 0;
-
-          } else {
-
-            // Start with number of months passed.
-            let possibleInstallments =
-              monthDiff;
-
-            // Check whether the current month's
-            // anniversary has actually arrived.
-            const currentDueDate =
-              addMonthsUTC(
-                loanDate,
-                possibleInstallments
-              );
-
-            if (
-              currentDueDate >
-              todayDate
-            ) {
-              possibleInstallments--;
-            }
-
-            dueTillToday =
-              Math.max(
-                0,
-                possibleInstallments
-              );
-          }
-
-          // MONTHLY has fixed tenure.
-          if (
-            loan.loanType ===
-            "MONTHLY"
-          ) {
-
-            dueTillToday =
-              Math.min(
-                dueTillToday,
-                totalInstallments
-              );
-          }
-
-          // FIXED intentionally has
-          // NO installment-count cap.
-        }
-
-        // =================================================
-        // CALCULATE PAST DUE
-        // =================================================
-
-        let pastDueEMIs = 0;
-
-        let pastDueEMIAmount = 0;
-
-        let todayDueEMI = 0;
-
-        let todayDueEMIAmount = 0;
-
-        // =================================================
-        // CHECK EACH UNPAID INSTALLMENT
-        // =================================================
-
-        for (
-          let installmentNo = 1;
-
-          installmentNo <=
-          dueTillToday;
-
-          installmentNo++
-        ) {
-
-          // =================================================
-          // ALREADY PAID
-          // =================================================
-
-          if (
-            paidInstallments.has(
-              installmentNo
-            )
-          ) {
-            continue;
-          }
-
-          // =================================================
-          // CALCULATE CORRECT DUE DATE
-          //
-          // IMPORTANT:
-          //
-          // installment 1 is NOT loanDate.
-          //
-          // DAILY:
-          // installment 1 = +1 day
-          //
-          // WEEKLY:
-          // installment 1 = +7 days
-          //
-          // MONTHLY:
-          // installment 1 = +1 month
-          //
-          // FIXED:
-          // installment 1 = +1 month
-          // =================================================
-
-          let dueDate;
-
-          if (
-            loan.loanType ===
-            "DAILY"
-          ) {
-
-            dueDate =
-              new Date(
-                loanDate
-              );
-
-            dueDate.setUTCDate(
-              dueDate.getUTCDate() +
-              installmentNo
-            );
-
-          } else if (
-            loan.loanType ===
-            "WEEKLY"
-          ) {
-
-            dueDate =
-              new Date(
-                loanDate
-              );
-
-            dueDate.setUTCDate(
-              dueDate.getUTCDate() +
-              (
-                installmentNo * 7
-              )
-            );
-
-          } else if (
-            loan.loanType ===
-              "MONTHLY" ||
-            loan.loanType ===
-              "FIXED"
-          ) {
-
-            dueDate =
-              addMonthsUTC(
-                loanDate,
-                installmentNo
-              );
-
-          } else {
-
-            continue;
-          }
-
-          // =================================================
-          // DUE DATE KEY IN IST
-          // =================================================
-
-          const dueDateKey =
-            getISTDateKey(
-              dueDate
-            );
-
-          // =================================================
-          // EMI AMOUNT
-          // =================================================
-
-          let emiAmount =
-            Number(
-              loan.emiAmount || 0
-            );
-
-          // =================================================
-          // FIXED LOAN
-          //
-          // Monthly interest only.
-          //
-          // Example:
-          // ₹50,000 × 2% = ₹1,000
-          // =================================================
-
-          if (
-            loan.loanType ===
-              "FIXED" &&
-            emiAmount <= 0
-          ) {
-
-            const principal =
-              Number(
-                loan.outstandingAmount ??
-                loan.loanAmount ??
-                0
-              );
-
-            const rate =
-              Number(
-                loan.interestRate ??
-                0
-              );
-
-            emiAmount =
-              Math.round(
-                (
-                  principal *
-                  rate
-                ) / 100
-              );
-          }
-
-          // =================================================
-          // PAST DUE
-          //
-          // ONLY BEFORE TODAY
-          //
-          // TODAY'S EMI IS NOT PAST DUE.
-          // =================================================
-
-          if (
-            dueDateKey <
-            todayKey
-          ) {
-
-            pastDueEMIs += 1;
-
-            pastDueEMIAmount +=
-              emiAmount;
-          }
-
-          // =================================================
-          // TODAY'S EMI
-          // =================================================
-
-          else if (
-            dueDateKey ===
-            todayKey
-          ) {
-
-            todayDueEMI += 1;
-
-            todayDueEMIAmount +=
-              emiAmount;
-          }
-        }
-
-        // =================================================
-        // RETURN UPDATED LOAN
-        // =================================================
-
-        return {
-          ...loan,
-
-          // Number of unpaid EMIs whose
-          // due date is BEFORE today.
-          pastDueEMIs,
-
-          // Total amount of those past-due EMIs.
-          pastDueEMIAmount,
-
-          // Today's unpaid EMI count.
-          todayDueEMI,
-
-          // Today's unpaid EMI amount.
-          todayDueEMIAmount
-        };
-      });
-
-    // =====================================================
-    // RESPONSE
-    // =====================================================
-
-    return res.json({
-      success: true,
-      loans: updatedLoans
-    });
-
-  } catch (error) {
-
-    console.error(
-      "GET AGENT LOANS ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-
-
-
 exports.createLoanRequest = async (req, res) => {
   try {
     const {
@@ -7043,8 +6024,7 @@ exports.createLoanRequest = async (req, res) => {
     // ------------------------------------------
 
     const memberData = await DailyMember.findById(member)
-  .populate("areaGroup", "areaName")
-  .populate("assignedAgent", "name mobile");
+  .populate("areaGroup", "areaName");
 
     if (!memberData) {
       return res.status(404).json({
@@ -7061,20 +6041,13 @@ exports.createLoanRequest = async (req, res) => {
     }
 
 // ------------------------------------------
-// CHECK AREA & ASSIGNED AGENT
+// CHECK AREA
 // ------------------------------------------
 
 if (!memberData.areaGroup) {
   return res.status(400).json({
     success: false,
     message: "Member does not have an Area assigned"
-  });
-}
-
-if (!memberData.assignedAgent) {
-  return res.status(400).json({
-    success: false,
-    message: "Member does not have an Agent assigned"
   });
 }
 
@@ -7239,8 +6212,6 @@ if (loanType === "FIXED") {
       pincode: memberData.pincode,
 
  areaName: memberData.areaGroup.areaName,
-assignedAgent: memberData.assignedAgent._id,
-
       loanAmount: amount,
       interestRate: rate,
       loanType,
@@ -7433,10 +6404,6 @@ exports.getLoanRequests = async (req, res) => {
         "member",
         "memberName memberId mobile"
       )
-      .populate(
-        "assignedAgent",
-        "name mobile agentId"
-      )
       .sort({ createdAt: -1 });
 
     return res.json({
@@ -7456,163 +6423,9 @@ exports.getLoanRequests = async (req, res) => {
 
 
 // ==========================================================
-// AGENT - GET OWN LOAN REQUESTS
+// ADMIN - GET LOAN TERMINATION REQUESTS
 // ==========================================================
 
-exports.getLoanRequestsByAgent = async (req, res) => {
-  try {
-    const { agentId } = req.params;
-
-    const requests = await DailyLoanRequest.find({
-      assignedAgent: agentId
-    })
-      .populate(
-        "member",
-        "memberName memberId mobile"
-      )
-      .sort({ createdAt: -1 });
-
-    return res.json({
-      success: true,
-      requests
-    });
-
-  } catch (error) {
-    console.error(
-      "GET AGENT LOAN REQUESTS ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message
-    });
-  }
-};
-
-// ==========================================================
-// AGENT - REQUEST LOAN TERMINATION
-// ==========================================================
-
-exports.requestLoanTermination = async (req, res) => {
-  try {
-    const { loanId } = req.params;
-    const { agentId, reason } = req.body;
-
-    if (!agentId) {
-      return res.status(400).json({
-        success: false,
-        message: "Agent ID is required",
-      });
-    }
-
-    const loan = await DailyLoan.findById(loanId);
-
-    if (!loan) {
-      return res.status(404).json({
-        success: false,
-        message: "Loan not found",
-      });
-    }
-
-    // ==========================================
-    // AGENT OWNERSHIP CHECK
-    // ==========================================
-
-    if (
-      String(loan.assignedAgent) !==
-      String(agentId)
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You are not assigned to this loan",
-      });
-    }
-
-    // ==========================================
-    // ALREADY CLOSED
-    // ==========================================
-
-    if (loan.status === "CLOSED") {
-      return res.status(400).json({
-        success: false,
-        message: "Loan is already closed",
-      });
-    }
-
-    // ==========================================
-    // ALREADY PENDING
-    // ==========================================
-
-    if (loan.terminationStatus === "PENDING") {
-      return res.status(400).json({
-        success: false,
-        message: "Termination request is already pending",
-      });
-    }
-
-    // ==========================================
-    // CREATE TERMINATION REQUEST
-    // ==========================================
-
-    const request = await DailyLoanRequest.create({
-      requestType: "LOAN_TERMINATION",
-
-      loan: loan._id,
-
-      member: loan.member,
-
-      assignedAgent: loan.assignedAgent,
-
-      agentId,
-
-      reason:
-        reason ||
-        "Loan termination requested by agent",
-
-      status: "PENDING",
-
-      requestedAt: new Date(),
-    });
-
-    // ==========================================
-    // MARK LOAN AS PENDING TERMINATION
-    // ==========================================
-
-    loan.terminationStatus = "PENDING";
-
-    loan.terminationRequestedAt = new Date();
-
-    loan.terminationRequestedBy = agentId;
-
-    loan.terminationReason =
-      reason ||
-      "Loan termination requested by agent";
-
-    await loan.save();
-
-    return res.status(201).json({
-      success: true,
-
-      message:
-        "Loan termination request submitted successfully. Waiting for admin approval.",
-
-      request,
-    });
-
-  } catch (error) {
-
-    console.error(
-      "TERMINATION REQUEST ERROR:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
 exports.getLoanTerminationRequests = async (req, res) => {
   try {
 
@@ -7627,10 +6440,6 @@ exports.getLoanTerminationRequests = async (req, res) => {
       .populate(
         "member",
         "memberName memberId mobile"
-      )
-      .populate(
-        "assignedAgent",
-        "name mobile agentId"
       )
       .sort({
         createdAt: -1,
@@ -7934,8 +6743,7 @@ exports.approveLoanRequest = async (req, res) => {
    const member = await DailyMember.findById(
   request.member
 )
-  .populate("areaGroup", "areaName")
-  .populate("assignedAgent", "name mobile email");
+  .populate("areaGroup", "areaName");
 
     if (!member) {
       return res.status(404).json({
@@ -7951,20 +6759,13 @@ exports.approveLoanRequest = async (req, res) => {
       });
     }
 // ------------------------------------------
-// AREA & AGENT CHECK
+// AREA CHECK
 // ------------------------------------------
 
 if (!member.areaGroup) {
   return res.status(400).json({
     success: false,
     message: "Member does not have an Area assigned"
-  });
-}
-
-if (!member.assignedAgent) {
-  return res.status(400).json({
-    success: false,
-    message: "Member does not have an Agent assigned"
   });
 }
     // ------------------------------------------
@@ -8032,9 +6833,6 @@ if (!member.assignedAgent) {
   pincode: member.pincode,
 
   areaName: member.areaGroup.areaName,
-
-  assignedAgent: member.assignedAgent._id,
-
   loanNumber: loanNumber,
 
   loanAmount: request.loanAmount,
@@ -8422,9 +7220,7 @@ exports.giveMoreLoan = async (req, res) => {
   try {
     const {
       loanId,
-      additionalAmount,
-      collectorType,
-      collectorId
+      additionalAmount
     } = req.body;
 
     if (!loanId) {

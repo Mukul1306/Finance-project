@@ -35,18 +35,7 @@ const areaGroupSchema = new mongoose.Schema({
     type: Date
   },
 
-  assignedAgent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "DailyAgent",
-    required: true
-  },
-
-  secondaryAgent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "DailyAgent",
-    default: null
-  },
-
+ 
   status: {
     type: String,
     default: "ACTIVE"
