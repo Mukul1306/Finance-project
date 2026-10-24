@@ -128,32 +128,24 @@ GET ALL MEMBERS
 */
 
 exports.getMembers = async (req, res) => {
-
   try {
-
     const members = await DailyMember.find()
-      .sort({ createdAt: -1 });
+      .populate("areaGroup", "areaName")
+      .sort({ createdAt: -1 })
+      .lean();
 
-    res.status(200).json({
-
+    return res.status(200).json({
       success: true,
-
-      members
-
+      members,
     });
-
   } catch (error) {
+    console.error("GET MEMBERS ERROR:", error);
 
-    res.status(500).json({
-
+    return res.status(500).json({
       success: false,
-
-      message: error.message
-
+      message: error.message,
     });
-
   }
-
 };
 
 /*
